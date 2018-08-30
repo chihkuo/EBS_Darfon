@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="DataColt" />
+		<Option pch_mode="2" />
+		<Option compiler="lede-sdk Compiler" />
+		<Build>
+			<Target title="Debug">
+				<Option output="bin/Debug/dlg320" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_compiler_mips" />
+				<Option projectIncludeDirsRelation="-1" />
+				<Option projectLibDirsRelation="-1" />
+				<Compiler>
+					<Add option="-Ddisable_write_csman -DTEST" />
+					<Add option="-D_TEST" />
+				</Compiler>
+				<Linker>
+					<Add option="-pthread" />
+				</Linker>
+				<MakeCommands>
+					<Build command="" />
+					<CompileFile command="" />
+					<Clean command="" />
+					<DistClean command="" />
+					<AskRebuildNeeded command="" />
+					<SilentBuild command=" &gt; $(CMD_NULL)" />
+				</MakeCommands>
+			</Target>
+			<Target title="Release">
+				<Option output="bin/Release/dlg320" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_compiler_mips" />
+				<Compiler>
+					<Add option="-O2  -D_TEST -Ddisable_write_csman" />
+					<Add directory="/home/chih/toolchain/lede-sdk/staging_dir/toolchain-mipsel_24kc_gcc-5.4.0_musl-1.1.16/include" />
+					<Add directory="include" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+					<Add option="-pthread" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add option="-fexceptions" />
+		</Compiler>
+		<Unit filename="../common/SaveLog.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../common/SaveLog.h" />
+		<Unit filename="Darfonlogger.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="G320.cpp" />
+		<Unit filename="G320.h" />
+		<Unit filename="iniparser-2.17/src/dictionary.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="iniparser-2.17/src/dictionary.h" />
+		<Unit filename="iniparser-2.17/src/iniparser.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="iniparser-2.17/src/iniparser.h" />
+		<Unit filename="iniparser-2.17/src/strlib.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="iniparser-2.17/src/strlib.h" />
+		<Unit filename="main.cpp" />
+		<Unit filename="modbusdrv.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="modbusdrv.h" />
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+			<lib_finder disable_auto="1" />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

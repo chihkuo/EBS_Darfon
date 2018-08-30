@@ -1,0 +1,172 @@
+/*
+ * @file Member ID Definition of Group Radius User.
+ *
+ * Moderator:
+ * Group ID: 0x00990000/0x80990000
+ */
+
+#ifndef _CSID_RADIUS_USER_H_
+#define _CSID_RADIUS_USER_H_
+
+#include "csid_gid.h"
+
+#define _CFG_RADIUS_USER(x)       (CSID_GIDC_RADIUS_USER|(x))
+#define _STA_RADIUS_USER(x)       (CSID_GIDS_RADIUS_USER|(x))
+
+//database to store informations of users
+#define BEGIN_USERNAME          0x4000
+#define BEGIN_PASSWD            0x4200
+#define BEGIN_EN                0x4400
+#define BEGIN_LEVEL             0x4600
+#define BEGIN_LEASETIME         0x4800
+#define BEGIN_IDLETIMEOUT       0x4A00
+#define BEGIN_GROUPTO           0x4C00
+#define BEGIN_CREATE_TIME       0x4E00
+#define BEGIN_DAILY_COUNTER     0x5000
+	
+#define BEGIN_STATUS            0x5000
+#define BEGIN_EXPIRE            0x5200
+#define BEGIN_IDLE_TIME         0x5400
+#define BEGIN_LAST_LOGIN_TIME   0x5600
+#define BEGIN_MAC               0x5800
+#define BEGIN_IP                0x5A00
+#define BEGIN_TIMELEFT          0x5C00
+#define BEGIN_TIMEUSED          0x5E00
+
+/* Configuration Items */
+#define CSID_C_RADIUS_USER_LIST     _CFG_RADIUS_USER(0x0104) //T=u32, D=0
+
+//add user
+#define CSID_C_RADIUS_ADD_USER_NAME        _CFG_RADIUS_USER(0x1000) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_PASSWD      _CFG_RADIUS_USER(0x1001) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_LEVEL       _CFG_RADIUS_USER(0x1002) //T=u32, D=0
+#define CSID_C_RADIUS_ADD_USER_LEASETIME   _CFG_RADIUS_USER(0x1003) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_IDLETIMEOUT _CFG_RADIUS_USER(0x1004) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_GROUPTO     _CFG_RADIUS_USER(0x1005) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_ENABLE      _CFG_RADIUS_USER(0x1006) //T=u32, D=1
+#define CSID_C_RADIUS_ADD_USER_DAILY_COUNTER    _CFG_RADIUS_USER(0x1007)    //T=str, D="", user daily counter
+
+#define CSID_C_RADIUS_ADD_USER_NAME1        _CFG_RADIUS_USER(0x1100) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_PASSWD1      _CFG_RADIUS_USER(0x1101) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_LEVEL1       _CFG_RADIUS_USER(0x1102) //T=u32, D=0
+#define CSID_C_RADIUS_ADD_USER_LEASETIME1   _CFG_RADIUS_USER(0x1103) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_IDLETIMEOUT1 _CFG_RADIUS_USER(0x1104) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_GROUPTO1     _CFG_RADIUS_USER(0x1105) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_ENABLE1      _CFG_RADIUS_USER(0x1106) //T=u32, D=1
+#define CSID_C_RADIUS_ADD_USER_DAILY_COUNTER1   _CFG_RADIUS_USER(0x1107)    //T=str, D="", user daily counter
+
+#define CSID_C_RADIUS_ADD_USER_NAME2        _CFG_RADIUS_USER(0x1200) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_PASSWD2      _CFG_RADIUS_USER(0x1201) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_LEVEL2       _CFG_RADIUS_USER(0x1202) //T=u32, D=0
+#define CSID_C_RADIUS_ADD_USER_LEASETIME2   _CFG_RADIUS_USER(0x1203) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_IDLETIMEOUT2 _CFG_RADIUS_USER(0x1204) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_GROUPTO2     _CFG_RADIUS_USER(0x1205) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_ENABLE2      _CFG_RADIUS_USER(0x1206) //T=u32, D=1
+#define CSID_C_RADIUS_ADD_USER_DAILY_COUNTER2   _CFG_RADIUS_USER(0x1207)    //T=str, D="", user daily counter
+
+#define CSID_C_RADIUS_ADD_USER_NAME3        _CFG_RADIUS_USER(0x1300) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_PASSWD3      _CFG_RADIUS_USER(0x1301) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_LEVEL3       _CFG_RADIUS_USER(0x1302) //T=u32, D=0
+#define CSID_C_RADIUS_ADD_USER_LEASETIME3   _CFG_RADIUS_USER(0x1303) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_IDLETIMEOUT3 _CFG_RADIUS_USER(0x1304) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_GROUPTO3     _CFG_RADIUS_USER(0x1305) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_ENABLE3      _CFG_RADIUS_USER(0x1306) //T=u32, D=1
+#define CSID_C_RADIUS_ADD_USER_DAILY_COUNTER3   _CFG_RADIUS_USER(0x1307)    //T=str, D="", user daily counter
+
+#define CSID_C_RADIUS_ADD_USER_NAME4        _CFG_RADIUS_USER(0x1400) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_PASSWD4      _CFG_RADIUS_USER(0x1401) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_LEVEL4       _CFG_RADIUS_USER(0x1402) //T=u32, D=0
+#define CSID_C_RADIUS_ADD_USER_LEASETIME4   _CFG_RADIUS_USER(0x1403) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_IDLETIMEOUT4 _CFG_RADIUS_USER(0x1404) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_GROUPTO4     _CFG_RADIUS_USER(0x1405) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_ENABLE4      _CFG_RADIUS_USER(0x1406) //T=u32, D=1
+#define CSID_C_RADIUS_ADD_USER_DAILY_COUNTER4   _CFG_RADIUS_USER(0x1407)    //T=str, D="", user daily counter
+
+#define CSID_C_RADIUS_ADD_USER_NAME5        _CFG_RADIUS_USER(0x1500) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_PASSWD5      _CFG_RADIUS_USER(0x1501) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_LEVEL5       _CFG_RADIUS_USER(0x1502) //T=u32, D=0
+#define CSID_C_RADIUS_ADD_USER_LEASETIME5   _CFG_RADIUS_USER(0x1503) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_IDLETIMEOUT5 _CFG_RADIUS_USER(0x1504) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_GROUPTO5     _CFG_RADIUS_USER(0x1505) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_ENABLE5      _CFG_RADIUS_USER(0x1506) //T=u32, D=1
+#define CSID_C_RADIUS_ADD_USER_DAILY_COUNTER5   _CFG_RADIUS_USER(0x1507)    //T=str, D="", user daily counter
+
+#define CSID_C_RADIUS_ADD_USER_NAME6        _CFG_RADIUS_USER(0x1600) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_PASSWD6      _CFG_RADIUS_USER(0x1601) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_LEVEL6       _CFG_RADIUS_USER(0x1602) //T=u32, D=0
+#define CSID_C_RADIUS_ADD_USER_LEASETIME6   _CFG_RADIUS_USER(0x1603) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_IDLETIMEOUT6 _CFG_RADIUS_USER(0x1604) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_GROUPTO6     _CFG_RADIUS_USER(0x1605) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_ENABLE6      _CFG_RADIUS_USER(0x1606) //T=u32, D=1
+#define CSID_C_RADIUS_ADD_USER_DAILY_COUNTER6   _CFG_RADIUS_USER(0x1607)    //T=str, D="", user daily counter
+
+#define CSID_C_RADIUS_ADD_USER_NAME7        _CFG_RADIUS_USER(0x1700) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_PASSWD7      _CFG_RADIUS_USER(0x1701) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_LEVEL7       _CFG_RADIUS_USER(0x1702) //T=u32, D=0
+#define CSID_C_RADIUS_ADD_USER_LEASETIME7   _CFG_RADIUS_USER(0x1703) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_IDLETIMEOUT7 _CFG_RADIUS_USER(0x1704) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_GROUPTO7     _CFG_RADIUS_USER(0x1705) //T=str, D=""
+#define CSID_C_RADIUS_ADD_USER_ENABLE7      _CFG_RADIUS_USER(0x1706) //T=u32, D=1
+#define CSID_C_RADIUS_ADD_USER_DAILY_COUNTER7   _CFG_RADIUS_USER(0x1707)    //T=str, D="", user daily counter
+//end add user
+
+//delete user
+#define CSID_C_DEL_USER_NAME        _CFG_RADIUS_USER(0x2000) //T=str, D=""
+
+//modify user
+#define CSID_C_MOD_USER_NAME_ORG    _CFG_RADIUS_USER(0x3000)  //T=str, D=""
+#define CSID_C_MOD_USER_NAME        _CFG_RADIUS_USER(0x3001)  //T=str, D=""
+#define CSID_C_MOD_USER_PASSWD      _CFG_RADIUS_USER(0x3002)  //T=str, D=""
+#define CSID_C_MOD_USER_LEVEL       _CFG_RADIUS_USER(0x3003)  //T=u32, D=0
+#define CSID_C_MOD_USER_LEASETIME   _CFG_RADIUS_USER(0x3004)  //T=str, D=""
+#define CSID_C_MOD_USER_IDLETIMEOUT _CFG_RADIUS_USER(0x3005)  //T=str, D=""
+#define CSID_C_MOD_USER_GROUPTO     _CFG_RADIUS_USER(0x3006)  //T=str, D=""
+#define CSID_C_MOD_USER_ENABLE      _CFG_RADIUS_USER(0x3007)  //T=u32, D=0
+#define CSID_C_MOD_USER_DAILY_COUNTER   _CFG_RADIUS_USER(0x3008)    //T=str, D="", user daily counter
+
+#define CSID_C_RADIUS_USER              _CFG_RADIUS_USER(0x4000) //T=str, user name
+#define CSID_C_RADIUS_PASSWD            _CFG_RADIUS_USER(0x4200)  //T=str, D="" , user password
+#define CSID_C_RADIUS_USER_ENABLE       _CFG_RADIUS_USER(0x4400)  //T=u32, D=0, enable flag
+#define CSID_C_RADIUS_LEVEL             _CFG_RADIUS_USER(0x4600)  //T=u32, D=0
+#define CSID_C_RADIUS_LEASETIME         _CFG_RADIUS_USER(0x4800)  //T=str, D=""
+#define CSID_C_RADIUS_IDLETIMEOUT       _CFG_RADIUS_USER(0x4A00)  //T=str, D=""
+#define CSID_C_RADIUS_GROUPTO           _CFG_RADIUS_USER(0x4C00)  //T=str, D="" 
+#define CSID_C_RADIUS_USER_CREATE_TIME  _CFG_RADIUS_USER(0x4E00) //T=str, D="" , user create time
+#define CSID_C_RADIUS_USER_DAILY_COUNTER    _CFG_RADIUS_USER(0x5000)    //T=str, D="", user daily counter
+#define CSID_C_RADIUS_USER_IP           _CFG_RADIUS_USER(0x5200)    //T=str, D="", not in use now, but for QoS v213
+#define CSID_C_RADIUS_USER_STATUS       _CFG_RADIUS_USER(0x5400)    //T=u32, D=0, not in use now, but for QoS v213
+
+/* Status Items */
+#define CSID_S_RADIUS_USER_ALTERED  _STA_RADIUS_USER(0x0100) //T=u32, D=0, altered
+
+#define CSID_S_RADIUS_ADD_USER      _STA_RADIUS_USER(0x0101) //T=u32, D=0
+#define CSID_S_RADIUS_DEL_USER      _STA_RADIUS_USER(0x0102) //T=u32, D=0
+#define CSID_S_RADIUS_MOD_USER      _STA_RADIUS_USER(0x0103) //T=u32, D=0
+#define CSID_S_RADIUS_LOGOUT_USER   _STA_RADIUS_USER(0x0105) //T=u32, D=0
+#define CSID_S_RADIUS_DEL_USER1     _STA_RADIUS_USER(0x0106) //T=u32, D=0
+#define CSID_S_RADIUS_DEL_USER2     _STA_RADIUS_USER(0x0107) //T=u32, D=0
+#define CSID_S_RADIUS_DEL_USER3     _STA_RADIUS_USER(0x0108) //T=u32, D=0
+#define CSID_S_RADIUS_DEL_USER4     _STA_RADIUS_USER(0x0109) //T=u32, D=0
+#define CSID_S_RADIUS_DEL_USER5     _STA_RADIUS_USER(0x010A) //T=u32, D=0
+#define CSID_S_RADIUS_DEL_USER6     _STA_RADIUS_USER(0x010B) //T=u32, D=0
+#define CSID_S_RADIUS_DEL_USER7     _STA_RADIUS_USER(0x010C) //T=u32, D=0
+
+#define CSID_S_DEL_USER_COMPLETE    _STA_RADIUS_USER(0x2101) //T=u32, D=0
+
+#define CSID_S_MOD_USER_COMPLETE    _STA_RADIUS_USER(0x3108)  //T=u32, D=0
+
+#define CSID_S_LOGOUT_USER_NAME     _STA_RADIUS_USER(0x3200)  //T=str, D=""
+
+//reserve for 0x100 entries
+#define CSID_S_RADIUS_ONLINE_USER_LIST     _STA_RADIUS_USER(0x4000) //T=str, online user list
+
+#define CSID_S_RADIUS_USER_STATUS       _STA_RADIUS_USER(0x5000)   //T=u32, D=0 ,online or not
+#define CSID_S_RADIUS_USER_EXPIRE       _STA_RADIUS_USER(0x5200)   //T=str, D="" ,expire time
+#define CSID_S_RADIUS_USER_IDLE_TIME    _STA_RADIUS_USER(0x5400) //T=str, D="" ,idle time
+#define CSID_S_RADIUS_LAST_LOGIN_TIME   _STA_RADIUS_USER(0x5600) //T=str, D="" , last login time
+#define CSID_S_RADIUS_USER_MAC          _STA_RADIUS_USER(0x5800) //T=str, D="" , mac addr
+#define CSID_S_RADIUS_USER_IP           _STA_RADIUS_USER(0x5A00)       //T=str, D="" ,ip address
+#define CSID_S_RADIUS_USER_TIMELEFT     _STA_RADIUS_USER(0x5C00)  //T=u32, D=0, remaining lease time in seconds
+#define CSID_S_RADIUS_USER_TIMEUSED     _STA_RADIUS_USER(0x5E00)	//T=u32, D=0, used time in seconds
+
+#endif
