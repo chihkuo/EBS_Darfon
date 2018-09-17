@@ -1,0 +1,41 @@
+
+config sms
+	option sms_server '60.251.36.232'
+	option sms_port '80'
+	option update_server '60.251.36.232'
+	option update_port '80'
+	option sample_time '3'
+	option upload_time '10'
+	option delay_time '500'
+	option cleartx_delay '1000'
+	option shelf_life '30'
+	option update_SW_time '30'
+
+config comport
+	option other2_port 'COM3'
+	option other3_port 'COM4'
+	option com1_data_bits '8'
+	option com1_parity 'None'
+	option com1_stop_bits '1'
+	option com3_baud '57600'
+	option com4_baud '115200'
+	option com4_data_bits '8'
+	option com4_parity 'None'
+	option com4_stop_bits '1'
+	option com3_data_bits '8'
+	option com3_parity 'None'
+	option com3_stop_bits '1'
+	option com2_data_bits '8'
+	option com2_parity 'None'
+	option com2_stop_bits '1'
+	option com2_baud '9600'
+	option com1_baud '9600'
+	option inverter_port 'COM1'
+	option other1_port 'COM2'
+
+config swver
+	option dlver '1.0.0'
+	option dpver '1.0.0'
+
+config button
+
