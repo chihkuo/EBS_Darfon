@@ -74,7 +74,7 @@ char   *szPort[]={"/dev/ttyUSB0","/dev/ttyUSB1","/dev/ttyUSB2","/dev/ttyUSB3"};
 
 bool LogCreated;
 
-extern int MyModbusDrvInit(char *port);
+//extern int MyModbusDrvInit(char *port, int baud, int data_bits, char* parity, int stop_bits);
 void writeLog (char *message);
 
 

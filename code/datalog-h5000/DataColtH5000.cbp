@@ -75,6 +75,7 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="modbusdrv.h" />
+		<Unit filename="sys_error.h" />
 		<Extensions>
 			<code_completion />
 			<envvars />

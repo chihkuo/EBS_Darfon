@@ -1256,7 +1256,7 @@ int ModbusDrvDeinit(void)
 	return 0;
 }
 
-int MyModbusDrvInit(char *port)
+int MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_bits)
 {
 	unsigned int i;
 	unsigned int flags;
@@ -1279,6 +1279,8 @@ int MyModbusDrvInit(char *port)
 		//getchar();
 		return -1;
 	}
+	/* set to non-blocking read */
+	fcntl(fd, F_SETFL, FNDELAY);
 
 	// val = fcntl(fd, F_GETFL, 0);
      //printf("post-open file status = 0x%x\n", val);
@@ -1296,13 +1298,124 @@ int MyModbusDrvInit(char *port)
 		return -2;
 	}
 
-	/*set 	9600bps, n81, RTS/CTS flow control,
+	T_new.c_cflag |= (CLOCAL|CREAD);
+    // set baud
+    switch (baud)
+    {
+        case 4800:
+            T_new.c_cflag |= B4800;
+            //cfsetispeed(&T_new, B4800);
+            //cfsetospeed(&T_new, B4800);
+            printf("set baud 4800\n");
+            break;
+        case 9600:
+            T_new.c_cflag |= B9600;
+            //cfsetispeed(&T_new, B9600);
+            //cfsetospeed(&T_new, B9600);
+            printf("set baud 9600\n");
+            break;
+        case 19200:
+            T_new.c_cflag |= B19200;
+            //cfsetispeed(&T_new, B19200);
+            //cfsetospeed(&T_new, B19200);
+            printf("set baud 19200\n");
+            break;
+        case 38400:
+            T_new.c_cflag |= B38400;
+            //cfsetispeed(&T_new, B38400);
+            //cfsetospeed(&T_new, B38400);
+            printf("set baud 38400\n");
+            break;
+        case 57600:
+            T_new.c_cflag |= B57600;
+            //cfsetispeed(&T_new, B57600);
+            //cfsetospeed(&T_new, B57600);
+            printf("set baud 57600\n");
+            break;
+        case 115200:
+            T_new.c_cflag |= B115200;
+            //cfsetispeed(&T_new, B115200);
+            //cfsetospeed(&T_new, B115200);
+            printf("set baud 115200\n");
+            break;
+        default:
+            printf("Unsupport baud rate %d\n", baud);
+    }
+
+    // set data_bits
+    switch (data_bits)
+    {
+        case 5:
+            T_new.c_cflag &= ~CSIZE;
+            T_new.c_cflag |= CS5;
+            printf("set bits 5\n");
+            break;
+        case 6:
+            T_new.c_cflag &= ~CSIZE;
+            T_new.c_cflag |= CS6;
+            printf("set bits 6\n");
+            break;
+        case 7:
+            T_new.c_cflag &= ~CSIZE;
+            T_new.c_cflag |= CS7;
+            printf("set bits 7\n");
+            break;
+        case 8:
+            T_new.c_cflag &= ~CSIZE;
+            T_new.c_cflag |= CS8;
+            printf("set data bits 8\n");
+            break;
+        default:
+            printf("Unsupport data bits %d\n", data_bits);
+    }
+
+    T_new.c_iflag = 0;
+    // set parity
+    switch (parity)
+    {
+        case 'N':
+            T_new.c_cflag &= ~PARENB;   /* Clear parity enable */
+            //T_new.c_iflag &= ~INPCK;    /* Disable parity checking */
+            printf("set parity N\n");
+            break;
+        case 'O':
+            T_new.c_cflag |= PARENB;    /* set odd even parity */
+            T_new.c_cflag |= PARODD;    /* set odd parity */
+            T_new.c_iflag |= INPCK;     /* enable parity checking */
+            printf("set parity O\n");
+            break;
+        case 'E':
+            T_new.c_cflag |= PARENB;    /* set odd even parity */
+            T_new.c_cflag &= ~PARODD;   /* set even parity*/
+            T_new.c_iflag |= INPCK;     /* enable parity checking */
+            printf("set parity E\n");
+            break;
+        default:
+            printf("Unsupport parity %c\n", parity);
+    }
+
+    // set stop_bits
+    switch(stop_bits)
+    {
+        case 1:
+            T_new.c_cflag &= ~CSTOPB;
+            printf("set stop bits 1\n");
+            break;
+        case 2:
+            T_new.c_cflag |= CSTOPB;
+            printf("set stop bits 2\n");
+            break;
+        default:
+            printf("Unsupport stop bits %d\n", stop_bits);
+    }
+
+    /*set 	9600bps, n81, RTS/CTS flow control,
 		ignore modem status lines,
 		hang up on last close,
 		and disable other flags*/
-	T_new.c_cflag = (B9600 | CS8 | CREAD | CLOCAL );
+	//T_new.c_cflag = (B9600 | CS8 | CREAD | CLOCAL );
+	//T_new.c_iflag = 0;
 	T_new.c_oflag = 0;
-	T_new.c_iflag = 0;
 	T_new.c_lflag = 0;
 	if (tcsetattr(fd, TCSANOW, &T_new) != 0)
 	{
@@ -1311,8 +1424,6 @@ int MyModbusDrvInit(char *port)
 		//getchar();
 		return -3;
 	}
-	/* set to non-blocking read */
-	fcntl(fd, F_SETFL, FNDELAY);
 
 	/* uart buffer init */
 	for(i=0;i<MODBUS_TX_BUFFER_SIZE;i++)

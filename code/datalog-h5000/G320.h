@@ -29,6 +29,7 @@ typedef struct MODBUS_REPLY_PACKET
 #define XML_PATH        DEF_PATH"/XML"
 #define SYSLOG_PATH     DEF_PATH"/SYSLOG"
 #define DEVICELIST_PATH "/tmp/DeviceList"
+#define DEV_XML_PATH        "/tmp/XML_PATH"
 //#define USB_PATH        "/tmp/usb"
 #define USB_PATH        "/tmp/run/mountd/sda1"
 #define SDCARD_PATH     "/tmp/sdcard"
@@ -37,6 +38,9 @@ typedef struct MODBUS_REPLY_PACKET
 #define TODOLIST_PATH   "/tmp/TODOList"
 #define WL_CHANGED_PATH "/tmp/WL_Changed"
 
+#define TIMEZONE_URL    "http://ip-api.com/json"
+#define TIME_OFFSET_URL "http://svn.fonosfera.org/fon-ng/trunk/luci/modules/admin-fon/root/etc/timezones.db"
+//#define KEY             "O10936IZHJTQ"
 #define TIME_SERVER_URL "https://www.worldtimeserver.com/handlers/GetData.ashx?action=GCTData"
 
 #define MODBUS_TX_BUFFER_SIZE		1544
@@ -117,7 +121,8 @@ protected:
     bool    GetHybridIDData(int index);
     void    DumpHybridIDData(unsigned char *buf);
     bool    SetHybridIDData(int index);
-    void    ParserHybridIDFlags(int flags);
+    void    ParserHybridIDFlags1(int flags);
+    void    ParserHybridIDFlags2(int flags);
     bool    GetHybridRTCData(int index);
     void    DumpHybridRTCData(unsigned char *buf);
     bool    SetHybridRTCData(int index);
@@ -141,11 +146,10 @@ protected:
     bool    GetHybridBMSModule(int index, int module);
     bool    SetBMSFile(int index, int module);
 
-    bool    CheckTimezone();
     bool    GetTimezone();
     void    SetTimezone(char *zonename, char *timazone);
     void    GetLocalTime();
-    void    GetNetTime();
+    void    GetNTPTime();
 
     void    SetLogXML();
     bool    WriteLogXML(int index);
@@ -170,6 +174,8 @@ protected:
     int     m_snCount;
     int     m_loopstate;
     int     m_loopflag;
+    int     m_sys_error;
+    bool    m_do_get_TZ;
     struct tm   *m_st_time;
     time_t  m_last_read_time;
     time_t  m_last_register_time;
@@ -181,7 +187,8 @@ protected:
     MI_POWER_INFO   m_mi_power_info;
 
     HB_ID_DATA      m_hb_id_data;
-    HB_ID_FLAGS     m_hb_id_flags;
+    HB_ID_FLAGS1    m_hb_id_flags1;
+    HB_ID_FLAGS2    m_hb_id_flags2;
     HB_RTC_DATA     m_hb_rtc_data;
     HB_RS_INFO      m_hb_rs_info;
     HB_RRS_INFO     m_hb_rrs_info;
@@ -202,6 +209,7 @@ protected:
     char            m_errlog_filename[128];
     char            m_bms_mainbuf[BMS_BUF_SIZE];
     char            m_bms_filename[128];
+    char            m_bms_header[8192];
 };
 
 #endif // G320_H_INCLUDED

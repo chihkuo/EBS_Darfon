@@ -10,18 +10,18 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION     "1.0.0"
-#define DLMODEL     "SBC700"
-#define TIMEOUT     "30"
-#define CURL_FILE   "/tmp/SWupdate"
-#define CURL_CMD    "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
-#define UPDATE_FILE "/tmp/update.tar"
-#define UPDATE_DIR  "/tmp/update"
-#define SYSLOG_PATH "/tmp/test/SYSLOG"
-
 //#define USB_PATH    "/tmp/usb"
 #define USB_PATH    "/tmp/run/mountd/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
+
+#define VERSION             "1.0.0"
+#define DLMODEL             "SBC700"
+#define TIMEOUT             "30"
+#define CURL_FILE           "/tmp/SWupdate"
+#define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
+#define UPDATE_FILE         "/tmp/update.tar"
+#define UPDATE_DIR          "/tmp/update"
+#define SYSLOG_PATH         "/tmp/test/SYSLOG"
 
 char SOAP_HEAD[] =
 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
@@ -35,8 +35,10 @@ char SMS_SERVER[64] = {0};
 int sms_port = 0;
 char UPDATE_SERVER[64] = {0};
 int update_port = 0;
+int update_SW_time = 0;
 char g_CURL_CMD[256] = {0};
-char g_SYSLOG_PATH[256] = {0};
+char g_SYSLOG_PATH[64] = {0};
+char g_UPDATE_PATH[64] = {0};
 
 // update parameter
 typedef struct swupdate {
@@ -146,13 +148,24 @@ void getConfig()
     sscanf(buf, "%d", &update_port);
     printf("Update Port = %d\n", update_port);
 
+    // get update SW time
+    fd = popen("uci get dlsetting.@sms[0].update_SW_time", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+        return;
+    }
+    fgets(buf, 32, fd);
+    pclose(fd);
+    sscanf(buf, "%d", &update_SW_time);
+    printf("Update SW time = %d\n", update_SW_time);
+
     return;
 }
 
 void setCMD()
 {
-    if ( strlen(SMS_SERVER) )
-        sprintf(g_CURL_CMD, "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://%s:%d/SmsWebService1.asmx?WSDL -d @%s --max-time %s", SMS_SERVER, sms_port, CURL_FILE, TIMEOUT);
+    if ( strlen(UPDATE_SERVER) )
+        sprintf(g_CURL_CMD, "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://%s:%d/SmsWebService1.asmx?WSDL -d @%s --max-time %s", UPDATE_SERVER, update_port, CURL_FILE, TIMEOUT);
     else
         sprintf(g_CURL_CMD, "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232/SmsWebService1.asmx?WSDL -d @%s --max-time %s", CURL_FILE, TIMEOUT);
 
@@ -163,16 +176,22 @@ void setPath()
 {
     struct stat st;
 
-    if ( stat(USB_PATH, &st) == 0 ) { //linux storage detect, EX: /dev/sda1
-        strcpy(g_SYSLOG_PATH, USB_PATH); // tmp, for test
+    if ( stat(USB_PATH, &st) == 0 ) { //linux storage detect
+        strcpy(g_SYSLOG_PATH, USB_PATH);
         strcat(g_SYSLOG_PATH, "/SYSLOG");
+        strcpy(g_UPDATE_PATH, USB_PATH);
+        strcat(g_UPDATE_PATH, "/update.tar");
     }
     else if ( stat(SDCARD_PATH, &st) == 0 ) {
         strcpy(g_SYSLOG_PATH, SDCARD_PATH);
         strcat(g_SYSLOG_PATH, "/SYSLOG");
+        strcpy(g_UPDATE_PATH, SDCARD_PATH);
+        strcat(g_UPDATE_PATH, "/update.tar");
     }
-    else
+    else {
         strcpy(g_SYSLOG_PATH, SYSLOG_PATH);
+        strcpy(g_UPDATE_PATH, UPDATE_FILE);
+    }
 
     return;
 }
@@ -185,7 +204,7 @@ void init()
 
 int QryDLSWUpdate()
 {
-    char buf[256] = {0};
+    char buf[512] = {0};
     char vertmp[32] = {0};
     FILE *fd = NULL;
     int size = 0, inlen = 0, outlen = 0;
@@ -315,19 +334,45 @@ int QryDLSWUpdate()
 
     printf("Get Ver = %d.%d.%d, DLModelp = %s, PlanTime = %02d:%02d, SWURL = %s\n",
            myupdate.major, myupdate.minor, myupdate.patch, myupdate.DLModel, myupdate.hour, myupdate.minutes, myupdate.SWURL);
+
+    // check dl model, if not match then exit, no download
+    if ( strcmp(myupdate.DLModel, DLMODEL) ) {
+        sprintf(buf, "SWupdate QryDLSWUpdate() : DLModel %s not match this board %s", myupdate.DLModel, DLMODEL);
+        printf("%s\n", buf);
+        SaveLog(buf, st_time);
+        return 6;
+    }
+
     if ( strlen(myupdate.SWURL) ) {
-        sprintf(buf, "curl -o %s %s", UPDATE_FILE, myupdate.SWURL);
+        sprintf(buf, "curl -o %s %s", g_UPDATE_PATH, myupdate.SWURL);
         if ( !system(buf) ) {
             printf("Download OK\n");
-            SaveLog("SWupdate QryDLSWUpdate() : Download OK", st_time);
+            sprintf(buf, "SWupdate QryDLSWUpdate() : Download %s to %s OK", myupdate.SWURL, g_UPDATE_PATH);
+            SaveLog(buf, st_time);
             printf("======================= QryDLSWUpdate end =======================\n");
             return 0;
         }
         else {
             printf("Download Fail\n");
-            SaveLog("SWupdate QryDLSWUpdate() : Download Fail", st_time);
+            sprintf(buf, "SWupdate QryDLSWUpdate() : Download %s to %s Fail", myupdate.SWURL, g_UPDATE_PATH);
+            SaveLog(buf, st_time);
+            if ( strstr(g_UPDATE_PATH, USB_PATH) ) {
+                sprintf(buf, "curl -o %s %s", UPDATE_DIR, myupdate.SWURL);
+                if ( !system(buf) ) {
+                    printf("Download OK\n");
+                    sprintf(buf, "SWupdate QryDLSWUpdate() : Download %s to %s OK", myupdate.SWURL, UPDATE_DIR);
+                    SaveLog(buf, st_time);
+                    printf("======================= QryDLSWUpdate end =======================\n");
+                    return 0;
+                }
+                else {
+                    printf("Download Fail\n");
+                    sprintf(buf, "SWupdate QryDLSWUpdate() : Download %s to %s Fail", myupdate.SWURL, UPDATE_DIR);
+                    SaveLog(buf, st_time);
+                }
+            }
             printf("======================= QryDLSWUpdate end =======================\n");
-            return 6;
+            return 7;
         }
     }
 
@@ -359,7 +404,7 @@ int CheckTime(struct tm *st_time)
     return 0;
 }
 
-int DoUpdate()
+int DoUpdate(char *file_path)
 {
     char buf[256] = {0};
     int ret = 0;
@@ -375,32 +420,47 @@ int DoUpdate()
 
     printf("run DoUpdate\n");
 
-    // check dl model
-    if ( strcmp(myupdate.DLModel, DLMODEL) ) {
-        sprintf(buf, "SWupdate DoUpdate() : DLModel %s not match this board %s", myupdate.DLModel, DLMODEL);
-        printf("%s\n", buf);
-        SaveLog(buf, st_time);
-        // clean update file
-        printf("remove %s\n", UPDATE_FILE);
-        sprintf(buf, "rm %s; sync;", UPDATE_FILE);
-        system(buf);
-        return 1;
-    }
-
     // unzip
-    sprintf(buf, "tar -xf %s -C /tmp", UPDATE_FILE);
+    sprintf(buf, "tar -xf %s -C /tmp", file_path);
     ret = system(buf);
     printf("ret = %d\n", ret);
     system("sync");
     // clean update file
-    printf("remove %s\n", UPDATE_FILE);
-    sprintf(buf, "rm %s; sync;", UPDATE_FILE);
+    printf("remove %s\n", file_path);
+    sprintf(buf, "rm %s; sync;", file_path);
     system(buf);
     // check result, success = 0, fail > 0
     if ( ret ) {
         printf("command tar fail!\n");
         SaveLog("SWupdate DoUpdate() : tar fail", st_time);
-        return 2;
+        return 1;
+    }
+
+    // paser SW & HW VER if file from usb
+    if ( !strlen(myupdate.DLModel) ) { // file not from download, no parameter
+        if ( stat(USB_PATH, &st) == 0 ) { // file in usb
+            sprintf(buf, "%s/update.txt", USB_PATH);
+            fd = fopen(buf, "r");
+            if ( fd == NULL ) {
+                printf("fopen fail!\n");
+                return 2;
+            }
+            memset(buf, 0, 256);
+            fgets(buf, 256, fd);
+            sscanf(buf, "%d.%d.%d", &myupdate.major, &myupdate.minor, &myupdate.patch);
+            fgets(myupdate.DLModel, 16, fd);
+            pclose(fd);
+            myupdate.DLModel[strlen(myupdate.DLModel)-1] = 0; // remove \n
+            printf("myupdate.DLModel = [%s] \n", myupdate.DLModel);
+        }
+    }
+
+    // check dl model, if not match then exit
+    if ( strcmp(myupdate.DLModel, DLMODEL) ) {
+        sprintf(buf, "SWupdate QryDLSWUpdate() : DLModel %s not match this board %s", myupdate.DLModel, DLMODEL);
+        printf("%s\n", buf);
+        SaveLog(buf, st_time);
+        return 3;
     }
 
     // check unzip file
@@ -409,7 +469,7 @@ int DoUpdate()
     fd = popen(buf, "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
-        return 3;
+        return 4;
     }
     memset(buf, 0, 256);
     fgets(buf, 256, fd);
@@ -423,7 +483,7 @@ int DoUpdate()
     fd = popen(buf, "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
-        return 4;
+        return 5;
     }
     memset(buf, 0, 256);
     fgets(buf, 256, fd);
@@ -439,14 +499,14 @@ int DoUpdate()
         printf("update file version not match!\n");
         sprintf(buf, "SWupdate DoUpdate() : update file version not match %d.%d.%d", myupdate.major, myupdate.minor, myupdate.patch);
         SaveLog(buf, st_time);
-        return 5;
+        return 6;
     }
 
     // get original dlg320.exe version
     fd = popen("/usr/home/dlg320.exe -v", "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
-        return 6;
+        return 7;
     }
     memset(buf, 0, 256);
     fgets(buf, 256, fd);
@@ -459,7 +519,7 @@ int DoUpdate()
     fd = popen("/usr/home/DataProgram.exe -v", "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
-        return 7;
+        return 8;
     }
     memset(buf, 0, 256);
     fgets(buf, 256, fd);
@@ -472,7 +532,7 @@ int DoUpdate()
     if ( (dl_upd_ver <= dl_ori_ver) && (dp_upd_ver <= dp_ori_ver) ) {
         printf("update file version <= original file version\n");
         SaveLog("SWupdate DoUpdate() : update file version <= original file version", st_time);
-        return 8;
+        return 9;
     }
 
     // kill process
@@ -487,7 +547,7 @@ int DoUpdate()
         SaveLog("SWupdate DoUpdate() : copy dlg320.exe fail", st_time);
         sprintf(buf, "rm -rf %s; sync", UPDATE_DIR);
         system(buf);
-        return 9;
+        return 10;
     }
     sprintf(buf, "cp %s/DataProgram.exe /usr/home", UPDATE_DIR);
     ret = system(buf);
@@ -496,7 +556,7 @@ int DoUpdate()
         SaveLog("SWupdate DoUpdate() : copy DataProgram.exe fail", st_time);
         sprintf(buf, "rm -rf %s; sync", UPDATE_DIR);
         system(buf);
-        return 10;
+        return 11;
     }
     // run update.sh if exist
     sprintf(buf, "%s/update.sh", UPDATE_DIR);
@@ -505,7 +565,7 @@ int DoUpdate()
         system(buf);
         sprintf(buf, "%s/update.sh", UPDATE_DIR);
         system(buf);
-        printf("run %s/update.sh", UPDATE_DIR);
+        printf("run %s/update.sh\n", UPDATE_DIR);
         sprintf(buf, "SWupdate DoUpdate() : run %s/update.sh", UPDATE_DIR);
         SaveLog(buf, st_time);
     }
@@ -671,7 +731,7 @@ int main()
     time_t  previous_time;
     time_t  current_time;
     struct tm   *st_time = NULL;
-    int counter, interval, run_processs_min, syslog_count;
+    int counter, run_processs_min, syslog_count;
     struct stat st;
     int doUpdDLSWStatus = 0;
 
@@ -698,7 +758,6 @@ int main()
     DoUpdate();*/
 
     counter = 0;
-    interval = 10; //minutes
     run_processs_min = -1;
     syslog_count = 0;
     while (1) {
@@ -720,30 +779,33 @@ int main()
             }
         }
 
+        // get config & set parameter
+        getConfig();
+        setCMD();
+        setPath();
         // do QryDLSWUpdate
-        if ( st_time->tm_min % interval == 0 ) {
+        if ( st_time->tm_min % update_SW_time == 0 ) {
             // if update file not exist
-            if ( stat(UPDATE_FILE, &st) ) {
-                previous_time = current_time;
-                printf("localtime : %4d/%02d/%02d %02d:%02d:%02d", 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
-                //printf("#### Debug : QryDLSWUpdate start time : %ld ####\n", previous_time);
+            if ( stat(g_UPDATE_PATH, &st) ) { // not in storage
+                if ( stat(UPDATE_FILE, &st) ) { // not in /tmp
+                    previous_time = current_time;
+                    printf("localtime : %4d/%02d/%02d %02d:%02d:%02d", 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
+                    //printf("#### Debug : QryDLSWUpdate start time : %ld ####\n", previous_time);
 
-                // get config & set parameter
-                getConfig();
-                setCMD();
-                setPath();
+                    // get update info
+                    if ( strlen(myupdate.SWURL) == 0 )
+                        QryDLSWUpdate();
 
-                // get update info
-                if ( strlen(myupdate.SWURL) == 0 )
-                    QryDLSWUpdate();
-
-                current_time = time(NULL);
-                counter = current_time - previous_time;
-                //printf("#### Debug : QryDLSWUpdate end time : %ld ####\n", current_time);
-                printf("#### Debug : QryDLSWUpdate span time : %d ####\n", counter);
+                    current_time = time(NULL);
+                    counter = current_time - previous_time;
+                    //printf("#### Debug : QryDLSWUpdate end time : %ld ####\n", current_time);
+                    printf("#### Debug : QryDLSWUpdate span time : %d ####\n", counter);
+                }
+                else
+                    printf("%s exist!\n", UPDATE_FILE);
             }
             else
-                printf("%s exist!\n", UPDATE_FILE);
+                printf("%s exist!\n", g_UPDATE_PATH);
         }
         // sleep
         //printf("usleep() 60s\n");
@@ -755,11 +817,17 @@ int main()
         printf("localtime : %4d/%02d/%02d %02d:%02d:%02d\n", 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
         printf("##############################\n");
 
+        // check storage
+        if ( stat(g_UPDATE_PATH, &st) == 0 )
+            if ( CheckTime(st_time) )
+                if ( !DoUpdate(g_UPDATE_PATH) )
+                    doUpdDLSWStatus = 1;
+        // check /tmp
         if ( stat(UPDATE_FILE, &st) == 0 )
             if ( CheckTime(st_time) )
-                if ( !DoUpdate() )
+                if ( !DoUpdate(UPDATE_FILE) )
                     doUpdDLSWStatus = 1;
-
+        // update report
         if ( doUpdDLSWStatus )
             if ( !UpdDLSWStatus() ) {
                 doUpdDLSWStatus = 0;

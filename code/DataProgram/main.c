@@ -56,6 +56,7 @@ char g_CURL_CMD[256] = {0};
 
 struct tm st_log_time = {0};
 struct tm st_errlog_time = {0};
+struct tm st_list_time = {0};
 
 void getMAC(char *MAC)
 {
@@ -156,8 +157,8 @@ void getConfig()
     data_interval = tmp_interval;
     printf("set data interval %d\n", data_interval);
 */
-    // get update interval
-    fd = popen("uci get dlsetting.@sms[0].update_time", "r");
+    // get upload interval
+    fd = popen("uci get dlsetting.@sms[0].upload_time", "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
         return;
@@ -252,7 +253,6 @@ int CheckTime(struct tm target, struct tm file, int save_sec)
 
 int PostMIList()
 {
-    struct tm st_list_time = {0};
     char FILENAME[64] = {0};
     char buf[512] = {0}; // PostMIList result date length about = 372
     FILE *pMIList_fd = NULL;
@@ -270,9 +270,7 @@ int PostMIList()
 
     printf("======================== PostMIList start ========================\n");
     // get MIlist list (always one new file)
-    sprintf(buf, "cd %s; ls MIList_* > /tmp/MIList", g_XML_PATH);
-    //printf("buf cmd = %s\n", buf);
-    system(buf);
+    system("cd /tmp; ls MIList_* > /tmp/MIList");
 
     pMIList_fd = fopen("/tmp/MIList", "rb");
     if ( pMIList_fd == NULL ) {
@@ -290,7 +288,7 @@ int PostMIList()
         return 2;
     }
 
-    sprintf(FILENAME, "%s/%s", g_XML_PATH, buf);
+    sprintf(FILENAME, "/tmp/%s", buf);
     //printf("FILENAME = %s\n", FILENAME);
 
     // get file time
@@ -305,11 +303,11 @@ int PostMIList()
     if ( CheckTime(st_list_time, st_file_time, 0) ) {
         printf("Find new MIList\n");
         // set new time to st_list_time
-        st_list_time = st_file_time;
+        //st_list_time = st_file_time;
         //printf("List time : %04d/%02d/%02d %02d:%02d:%02d\n",
         //    st_list_time.tm_year+1900, st_list_time.tm_mon+1, st_list_time.tm_mday, st_list_time.tm_hour, st_list_time.tm_min, st_list_time.tm_sec);
     } else {
-        //printf("Old MIList file %s\n", FILENAME);
+        printf("Old MIList file %s\n", FILENAME);
         //printf("Not to do update\n");
         return 3;
     }
@@ -369,6 +367,7 @@ int PostMIList()
     if ( ret == 0 ) {
         printf("File %s update OK\n", FILENAME);
         SaveLog("DataProgram PostMIList() : update OK", st_time);
+        memcpy(&st_list_time, &st_file_time, sizeof(st_file_time));
         printf("========================= PostMIList end =========================\n");
         return 0;
     } else {
@@ -487,180 +486,191 @@ int Rcvlog()
     int clean = 0;
     time_t current_time;
     struct tm *st_time;
+    int i = 0, j = 0;
 
     current_time = time(NULL);
     st_time = localtime(&current_time);
 
     printf("======================== Rcvlog start ========================\n");
-    // get Log file date list
-    sprintf(buf, "cd %s; ls > /tmp/LogDate", g_LOG_PATH);
-    //printf("buf cmd = %s\n", buf);
-    system(buf);
+    if ( strstr(g_LOG_PATH, USB_PATH) )
+        j = 2; // storage & /tmp
+    else
+        j = 1; // only /tmp
 
-    pdate_fd = fopen("/tmp/LogDate", "rb");
-    if ( pdate_fd == NULL ) {
-        printf("#### Open /tmp/LogDate Fail ####\n");
-        return 1;
-    }
+    for ( i = 0; i < j; i++ ) {
+        if ( i == 1 ) // change path from storage to /tmp
+            strcpy(g_LOG_PATH, LOG_XML_PATH);
 
-    qrylogdate = (st_log_time.tm_year+1900)*10000 + (st_log_time.tm_mon+1)*100 + st_log_time.tm_mday;
-    //printf("QryLogDate = %d\n", qrylogdate);
-
-    // get file date
-    memset(buf, 0, 512);
-    while ( fgets(buf, 64, pdate_fd) != NULL ) {
-        if ( strlen(buf) == 0 )
-            break;
-        // set '\n' to 0
-        buf[strlen(buf)-1] = 0;
-        sscanf(buf, "%d", &logdate);
-        //printf("Get LogDate = %d\n", logdate);
-        if ( logdate < qrylogdate ) {
-            //printf("Old date, continue\n");
-            if ( strstr(g_LOG_PATH, LOG_XML_PATH) != NULL ) {
-                sprintf(buf, "rm -rf %s/%d", g_LOG_PATH, logdate);
-                //printf("cmd = %s\n", buf);
-                system(buf);
-            }
-            continue;
-        }
-        sprintf(buf, "cd %s/%d; ls > /tmp/LogTime", g_LOG_PATH, logdate);
+        // get Log file date list
+        sprintf(buf, "cd %s; ls > /tmp/LogDate", g_LOG_PATH);
         //printf("buf cmd = %s\n", buf);
         system(buf);
 
-        ptime_fd = fopen("/tmp/LogTime", "rb");
-        if ( ptime_fd == NULL ) {
-            printf("#### Open /tmp/LogTime Fail ####\n");
-            return 2;
+        pdate_fd = fopen("/tmp/LogDate", "rb");
+        if ( pdate_fd == NULL ) {
+            printf("#### Open /tmp/LogDate Fail ####\n");
+            return 1;
         }
-        // get file time
+
+        qrylogdate = (st_log_time.tm_year+1900)*10000 + (st_log_time.tm_mon+1)*100 + st_log_time.tm_mday;
+        //printf("QryLogDate = %d\n", qrylogdate);
+
+        // get file date
         memset(buf, 0, 512);
-        while ( fgets(buf, 64, ptime_fd) != NULL ) {
+        while ( fgets(buf, 64, pdate_fd) != NULL ) {
             if ( strlen(buf) == 0 )
                 break;
             // set '\n' to 0
             buf[strlen(buf)-1] = 0;
-
-            // remove previous data if save as host (ex. /tmp/test)
-            if ( strstr(FILENAME, LOG_XML_PATH) )
-                remove(FILENAME);
-            // remove empty file
-            if ( stat(FILENAME, &st) == 0 )
-                if ( st.st_size <= 20 ) {
-                        remove(FILENAME);
-                        printf("remove empty file!\n");
+            sscanf(buf, "%d", &logdate);
+            //printf("Get LogDate = %d\n", logdate);
+            if ( logdate < qrylogdate ) {
+                //printf("Old date, continue\n");
+                if ( strstr(g_LOG_PATH, LOG_XML_PATH) != NULL ) {
+                    sprintf(buf, "rm -rf %s/%d", g_LOG_PATH, logdate);
+                    //printf("cmd = %s\n", buf);
+                    system(buf);
                 }
-            // clean file
-            if ( clean )
-                remove(FILENAME);
-
-            // get next file name in list
-            sprintf(FILENAME, "%s/%d/%s", g_LOG_PATH, logdate, buf);
-            //printf("FILENAME = %s\n", FILENAME);
-            // get file time
-            st_file_time.tm_year = logdate/10000 - 1900;
-            st_file_time.tm_mon = (logdate%10000)/100 - 1;
-            st_file_time.tm_mday = logdate%100;
-            sscanf(buf, "%02d%02d", &st_file_time.tm_hour, &st_file_time.tm_min);
-            st_file_time.tm_sec = 0;
-            //printf("File time : %04d/%02d/%02d %02d:%02d\n",
-            //    st_file_time.tm_year+1900, st_file_time.tm_mon+1, st_file_time.tm_mday, st_file_time.tm_hour, st_file_time.tm_min);
-            // check time,
-            if ( !CheckTime(st_log_time, st_file_time, 0) ) {
-                //printf("Old file %s\n", FILENAME);
-                //printf("Not to do update\n");
-                //if ( !CheckTime(st_log_time, st_file_time, save_time) ) {
-                //    printf("File too old, remove file %s\n", FILENAME);
-                //    remove(FILENAME);
-                //}
                 continue;
             }
-            // check file
-            if ( stat(FILENAME, &st) == 0 )
-                if ( st.st_size <= 20 ) {
-                    printf("empty file!\n");
-                    clean = 1;
-                    continue;
-                }
-
-            // set curl file
-            pcurlfile_fd = fopen(CURL_FILE, "wb");
-            if ( pcurlfile_fd == NULL ) {
-                printf("#### Open %s Fail ####\n", CURL_FILE);
-                continue;
-            }
-            fputs(SOAP_HEAD, pcurlfile_fd);
-            sprintf(buf, "\t\t<Rcvlog xmlns=\"http://tempuri.org/\">\n");
-            fputs(buf, pcurlfile_fd);
-            sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
-            fputs(buf, pcurlfile_fd);
-            sprintf(buf, "\t\t\t<devicefile>");
-            fputs(buf, pcurlfile_fd);
-            base64_encode(FILENAME, pcurlfile_fd);
-            sprintf(buf, "</devicefile>\n");
-            fputs(buf, pcurlfile_fd);
-            sprintf(buf, "\t\t</Rcvlog>\n");
-            fputs(buf, pcurlfile_fd);
-            fputs(SOAP_TAIL, pcurlfile_fd);
-            fclose(pcurlfile_fd);
-
-            // run curl soap to web server
-            sprintf(buf, "%s > /tmp/Rcvlog", g_CURL_CMD);
+            sprintf(buf, "cd %s/%d; ls > /tmp/LogTime", g_LOG_PATH, logdate);
+            //printf("buf cmd = %s\n", buf);
             system(buf);
 
-            // check responds
-            if ( stat("/tmp/Rcvlog", &st) == 0 )
-                if ( st.st_size == 0 ) {
-                    printf("#### Rcvlog() /tmp/Rcvlog empty ####\n");
-                    SaveLog("DataProgram Rcvlog() : /tmp/Rcvlog empty", st_time);
-                    continue;
-                }
-            // read data
-            presult_fd = fopen("/tmp/Rcvlog", "rb");
-            if ( presult_fd == NULL ) {
-                printf("#### Open /tmp/Rcvlog Fail ####\n");
-                continue;
+            ptime_fd = fopen("/tmp/LogTime", "rb");
+            if ( ptime_fd == NULL ) {
+                printf("#### Open /tmp/LogTime Fail ####\n");
+                return 2;
             }
+            // get file time
             memset(buf, 0, 512);
-            fread(buf, 1, 512, presult_fd);
-            fclose(presult_fd);
-            //printf("/tmp/Rcvlog : \n%s\n", buf);
+            while ( fgets(buf, 64, ptime_fd) != NULL ) {
+                if ( strlen(buf) == 0 )
+                    break;
+                // set '\n' to 0
+                buf[strlen(buf)-1] = 0;
 
-            index = strstr(buf, "<RcvlogResult>");
-            if ( index == NULL ) {
-                printf("#### Rcvlog() <RcvlogResult> not found ####\n");
-                SaveLog("DataProgram Rcvlog() : <RcvlogResult> not found", st_time);
-                continue;
-            }
-            sscanf(index, "<RcvlogResult>%02d</RcvlogResult>", &ret);
-            printf("ret = %02d\n", ret);
-            if ( ret == 0 ) {
-                printf("File %s update OK\n", FILENAME);
-                sprintf(buf, "DataProgram Rcvlog() : update %s OK", FILENAME);
-                SaveLog(buf, st_time);
-                clean = 0;
-            } else {
-                printf("File %s update Fail\n", FILENAME);
-                sprintf(buf, "DataProgram Rcvlog() : update %s Fail", FILENAME);
-                SaveLog(buf, st_time);
-                clean = 1;
+                // remove previous data if save as host (ex. /tmp/test)
+                if ( strstr(FILENAME, LOG_XML_PATH) )
+                    remove(FILENAME);
+                // remove empty file
                 if ( stat(FILENAME, &st) == 0 )
                     if ( st.st_size <= 20 ) {
-                        remove(FILENAME);
-                        printf("remove empty file!\n");
+                            remove(FILENAME);
+                            printf("remove empty file!\n");
                     }
+                // clean file
+                if ( clean )
+                    remove(FILENAME);
+
+                // get next file name in list
+                sprintf(FILENAME, "%s/%d/%s", g_LOG_PATH, logdate, buf);
+                //printf("FILENAME = %s\n", FILENAME);
+                // get file time
+                st_file_time.tm_year = logdate/10000 - 1900;
+                st_file_time.tm_mon = (logdate%10000)/100 - 1;
+                st_file_time.tm_mday = logdate%100;
+                sscanf(buf, "%02d%02d", &st_file_time.tm_hour, &st_file_time.tm_min);
+                st_file_time.tm_sec = 0;
+                //printf("File time : %04d/%02d/%02d %02d:%02d\n",
+                //    st_file_time.tm_year+1900, st_file_time.tm_mon+1, st_file_time.tm_mday, st_file_time.tm_hour, st_file_time.tm_min);
+                // check time,
+                if ( !CheckTime(st_log_time, st_file_time, 0) ) {
+                    //printf("Old file %s\n", FILENAME);
+                    //printf("Not to do update\n");
+                    //if ( !CheckTime(st_log_time, st_file_time, save_time) ) {
+                    //    printf("File too old, remove file %s\n", FILENAME);
+                    //    remove(FILENAME);
+                    //}
+                    continue;
+                }
+                // check file
+                if ( stat(FILENAME, &st) == 0 )
+                    if ( st.st_size <= 20 ) {
+                        printf("empty file!\n");
+                        clean = 1;
+                        continue;
+                    }
+
+                // set curl file
+                pcurlfile_fd = fopen(CURL_FILE, "wb");
+                if ( pcurlfile_fd == NULL ) {
+                    printf("#### Open %s Fail ####\n", CURL_FILE);
+                    continue;
+                }
+                fputs(SOAP_HEAD, pcurlfile_fd);
+                sprintf(buf, "\t\t<Rcvlog xmlns=\"http://tempuri.org/\">\n");
+                fputs(buf, pcurlfile_fd);
+                sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
+                fputs(buf, pcurlfile_fd);
+                sprintf(buf, "\t\t\t<devicefile>");
+                fputs(buf, pcurlfile_fd);
+                base64_encode(FILENAME, pcurlfile_fd);
+                sprintf(buf, "</devicefile>\n");
+                fputs(buf, pcurlfile_fd);
+                sprintf(buf, "\t\t</Rcvlog>\n");
+                fputs(buf, pcurlfile_fd);
+                fputs(SOAP_TAIL, pcurlfile_fd);
+                fclose(pcurlfile_fd);
+
+                // run curl soap to web server
+                sprintf(buf, "%s > /tmp/Rcvlog", g_CURL_CMD);
+                system(buf);
+
+                // check responds
+                if ( stat("/tmp/Rcvlog", &st) == 0 )
+                    if ( st.st_size == 0 ) {
+                        printf("#### Rcvlog() /tmp/Rcvlog empty ####\n");
+                        SaveLog("DataProgram Rcvlog() : /tmp/Rcvlog empty", st_time);
+                        continue;
+                    }
+                // read data
+                presult_fd = fopen("/tmp/Rcvlog", "rb");
+                if ( presult_fd == NULL ) {
+                    printf("#### Open /tmp/Rcvlog Fail ####\n");
+                    continue;
+                }
+                memset(buf, 0, 512);
+                fread(buf, 1, 512, presult_fd);
+                fclose(presult_fd);
+                //printf("/tmp/Rcvlog : \n%s\n", buf);
+
+                index = strstr(buf, "<RcvlogResult>");
+                if ( index == NULL ) {
+                    printf("#### Rcvlog() <RcvlogResult> not found ####\n");
+                    SaveLog("DataProgram Rcvlog() : <RcvlogResult> not found", st_time);
+                    continue;
+                }
+                sscanf(index, "<RcvlogResult>%02d</RcvlogResult>", &ret);
+                printf("ret = %02d\n", ret);
+                if ( ret == 0 ) {
+                    printf("File %s update OK\n", FILENAME);
+                    sprintf(buf, "DataProgram Rcvlog() : update %s OK", FILENAME);
+                    SaveLog(buf, st_time);
+                    clean = 0;
+                } else {
+                    printf("File %s update Fail\n", FILENAME);
+                    sprintf(buf, "DataProgram Rcvlog() : update %s Fail", FILENAME);
+                    SaveLog(buf, st_time);
+                    clean = 1;
+                    if ( stat(FILENAME, &st) == 0 )
+                        if ( st.st_size <= 20 ) {
+                            remove(FILENAME);
+                            printf("remove empty file!\n");
+                        }
+                }
+                cnt++;
+                if ( cnt == UPDATE_MAX ) {
+                    printf("Update count = %d, Exit Rcvlog!\n", cnt);
+                    fclose(ptime_fd);
+                    fclose(pdate_fd);
+                    return 0;
+                }
             }
-            cnt++;
-            if ( cnt == UPDATE_MAX ) {
-                printf("Update count = %d, Exit Rcvlog!\n", cnt);
-                fclose(ptime_fd);
-                fclose(pdate_fd);
-                return 0;
-            }
+            fclose(ptime_fd);
         }
-        fclose(ptime_fd);
+        fclose(pdate_fd);
     }
-    fclose(pdate_fd);
 
     printf("======================== Rcvlog end =========================\n");
     return 0;
@@ -775,179 +785,190 @@ int Rcverrorlog()
     int clean = 0;
     time_t current_time;
     struct tm *st_time;
+    int i = 0, j = 0;
 
     current_time = time(NULL);
     st_time = localtime(&current_time);
 
     printf("====================== Rcverrorlog start ======================\n");
-    // get Log file date list
-    sprintf(buf, "cd %s; ls > /tmp/ErrLogDate", g_ERRLOG_PATH);
-    //printf("buf cmd = %s\n", buf);
-    system(buf);
+    if ( strstr(g_ERRLOG_PATH, USB_PATH) )
+        j = 2; // storage & /tmp
+    else
+        j = 1; // only /tmp
 
-    pdate_fd = fopen("/tmp/ErrLogDate", "rb");
-    if ( pdate_fd == NULL ) {
-        printf("#### Open /tmp/ErrLogDate Fail ####\n");
-        return 1;
-    }
+    for ( i = 0; i < j; i++ ) {
+        if ( i == 1 ) // change path from storage to /tmp
+            strcpy(g_ERRLOG_PATH, ERRLOG_XML_PATH);
 
-    qryerrlogdate = (st_errlog_time.tm_year+1900)*10000 + (st_errlog_time.tm_mon+1)*100 + st_errlog_time.tm_mday;
-    //printf("QryErrLogDate = %d\n", qryerrlogdate);
-
-    // get file date
-    memset(buf, 0, 512);
-    while ( fgets(buf, 64, pdate_fd) != NULL ) {
-        if ( strlen(buf) == 0 )
-            break;
-        // set '\n' to 0
-        buf[strlen(buf)-1] = 0;
-        sscanf(buf, "%d", &errlogdate);
-        //printf("Get ErrLogDate = %d\n", errlogdate);
-        if ( errlogdate < qryerrlogdate ) {
-            //printf("Old date, continue\n");
-            if ( strstr(g_ERRLOG_PATH, ERRLOG_XML_PATH) != NULL ) {
-                sprintf(buf, "rm -rf %s/%d", g_ERRLOG_PATH, errlogdate);
-                //printf("cmd = %s\n", buf);
-                system(buf);
-            }
-            continue;
-        }
-        sprintf(buf, "cd %s/%d; ls > /tmp/ErrLogTime", g_ERRLOG_PATH, errlogdate);
+        // get Log file date list
+        sprintf(buf, "cd %s; ls > /tmp/ErrLogDate", g_ERRLOG_PATH);
         //printf("buf cmd = %s\n", buf);
         system(buf);
 
-        ptime_fd = fopen("/tmp/ErrLogTime", "rb");
-        if ( ptime_fd == NULL ) {
-            printf("#### Open /tmp/ErrLogTime Fail ####\n");
-            return 2;
+        pdate_fd = fopen("/tmp/ErrLogDate", "rb");
+        if ( pdate_fd == NULL ) {
+            printf("#### Open /tmp/ErrLogDate Fail ####\n");
+            return 1;
         }
-        // get file time
+
+        qryerrlogdate = (st_errlog_time.tm_year+1900)*10000 + (st_errlog_time.tm_mon+1)*100 + st_errlog_time.tm_mday;
+        //printf("QryErrLogDate = %d\n", qryerrlogdate);
+
+        // get file date
         memset(buf, 0, 512);
-        while ( fgets(buf, 64, ptime_fd) != NULL ) {
+        while ( fgets(buf, 64, pdate_fd) != NULL ) {
             if ( strlen(buf) == 0 )
                 break;
             // set '\n' to 0
             buf[strlen(buf)-1] = 0;
-
-            // remove data if save as host (ex. /tmp/test)
-            if ( strstr(FILENAME, ERRLOG_XML_PATH) )
-                remove(FILENAME);
-            // remove empty file
-            if ( stat(FILENAME, &st) == 0 )
-                if ( st.st_size <= 20 ) {
-                        remove(FILENAME);
-                        printf("remove empty file!\n");
+            sscanf(buf, "%d", &errlogdate);
+            //printf("Get ErrLogDate = %d\n", errlogdate);
+            if ( errlogdate < qryerrlogdate ) {
+                //printf("Old date, continue\n");
+                if ( strstr(g_ERRLOG_PATH, ERRLOG_XML_PATH) != NULL ) {
+                    sprintf(buf, "rm -rf %s/%d", g_ERRLOG_PATH, errlogdate);
+                    //printf("cmd = %s\n", buf);
+                    system(buf);
                 }
-            // clean file
-            if ( clean )
-                remove(FILENAME);
-
-            sprintf(FILENAME, "%s/%d/%s", g_ERRLOG_PATH, errlogdate, buf);
-            //printf("FILENAME = %s\n", FILENAME);
-            // get file time
-            st_file_time.tm_year = errlogdate/10000 - 1900;
-            st_file_time.tm_mon = (errlogdate%10000)/100 - 1;
-            st_file_time.tm_mday = errlogdate%100;
-            sscanf(buf, "%02d%02d", &st_file_time.tm_hour, &st_file_time.tm_min);
-            st_file_time.tm_sec = 0;
-            //printf("File time : %04d/%02d/%02d %02d:%02d\n",
-            //    st_file_time.tm_year+1900, st_file_time.tm_mon+1, st_file_time.tm_mday, st_file_time.tm_hour, st_file_time.tm_min);
-            // check time,
-            if ( !CheckTime(st_errlog_time, st_file_time, 0) ) {
-                //printf("Old file %s\n", FILENAME);
-                //printf("Not to do update\n");
-                //if ( !CheckTime(st_errlog_time, st_file_time, save_time) ) {
-                //    printf("File too old, remove file %s\n", FILENAME);
-                //    remove(FILENAME);
-                //}
                 continue;
             }
-            // check file
-            if ( stat(FILENAME, &st) == 0 )
-                if ( st.st_size <= 20 ) {
-                    printf("empty file!\n");
-                    clean = 1;
-                    continue;
-                }
-
-            // set curl file
-            pcurlfile_fd = fopen(CURL_FILE, "wb");
-            if ( pcurlfile_fd == NULL ) {
-                printf("#### Open %s Fail ####\n", CURL_FILE);
-                continue;
-            }
-            fputs(SOAP_HEAD, pcurlfile_fd);
-            sprintf(buf, "\t\t<Rcverrorlog xmlns=\"http://tempuri.org/\">\n");
-            fputs(buf, pcurlfile_fd);
-            sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
-            fputs(buf, pcurlfile_fd);
-            sprintf(buf, "\t\t\t<devicefile>");
-            fputs(buf, pcurlfile_fd);
-            base64_encode(FILENAME, pcurlfile_fd);
-            sprintf(buf, "</devicefile>\n");
-            fputs(buf, pcurlfile_fd);
-            sprintf(buf, "\t\t</Rcverrorlog>\n");
-            fputs(buf, pcurlfile_fd);
-            fputs(SOAP_TAIL, pcurlfile_fd);
-            fclose(pcurlfile_fd);
-
-            // run curl soap to web server
-            sprintf(buf, "%s > /tmp/Rcverrorlog", g_CURL_CMD);
+            sprintf(buf, "cd %s/%d; ls > /tmp/ErrLogTime", g_ERRLOG_PATH, errlogdate);
+            //printf("buf cmd = %s\n", buf);
             system(buf);
 
-            // check responds
-            if ( stat("/tmp/Rcverrorlog", &st) == 0 )
-                if ( st.st_size == 0 ) {
-                    printf("#### Rcverrorlog() /tmp/Rcverrorlog empty ####\n");
-                    SaveLog("DataProgram Rcverrorlog() : /tmp/Rcverrorlog empty", st_time);
-                    continue;
-                }
-            // read data
-            presult_fd = fopen("/tmp/Rcverrorlog", "rb");
-            if ( presult_fd == NULL ) {
-                printf("#### Open /tmp/Rcverrorlog Fail ####\n");
-                continue;
+            ptime_fd = fopen("/tmp/ErrLogTime", "rb");
+            if ( ptime_fd == NULL ) {
+                printf("#### Open /tmp/ErrLogTime Fail ####\n");
+                return 2;
             }
+            // get file time
             memset(buf, 0, 512);
-            fread(buf, 1, 512, presult_fd);
-            fclose(presult_fd);
-            //printf("/tmp/Rcverrorlog : \n%s\n", buf);
+            while ( fgets(buf, 64, ptime_fd) != NULL ) {
+                if ( strlen(buf) == 0 )
+                    break;
+                // set '\n' to 0
+                buf[strlen(buf)-1] = 0;
 
-            index = strstr(buf, "<RcverrorlogResult>");
-            if ( index == NULL ) {
-                printf("#### Rcverrorlog() <RcverrorlogResult> not found ####\n");
-                SaveLog("DataProgram Rcverrorlog() : <RcverrorlogResult> not found", st_time);
-                continue;
-            }
-            sscanf(index, "<RcverrorlogResult>%02d</RcverrorlogResult>", &ret);
-            printf("ret = %02d\n", ret);
-            if ( ret == 0 ) {
-                printf("File %s update OK\n", FILENAME);
-                sprintf(buf, "DataProgram Rcverrorlog() : update %s OK", FILENAME);
-                SaveLog(buf, st_time);
-                clean = 0;
-            } else {
-                printf("File %s update Fail\n", FILENAME);
-                sprintf(buf, "DataProgram Rcverrorlog() : update %s Fail", FILENAME);
-                SaveLog(buf, st_time);
-                clean = 1;
+                // remove data if save as host (ex. /tmp/test)
+                if ( strstr(FILENAME, ERRLOG_XML_PATH) )
+                    remove(FILENAME);
+                // remove empty file
                 if ( stat(FILENAME, &st) == 0 )
                     if ( st.st_size <= 20 ) {
-                        remove(FILENAME);
-                        printf("remove empty file!\n");
+                            remove(FILENAME);
+                            printf("remove empty file!\n");
                     }
+                // clean file
+                if ( clean )
+                    remove(FILENAME);
+
+                sprintf(FILENAME, "%s/%d/%s", g_ERRLOG_PATH, errlogdate, buf);
+                //printf("FILENAME = %s\n", FILENAME);
+                // get file time
+                st_file_time.tm_year = errlogdate/10000 - 1900;
+                st_file_time.tm_mon = (errlogdate%10000)/100 - 1;
+                st_file_time.tm_mday = errlogdate%100;
+                sscanf(buf, "%02d%02d", &st_file_time.tm_hour, &st_file_time.tm_min);
+                st_file_time.tm_sec = 0;
+                //printf("File time : %04d/%02d/%02d %02d:%02d\n",
+                //    st_file_time.tm_year+1900, st_file_time.tm_mon+1, st_file_time.tm_mday, st_file_time.tm_hour, st_file_time.tm_min);
+                // check time,
+                if ( !CheckTime(st_errlog_time, st_file_time, 0) ) {
+                    //printf("Old file %s\n", FILENAME);
+                    //printf("Not to do update\n");
+                    //if ( !CheckTime(st_errlog_time, st_file_time, save_time) ) {
+                    //    printf("File too old, remove file %s\n", FILENAME);
+                    //    remove(FILENAME);
+                    //}
+                    continue;
+                }
+                // check file
+                if ( stat(FILENAME, &st) == 0 )
+                    if ( st.st_size <= 20 ) {
+                        printf("empty file!\n");
+                        clean = 1;
+                        continue;
+                    }
+
+                // set curl file
+                pcurlfile_fd = fopen(CURL_FILE, "wb");
+                if ( pcurlfile_fd == NULL ) {
+                    printf("#### Open %s Fail ####\n", CURL_FILE);
+                    continue;
+                }
+                fputs(SOAP_HEAD, pcurlfile_fd);
+                sprintf(buf, "\t\t<Rcverrorlog xmlns=\"http://tempuri.org/\">\n");
+                fputs(buf, pcurlfile_fd);
+                sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
+                fputs(buf, pcurlfile_fd);
+                sprintf(buf, "\t\t\t<devicefile>");
+                fputs(buf, pcurlfile_fd);
+                base64_encode(FILENAME, pcurlfile_fd);
+                sprintf(buf, "</devicefile>\n");
+                fputs(buf, pcurlfile_fd);
+                sprintf(buf, "\t\t</Rcverrorlog>\n");
+                fputs(buf, pcurlfile_fd);
+                fputs(SOAP_TAIL, pcurlfile_fd);
+                fclose(pcurlfile_fd);
+
+                // run curl soap to web server
+                sprintf(buf, "%s > /tmp/Rcverrorlog", g_CURL_CMD);
+                system(buf);
+
+                // check responds
+                if ( stat("/tmp/Rcverrorlog", &st) == 0 )
+                    if ( st.st_size == 0 ) {
+                        printf("#### Rcverrorlog() /tmp/Rcverrorlog empty ####\n");
+                        SaveLog("DataProgram Rcverrorlog() : /tmp/Rcverrorlog empty", st_time);
+                        continue;
+                    }
+                // read data
+                presult_fd = fopen("/tmp/Rcverrorlog", "rb");
+                if ( presult_fd == NULL ) {
+                    printf("#### Open /tmp/Rcverrorlog Fail ####\n");
+                    continue;
+                }
+                memset(buf, 0, 512);
+                fread(buf, 1, 512, presult_fd);
+                fclose(presult_fd);
+                //printf("/tmp/Rcverrorlog : \n%s\n", buf);
+
+                index = strstr(buf, "<RcverrorlogResult>");
+                if ( index == NULL ) {
+                    printf("#### Rcverrorlog() <RcverrorlogResult> not found ####\n");
+                    SaveLog("DataProgram Rcverrorlog() : <RcverrorlogResult> not found", st_time);
+                    continue;
+                }
+                sscanf(index, "<RcverrorlogResult>%02d</RcverrorlogResult>", &ret);
+                printf("ret = %02d\n", ret);
+                if ( ret == 0 ) {
+                    printf("File %s update OK\n", FILENAME);
+                    sprintf(buf, "DataProgram Rcverrorlog() : update %s OK", FILENAME);
+                    SaveLog(buf, st_time);
+                    clean = 0;
+                } else {
+                    printf("File %s update Fail\n", FILENAME);
+                    sprintf(buf, "DataProgram Rcverrorlog() : update %s Fail", FILENAME);
+                    SaveLog(buf, st_time);
+                    clean = 1;
+                    if ( stat(FILENAME, &st) == 0 )
+                        if ( st.st_size <= 20 ) {
+                            remove(FILENAME);
+                            printf("remove empty file!\n");
+                        }
+                }
+                cnt++;
+                if ( cnt == UPDATE_MAX ) {
+                    printf("Update count = %d, Exit Rcverrorlog!\n", cnt);
+                    fclose(ptime_fd);
+                    fclose(pdate_fd);
+                    return 0;
+                }
             }
-            cnt++;
-            if ( cnt == UPDATE_MAX ) {
-                printf("Update count = %d, Exit Rcverrorlog!\n", cnt);
-                fclose(ptime_fd);
-                fclose(pdate_fd);
-                return 0;
-            }
+            fclose(ptime_fd);
         }
-        fclose(ptime_fd);
+        fclose(pdate_fd);
     }
-    fclose(pdate_fd);
 
     printf("======================= Rcverrorlog end =======================\n");
     return 0;
@@ -1064,7 +1085,7 @@ int CheckUpdateInterval()
 
     printf("====================== CheckUpdateInterval start ======================\n");
     // get update interval
-    fd = popen("uci get dlsetting.@sms[0].update_time", "r");
+    fd = popen("uci get dlsetting.@sms[0].upload_time", "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
         return 1;
@@ -2343,6 +2364,7 @@ int main(int argc, char* argv[])
     }
 
     current_time = time(NULL);
+    previous_time = current_time;
     st_time = localtime(&current_time);
 
     printf("Data Program Start!\n");
@@ -2353,7 +2375,7 @@ int main(int argc, char* argv[])
     OpenLog(g_SYSLOG_PATH, st_time);
     SaveLog("DataProgram main() : start", st_time);
 
-    counter = 9999;
+    //counter = 9999;
     while (1) {
         if ( counter >= update_interval*60 ) {
             current_time = time(NULL);

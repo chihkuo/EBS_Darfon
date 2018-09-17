@@ -1,5 +1,6 @@
 #include "datalog.h"
 #include "G320.h"
+#include "sys_error.h"
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -9,7 +10,7 @@ extern "C"
 }
 
 extern "C" {
-    extern int    MyModbusDrvInit(char *szport);
+    extern int     MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_bits);
     extern void    RemoveAllRegister(int times);
     extern int    MyStartRegisterProcess(byte *psn);
     extern int     ModbusDrvDeinit();
@@ -34,6 +35,8 @@ CG320::CG320()
     m_snCount = 0;
     m_loopstate = 0;
     m_loopflag = 0;
+    m_sys_error = 0;
+    m_do_get_TZ = true;
     m_st_time = NULL;
     m_last_read_time = 0;
     m_last_register_time = 0;
@@ -43,7 +46,8 @@ CG320::CG320()
     m_mi_id_info = {0};
     m_mi_power_info = {0};
     m_hb_id_data = {0};
-    m_hb_id_flags = {0};
+    m_hb_id_flags1 = {0};
+    m_hb_id_flags2 = {0};
     m_hb_rtc_data = {0};
     m_hb_rs_info = {0};
     m_hb_rrs_info = {0};
@@ -63,7 +67,8 @@ CG320::CG320()
     memset(m_bms_mainbuf, 0x00, BMS_BUF_SIZE);
     memset(m_bms_filename, 0x00, 128);
 
-    for (int i=0; i<253; i++) {
+    int i = 0;
+    for (i=0; i<253; i++) {
         arySNobj[i].m_Addr=i+1; // address range 1 ~ 253
         memset(arySNobj[i].m_Sn, 0x00, 17);
         arySNobj[i].m_Device = -2;
@@ -72,7 +77,18 @@ CG320::CG320()
         //printf("i=%u, addr=%d\n",i,arySNobj[i].m_Addr );
     }
 
+    printf("create bms header\n");
     char buf[128] = {0};
+    memset(m_bms_header, 0x00, 8192);
+    strcpy(m_bms_header, "time,from/end address");
+    for (i = 0x209; i < 0x5B8; i++ ) {
+        memset(buf, 0, 128);
+        sprintf(buf, ",0x%03X", i);
+        strcat(m_bms_header, buf);
+    }
+    strcat(m_bms_header, "\n");
+    printf("end\n");
+
     sprintf(buf, "rm %s", DEVICELIST_PATH);
     system(buf);
 }
@@ -90,15 +106,21 @@ void CG320::Init()
     GetDLConfig();
 
     char *port;
-    port = szPort[m_dl_config.m_port-1]; // COM1~4 <==> /dev/ttyS0~3
+    port = szPort[m_dl_config.m_inverter_port-1]; // COM1~4 <==> /dev/ttyS0~3
     char szbuf[32];
     sprintf(szbuf,"port = %s \n",port);
     printf(szbuf);
-    MyModbusDrvInit(port);
+    char inverter_parity = 0;
+    if ( strstr(m_dl_config.m_inverter_parity, "Odd") )
+        inverter_parity = 'O';
+    else if ( strstr(m_dl_config.m_inverter_parity, "Even") )
+        inverter_parity = 'E';
+    else
+        inverter_parity = 'N';
+    MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits);
 
     // get time zone
-    if ( !GetTimezone() )
-        GetNetTime();
+    GetTimezone();
     usleep(1000000);
 
     // set save file path
@@ -183,8 +205,7 @@ void CG320::Start()
     int     idc = 0, i = 0;
     long    register_interval = 0, search_interval = 0, savelog_imterval = 0;
     struct stat st;
-    bool    dosave = false;
-    time_t  save_time = 0;
+    bool    dosave = true;
 
     GetLocalTime();
     SaveLog((char *)"DataLogger Start() : start", m_st_time);
@@ -262,7 +283,8 @@ void CG320::Start()
                         }
 
                         WriteLogXML(i);
-                        if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ) {
+                        if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                            (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
                             WriteErrorLogXML(i);
                         }
                         dosave = true;
@@ -326,7 +348,8 @@ void CG320::Start()
                         }
 
                         WriteLogXML(i);
-                        if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ) {
+                        if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ||
+                            (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
                             WriteErrorLogXML(i);
                         }
                         dosave = true;
@@ -373,12 +396,8 @@ void CG320::Start()
             printf("#### Debug : read span time : %ld ####\n", m_current_time - m_last_read_time);
         }
         if ( dosave ) {
-            m_current_time = time(NULL);
-            if ( m_current_time >= save_time+m_dl_config.m_sample_time*60 ) {
-                save_time = m_current_time;
-                SaveDeviceList();
-                dosave = false;
-            }
+            SaveDeviceList();
+            dosave = false;
         }
 
         // loop setting, delay, time ...
@@ -412,8 +431,12 @@ void CG320::Start()
                     if ( ReRegiser(i) ) {
                         if ( !GetDevice(i) )
                             arySNobj[i].m_Err++;
-                        else if ( arySNobj[i].m_Device >= 0x0A )
-                            SetHybridRTCData(i);
+                        else {
+                            // ReRegiser OK, GetDevice OK, know MI or Hybrid
+                            WriteMIListXML();
+                            if ( arySNobj[i].m_Device >= 0x0A )
+                                SetHybridRTCData(i);
+                        }
                     }
                 }
             }
@@ -423,6 +446,9 @@ void CG320::Start()
         // Search new device
         if ( search_interval >= 3600 ) {
             printf("==== Search part start ====\n");
+            // sync time from NTP
+            GetNTPTime();
+            // run StartRegisterProcess
             m_current_time = time(NULL);
             m_last_search_time = m_current_time;
             idc = StartRegisterProcess();
@@ -445,6 +471,11 @@ void CG320::Start()
             m_last_savelog_time = m_current_time;
             CloseLog();
             system("sync");
+
+            // get timezone if before not succss
+            if ( m_do_get_TZ )
+                GetTimezone();
+
             GetLocalTime();
             OpenLog(m_dl_path.m_syslog_path, m_st_time);
             printf("===== save syslog part end =====\n");
@@ -496,6 +527,7 @@ bool CG320::GetDLConfig()
     printf("#### GetDLConfig Start ####\n");
 
     char buf[32] = {0};
+    char cmd[128] = {0};
     FILE *pFile = NULL;
 
     // get sms_server
@@ -518,26 +550,7 @@ bool CG320::GetDLConfig()
     pclose(pFile);
     sscanf(buf, "%d", &m_dl_config.m_sms_port);
     printf("SMS Port = %d\n", m_dl_config.m_sms_port);
-    // get update_server
-    pFile = popen("uci get dlsetting.@sms[0].update_server", "r");
-    if ( pFile == NULL ) {
-        printf("popen fail!\n");
-        return false;
-    }
-    fgets(m_dl_config.m_update_server, 128, pFile);
-    pclose(pFile);
-    m_dl_config.m_update_server[strlen(m_dl_config.m_update_server)-1] = 0; // clean \n
-    printf("Update Server = %s\n", m_dl_config.m_update_server);
-    // get update server port
-    pFile = popen("uci get dlsetting.@sms[0].update_port", "r");
-    if ( pFile == NULL ) {
-        printf("popen fail!\n");
-        return false;
-    }
-    fgets(buf, 32, pFile);
-    pclose(pFile);
-    sscanf(buf, "%d", &m_dl_config.m_update_port);
-    printf("Update Port = %d\n", m_dl_config.m_update_port);
+
     // get sample_time
     pFile = popen("uci get dlsetting.@sms[0].sample_time", "r");
     if ( pFile == NULL ) {
@@ -558,56 +571,61 @@ bool CG320::GetDLConfig()
     pclose(pFile);
     sscanf(buf, "%d", &m_dl_config.m_delay_time);
     printf("Delay time (us.) = %d\n", m_dl_config.m_delay_time);
+
     // get serial port
-    pFile = popen("uci get dlsetting.@comport[0].port", "r");
+    pFile = popen("uci get dlsetting.@comport[0].inverter_port", "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
     }
     fgets(buf, 32, pFile);
     pclose(pFile);
-    sscanf(buf, "COM%d", &m_dl_config.m_port);
-    printf("Serial Port = %d\n", m_dl_config.m_port);
+    sscanf(buf, "COM%d", &m_dl_config.m_inverter_port);
+    printf("Serial Port = %d\n", m_dl_config.m_inverter_port);
     // get baud
-    pFile = popen("uci get dlsetting.@comport[0].baud", "r");
+    sprintf(cmd, "uci get dlsetting.@comport[0].com%d_baud", m_dl_config.m_inverter_port);
+    pFile = popen(cmd, "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
     }
     fgets(buf, 32, pFile);
     pclose(pFile);
-    sscanf(buf, "%d", &m_dl_config.m_baud);
-    printf("Baud rate = %d\n", m_dl_config.m_baud);
+    sscanf(buf, "%d", &m_dl_config.m_inverter_baud);
+    printf("Baud rate = %d\n", m_dl_config.m_inverter_baud);
     // get data bits
-    pFile = popen("uci get dlsetting.@comport[0].data_bits", "r");
+    sprintf(cmd, "uci get dlsetting.@comport[0].com%d_data_bits", m_dl_config.m_inverter_port);
+    pFile = popen(cmd, "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
     }
     fgets(buf, 32, pFile);
     pclose(pFile);
-    sscanf(buf, "%d", &m_dl_config.m_data_bits);
-    printf("Data bits = %d\n", m_dl_config.m_data_bits);
+    sscanf(buf, "%d", &m_dl_config.m_inverter_data_bits);
+    printf("Data bits = %d\n", m_dl_config.m_inverter_data_bits);
     // get parity
-    pFile = popen("uci get dlsetting.@comport[0].parity", "r");
+    sprintf(cmd, "uci get dlsetting.@comport[0].com%d_parity", m_dl_config.m_inverter_port);
+    pFile = popen(cmd, "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
     }
-    fgets(m_dl_config.m_parity, 8, pFile);
+    fgets(m_dl_config.m_inverter_parity, 8, pFile);
     pclose(pFile);
-    m_dl_config.m_parity[strlen(m_dl_config.m_parity)-1] = 0; // clean \n
-    printf("Parity = %s\n", m_dl_config.m_parity);
+    m_dl_config.m_inverter_parity[strlen(m_dl_config.m_inverter_parity)-1] = 0; // clean \n
+    printf("Parity = %s\n", m_dl_config.m_inverter_parity);
     // get stop bits
-    pFile = popen("uci get dlsetting.@comport[0].stop_bits", "r");
+    sprintf(cmd, "uci get dlsetting.@comport[0].com%d_stop_bits", m_dl_config.m_inverter_port);
+    pFile = popen(cmd, "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
     }
     fgets(buf, 32, pFile);
     pclose(pFile);
-    sscanf(buf, "%d", &m_dl_config.m_stop_bits);
-    printf("Stop bits = %d\n", m_dl_config.m_stop_bits);
+    sscanf(buf, "%d", &m_dl_config.m_inverter_stop_bits);
+    printf("Stop bits = %d\n", m_dl_config.m_inverter_stop_bits);
 
     printf("##### GetDLConfig End #####\n");
     return true;
@@ -618,15 +636,25 @@ bool CG320::SetPath()
     //printf("#### SetPath Start ####\n");
 
     char buf[256] = {0};
+    char tmpbuf[256] = {0};
     struct stat st;
+    bool mk_tmp_dir = false;
 
     // set root path (XML & BMS & SYSLOG in the same dir.)
-    if ( stat(USB_PATH, &st) == 0 ) /*linux storage detect, EX: /dev/sda1*/
+    if ( stat(USB_PATH, &st) == 0 ) { /*linux usb storage detect*/
         strcpy(m_dl_path.m_root_path, USB_PATH); // set usb
-    else if ( stat(SDCARD_PATH, &st) == 0 )
+        m_sys_error  &= ~SYS_0001_No_USB;
+        mk_tmp_dir = true;
+    } else if ( stat(SDCARD_PATH, &st) == 0 ) {
         strcpy(m_dl_path.m_root_path, SDCARD_PATH); // set sdcard
-    else
+        m_sys_error  &= ~SYS_0004_No_SD;
+        mk_tmp_dir = true;
+    } else {
         strcpy(m_dl_path.m_root_path, DEF_PATH); // set default path
+        m_sys_error  |= SYS_0001_No_USB;
+        m_sys_error  |= SYS_0004_No_SD;
+        mk_tmp_dir = false;
+    }
 
     // set XML path
     sprintf(m_dl_path.m_xml_path, "%s/XML", m_dl_path.m_root_path);
@@ -647,6 +675,8 @@ bool CG320::SetPath()
         else
             printf("mkdir %s OK\n", buf);
     }
+
+    // set log date path
     memset(buf, 0, 256);
     sprintf(buf, "%s/LOG/%4d%02d%02d", m_dl_path.m_xml_path, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
     strcpy(m_dl_path.m_log_path, buf);
@@ -668,6 +698,8 @@ bool CG320::SetPath()
         else
             printf("mkdir %s OK\n", buf);
     }
+
+    // set errlog date path
     memset(buf, 0, 256);
     sprintf(buf, "%s/ERRLOG/%4d%02d%02d", m_dl_path.m_xml_path, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
     strcpy(m_dl_path.m_errlog_path, buf);
@@ -688,6 +720,8 @@ bool CG320::SetPath()
         else
             printf("mkdir %s OK\n", buf);
     }
+
+    // set bms date path
     memset(buf, 0, 256);
     sprintf(buf, "%s/BMS/%4d%02d%02d", m_dl_path.m_root_path, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
     strcpy(m_dl_path.m_bms_path, buf);
@@ -715,6 +749,84 @@ bool CG320::SetPath()
     //printf("m_bms_path = %s\n", m_dl_path.m_bms_path);
     //printf("m_syslog_path = %s\n", m_dl_path.m_syslog_path);
 
+    if ( mk_tmp_dir ) {
+        // create /tmp XML dir
+        sprintf(tmpbuf, "%s/XML", DEF_PATH);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+
+        // create /tmp LOG dir
+        sprintf(tmpbuf, "%s/XML/LOG", DEF_PATH);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+        // create /tmp LOG date dir
+        sprintf(tmpbuf, "%s/XML/LOG/%4d%02d%02d", DEF_PATH, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+
+        // create /tmp ERRLOG dir
+        sprintf(tmpbuf, "%s/XML/ERRLOG", DEF_PATH);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+        // create /tmp ERRLOG date dir
+        sprintf(tmpbuf, "%s/XML/ERRLOG/%4d%02d%02d", DEF_PATH, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+
+        // create /tmp BMS dir
+        sprintf(tmpbuf, "%s/BMS", DEF_PATH);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+        // create /tmp BMS date dir
+        sprintf(tmpbuf, "%s/BMS/%4d%02d%02d", DEF_PATH, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+
+        // create /tmp SYSLOG dir
+        sprintf(tmpbuf, "%s/SYSLOG", DEF_PATH);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+    }
     //printf("##### SetPath End #####\n");
     return true;
 }
@@ -728,7 +840,8 @@ void CG320::CleanParameter()
     m_mi_id_info = {0};
     m_mi_power_info = {0};
     m_hb_id_data = {0};
-    m_hb_id_flags = {0};
+    m_hb_id_flags1 = {0};
+    m_hb_id_flags2 = {0};
     m_hb_rtc_data = {0};
     m_hb_rs_info = {0};
     m_hb_rrs_info = {0};
@@ -830,7 +943,8 @@ bool CG320::RunTODOList()
                                 m_hb_id_data.Inverter_Ver = m_dl_cmd.m_data[7];
                                 m_hb_id_data.DD_Ver = m_dl_cmd.m_data[8];
                                 m_hb_id_data.EEPROM_Ver = m_dl_cmd.m_data[9];
-                                m_hb_id_data.Flags = m_dl_cmd.m_data[13];
+                                m_hb_id_data.Flags1 = m_dl_cmd.m_data[12];
+                                m_hb_id_data.Flags2 = m_dl_cmd.m_data[13];
                                 SaveLog((char *)"DataLogger RunTODOList() : run SetHybridIDData()", m_st_time);
                                 SetHybridIDData(i);
                                 break;
@@ -860,6 +974,7 @@ bool CG320::RunTODOList()
                                 m_hb_rrs_info.DischargePower = m_dl_cmd.m_data[2];
                                 m_hb_rrs_info.RampRatePercentage = m_dl_cmd.m_data[3];
                                 m_hb_rrs_info.DegreeLeadLag = m_dl_cmd.m_data[4];
+                                m_hb_rrs_info.PeakShavingPower = m_dl_cmd.m_data[5];
                                 SaveLog((char *)"DataLogger RunTODOList() : run SetHybridRRSInfo()", m_st_time);
                                 SetHybridRRSInfo(i);
                                 break;
@@ -1537,8 +1652,11 @@ bool CG320::SaveWhiteList()
 bool CG320::SaveDeviceList()
 {
     FILE *pFile;
-    char buf[256] = {0};
-    int i = 0, type = 0;
+    char buf[4096] = {0};
+    int i = 0, type = 0, offset = 0, model = 0;
+    char *index_tmp = NULL, *index_start = NULL, *index_end = NULL;
+
+    printf("#### SaveDeviceList Start ####\n");
 
     pFile = fopen(DEVICELIST_PATH, "w");
     if ( pFile == NULL ) {
@@ -1552,11 +1670,66 @@ bool CG320::SaveDeviceList()
             if ( arySNobj[i].m_Device < 0 )
                 type = 0; // unknown
             else if ( arySNobj[i].m_Device < 0x0A )
-                type = 1;
+                type = 1; // MI
             else
-                type = 2;
-            sprintf(buf, "%03d %s %d %d\n", arySNobj[i].m_Addr, arySNobj[i].m_Sn, arySNobj[i].m_state, type);
+                type = 2; // Hybrid
+            sprintf(buf, "%03d %s %d %d ", arySNobj[i].m_Addr, arySNobj[i].m_Sn, arySNobj[i].m_state, type);
+
+            if (arySNobj[i].m_state) {
+                // set log data
+                index_tmp = strstr(m_log_buf, arySNobj[i].m_Sn);
+                if ( index_tmp != NULL ) {
+                    if ( index_tmp - m_log_buf > 80)
+                        index_start = strstr(index_tmp-80, "<record dev_id=");
+                    else
+                        index_start = strstr(m_log_buf, "<record dev_id=");
+
+                    index_end = strstr(index_start, "</record>");
+                    offset = index_end - index_start + 9;
+                    strcat(buf, "ENERGY_START");
+                    strncat(buf, index_start, offset);
+
+                    if ( arySNobj[i].m_Device < 0x0A ) {
+                        sscanf(arySNobj[i].m_Sn+4, "%04X", &model); // get 5-8 digit from SN
+                        if ( model >= 3 ) { // G640, put B part
+                            index_tmp = strstr(index_end, arySNobj[i].m_Sn);
+                            if ( index_tmp != NULL ) {
+                                index_start = strstr(index_tmp-80, "<record dev_id=");
+                                index_end = strstr(index_start, "</record>");
+                                offset = index_end - index_start + 9;
+                                strncat(buf, index_start, offset);
+                            }
+                        }
+                    }
+                    strcat(buf, "ENERGY_END");
+
+                } else {
+                    printf("index_tmp = NULL!\n");
+                    strcat(buf, "Empty");
+                }
+
+                // set error log data
+                index_tmp = strstr(m_errlog_buf, arySNobj[i].m_Sn);
+                if ( index_tmp != NULL ) {
+                    if ( index_tmp - m_errlog_buf > 80)
+                        index_start = strstr(index_tmp-80, "<record dev_id=");
+                    else
+                        index_start = strstr(m_errlog_buf, "<record dev_id=");
+
+                    index_end = strstr(index_start, "</record>");
+                    offset = index_end - index_start + 9;
+                    strcat(buf, "ERROR_START");
+                    strncat(buf, index_start, offset);
+                    strcat(buf, "ERROR_END");
+                } else {
+                    printf("index_tmp = NULL!\n");
+                    strcat(buf, "Empty");
+                }
+            } else
+                strcat(buf, "Empty Empty");
+
             fputs(buf, pFile);
+            fputc('\n', pFile);
         }
     }
     fclose(pFile);
@@ -1833,8 +2006,8 @@ int CG320::AllocateProcess(unsigned char *query, int len)
                     arySNobj[index].m_state = 1;
                     if ( index == m_snCount ) {
                         m_snCount++;
-                        cnt++;
                     }
+                    cnt++;
                     i+=12;
                 }
                 else
@@ -2169,7 +2342,8 @@ bool CG320::GetHybridIDData(int index)
             printf("#### GetHybridIDData OK ####\n");
             SaveLog((char *)"DataLogger GetHybridIDData() : OK", m_st_time);
             DumpHybridIDData(lpdata+3);
-            ParserHybridIDFlags(m_hb_id_data.Flags);
+            ParserHybridIDFlags1(m_hb_id_data.Flags1);
+            ParserHybridIDFlags2(m_hb_id_data.Flags2);
             return true;
         } else {
             if ( have_respond == true ) {
@@ -2199,7 +2373,8 @@ void CG320::DumpHybridIDData(unsigned char *buf)
     m_hb_id_data.Inverter_Ver = (*(buf+14) << 8) + *(buf+15);
     m_hb_id_data.DD_Ver = (*(buf+16) << 8) + *(buf+17);
     m_hb_id_data.EEPROM_Ver = (*(buf+18) << 8) + *(buf+19);
-    m_hb_id_data.Flags = (*(buf+26) << 8) + *(buf+27);
+    m_hb_id_data.Flags1 = (*(buf+24) << 8) + *(buf+25);
+    m_hb_id_data.Flags2 = (*(buf+26) << 8) + *(buf+27);
 
 /*    printf("#### Dump Hybrid ID Data ####\n");
     printf("Grid_Voltage = %d ==> ", m_hb_id_data.Grid_Voltage);
@@ -2249,7 +2424,8 @@ void CG320::DumpHybridIDData(unsigned char *buf)
         printf("Hybrid\n");
     printf("DD_Ver       = %d\n", m_hb_id_data.DD_Ver);
     printf("EEPROM_Ver   = %d\n", m_hb_id_data.EEPROM_Ver);
-    printf("Flags        = 0x%02X ==> \n", m_hb_id_data.Flags);
+    printf("Flags1        = 0x%02X ==> \n", m_hb_id_data.Flags1);
+    printf("Flags2        = 0x%02X ==> \n", m_hb_id_data.Flags2);
     printf("#############################\n");*/
 }
 
@@ -2295,11 +2471,12 @@ bool CG320::SetHybridIDData(int index)
     szIDData[28] = 0x00;
     szIDData[29] = 0x00;
     szIDData[30] = 0x00;
+    // flags1
     szIDData[31] = 0x00;
-    szIDData[32] = 0x00;
-    // flags
+    szIDData[32] = (unsigned char)m_hb_id_data.Flags1;
+    // flags2
     szIDData[33] = 0x00;
-    szIDData[34] = (unsigned char)m_hb_id_data.Flags;
+    szIDData[34] = (unsigned char)m_hb_id_data.Flags2;
     // data crc 0x0F
     crc = CalculateCRC(szIDData+7, 20);
     szIDData[35] = (unsigned char) (crc >> 8); // data crc hi
@@ -2342,32 +2519,47 @@ bool CG320::SetHybridIDData(int index)
     return false;
 }
 
-void CG320::ParserHybridIDFlags(int flags)
+void CG320::ParserHybridIDFlags1(int flags)
 {
     int tmp = flags;
 
-    m_hb_id_flags.B0_Rule21 = tmp & 0x01;
-    tmp>>=1;
-    m_hb_id_flags.B1_PVParallel = tmp & 0x01;
-    tmp>>=1;
-    m_hb_id_flags.B2_PVOffGrid = tmp & 0x01;
-    tmp>>=1;
-    m_hb_id_flags.B3_Heco1 = tmp & 0x01;
-    tmp>>=1;
-    m_hb_id_flags.B4_Heco2 = tmp & 0x01;
-    tmp>>=1;
-    m_hb_id_flags.B5_ACCoupling = tmp & 0x01;
-    tmp>>=1;
-    m_hb_id_flags.B6_FreControl = tmp & 0x01;
+    m_hb_id_flags1.B0B1_External_Sensor = tmp & 0x03;
+    //tmp>>=2;
 
-/*    printf("#### Parser Hybrid ID Flags ####\n");
-    printf("Bit0 : Rule21      = %d\n", m_hb_id_flags.B0_Rule21);
-    printf("Bit1 : PV Parallel = %d\n", m_hb_id_flags.B1_PVParallel);
-    printf("Bit2 : PV Off Grid = %d\n", m_hb_id_flags.B2_PVOffGrid);
-    printf("Bit3 : Heco1       = %d\n", m_hb_id_flags.B3_Heco1);
-    printf("Bit4 : Heco2       = %d\n", m_hb_id_flags.B4_Heco2);
-    printf("Bit5 : AC Coupling = %d\n", m_hb_id_flags.B5_ACCoupling);
-    printf("Bit6 : Fre Control = %d\n", m_hb_id_flags.B6_FreControl);
+/*    printf("#### Parser Hybrid ID Flags1 ####\n");
+    printf("Bit0Bit1 : External Sensor = %d\n", m_hb_id_flags1.B0B1_External_Sensor);
+    printf("################################\n");*/
+}
+
+void CG320::ParserHybridIDFlags2(int flags)
+{
+    int tmp = flags;
+
+    m_hb_id_flags2.B0_Rule21 = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B1_PVParallel = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B2_PVOffGrid = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B3_Heco1 = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B4_Heco2 = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B5_ACCoupling = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B6_FreControl = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B7_ArcDetection = tmp & 0x01;
+
+/*    printf("#### Parser Hybrid ID Flags2 ####\n");
+    printf("Bit0 : Rule21        = %d\n", m_hb_id_flags2.B0_Rule21);
+    printf("Bit1 : PV Parallel   = %d\n", m_hb_id_flags2.B1_PVParallel);
+    printf("Bit2 : PV Off Grid   = %d\n", m_hb_id_flags2.B2_PVOffGrid);
+    printf("Bit3 : Heco1         = %d\n", m_hb_id_flags2.B3_Heco1);
+    printf("Bit4 : Heco2         = %d\n", m_hb_id_flags2.B4_Heco2);
+    printf("Bit5 : AC Coupling   = %d\n", m_hb_id_flags2.B5_ACCoupling);
+    printf("Bit6 : Fre Control   = %d\n", m_hb_id_flags2.B6_FreControl);
+    printf("Bit7 : Arc Detection = %d\n", m_hb_id_flags2.B7_ArcDetection);
     printf("################################\n");*/
 }
 
@@ -2833,6 +3025,7 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
     m_hb_rrs_info.DischargePower = (*(buf+4) << 8) + *(buf+5);
     m_hb_rrs_info.RampRatePercentage = (*(buf+6) << 8) + *(buf+7);
     m_hb_rrs_info.DegreeLeadLag = (*(buf+8) << 8) + *(buf+9);
+    m_hb_rrs_info.PeakShavingPower = (*(buf+10) << 8) + *(buf+11);
 
 /*    printf("#### Dump Hybrid RRS Info ####\n");
     printf("Charge = %d ==> ", m_hb_rrs_info.ChargeSetting);
@@ -2862,6 +3055,7 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
             break;
     }
     printf("\n ==> B = %02d\n", m_hb_rrs_info.DegreeLeadLag%100);
+    printf("Peak Shaving Power = %d W\n", m_hb_rrs_info.PeakShavingPower);
     printf("##############################\n");*/
 }
 
@@ -2881,7 +3075,7 @@ bool CG320::SetHybridRRSInfo(int index)
     szRRSInfo[4] = 0x00;
     szRRSInfo[5] = 0x10; // number of data
     szRRSInfo[6] = 0x20; // bytes
-    // data 0xA0 ~ 0xA4
+    // data 0xA0 ~ 0xA5
     szRRSInfo[7] = 0x00;
     szRRSInfo[8] = (unsigned char)m_hb_rrs_info.ChargeSetting;
     szRRSInfo[9] = (unsigned char)((m_hb_rrs_info.ChargePower >> 8) & 0xFF);
@@ -2892,9 +3086,9 @@ bool CG320::SetHybridRRSInfo(int index)
     szRRSInfo[14] = (unsigned char)m_hb_rrs_info.RampRatePercentage;
     szRRSInfo[15] = (unsigned char)((m_hb_rrs_info.DegreeLeadLag >> 8) & 0xFF);
     szRRSInfo[16] = (unsigned char)(m_hb_rrs_info.DegreeLeadLag & 0xFF);
-    // zero 0xA5 ~ 0xAE
-    szRRSInfo[17] = 0x00;
-    szRRSInfo[18] = 0x00;
+    szRRSInfo[17] = (unsigned char)((m_hb_rrs_info.PeakShavingPower >> 8) & 0xFF);
+    szRRSInfo[18] = (unsigned char)(m_hb_rrs_info.PeakShavingPower & 0xFF);
+    // zero 0xA6 ~ 0xAE
     szRRSInfo[19] = 0x00;
     szRRSInfo[20] = 0x00;
     szRRSInfo[21] = 0x00;
@@ -3510,9 +3704,9 @@ bool CG320::SetHybridPanasonicModule(int index)
 
     char buf[256] = {0};
     int i = 0;
-    struct stat st;
+    //struct stat st;
 
-    if ( stat(m_bms_filename, &st) == -1 ) {
+    /*if ( stat(m_bms_filename, &st) == -1 ) {
         // set header
         strcpy(m_bms_mainbuf, "time,from/end address");
         for ( i = 0x209; i < 0x5B8; i++ ) {
@@ -3521,7 +3715,7 @@ bool CG320::SetHybridPanasonicModule(int index)
             strcat(m_bms_mainbuf, buf);
         }
         strcat(m_bms_mainbuf, "\n");
-    }
+    }*/
 
     // because all data = 0, for test, change value //
     /*m_bms_panamod[0] = '0';
@@ -3538,7 +3732,7 @@ bool CG320::SetHybridPanasonicModule(int index)
     memset(buf, 0, 256);
     sprintf(buf, "%04d-%02d-%02d %02d:%02d:00,0x209-0x5B7", 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
                     m_st_time->tm_hour, m_st_time->tm_min);
-    strcat(m_bms_mainbuf, buf);
+    strcpy(m_bms_mainbuf, buf);
     for ( i = 0; i < BMS_PANAMOD_SIZE; i+=2 ) {
         sprintf(buf, ",0x%02X%02X", m_bms_panamod[i], m_bms_panamod[i+1]);
         strcat(m_bms_mainbuf, buf);
@@ -3693,171 +3887,73 @@ bool CG320::SetBMSFile(int index, int module)
     return true;
 }
 
-bool CG320::CheckTimezone()
-{
-    char zonename[64] = {0};
-    char timezone[64] = {0};
-    FILE *pFile = NULL;
-
-    // check ini parameter
-    if ( (strlen(g_dlData.g_zonename) == 0) || (strlen(g_dlData.g_timezone) == 0) )
-        return false;
-
-    // check system parameter
-    pFile = popen("uci get system.@system[0].zonename", "r");
-    if ( pFile == NULL ) {
-        printf("popen fail!\n");
-        return false;
-    }
-    fgets(zonename, 64, pFile);
-    pclose(pFile);
-    zonename[strlen(zonename)-1] = 0; // clean \n
-    printf("Debug : zonename = %s\n", zonename);
-
-    pFile = NULL;
-    pFile = popen("uci get system.@system[0].timezone", "r");
-    if ( pFile == NULL ) {
-        printf("popen fail!\n");
-        return false;
-    }
-    fgets(timezone, 64, pFile);
-    pclose(pFile);
-    timezone[strlen(timezone)-1] = 0; // clean \n
-    printf("Debug : timezone = %s\n", timezone);
-
-    if ( strcmp(g_dlData.g_zonename, zonename) || strcmp(g_dlData.g_timezone, timezone) )
-        return false;
-
-    return true;
-}
-
 bool CG320::GetTimezone()
 {
-    char buf[2048] = {0};
+    char buf[1024] = {0};
     char tmp[64]= {0};
-    char offset_tzid[64] = {0};
-    char tz_string[64] = {0};
-    //char linenum[8] = {0};
+    char timezone[64] = {0};
+    char time_offset[64] = {0};
     char *index = NULL;
     FILE *pFile = NULL;
-    int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
     int i = 0, j = 0;
 
-    printf("########### Get Timezone ###########\n");
-    // get timezone
-    system("curl http://timezoneapi.io/api/ip --max-time 30 > /tmp/timezone");
+    printf("\n########### Get Timezone ###########\n");
+    // get timezone from ip
+    sprintf(buf, "curl %s --max-time 30 > /tmp/timezone", TIMEZONE_URL);
+    //printf("cmd = %s\n", buf);
+    system(buf);
     pFile = fopen("/tmp/timezone", "rb");
     if ( pFile == NULL ) {
         printf("Open /tmp/timezone fail!\n");
         return false;
     }
-    fread(buf, 2048, 1, pFile);
-    printf("Debug : buf[] = %s\n", buf);
+    fread(buf, 1024, 1, pFile);
+    //printf("Debug : buf[] = %s\n", buf);
     fclose(pFile);
 
-    // find zonename
-    index = strstr(buf, "offset_tzid"); // find "offset_tzid":"ZZZ\/YYY" ex: Asia\/Taipei
+    // find timezone
+    index = strstr(buf, "timezone"); // find "timezone":"ZZZ/YYY" ex: Asia/Taipei
     if ( index == NULL ) {
-        printf("offset_tzid not found!\n");
+        printf("timezone not found!\n");
         return false;
     }
-    strncpy(tmp, index+14, 63); // copy start at Z, example "offset_tzid":"ZZZ\/YYY",
+    strncpy(tmp, index+11, 63); // copy start at Z, example "timezone":"ZZZ/YYY", get ZZZ/YYY, end  of "
     for (i = 0; i < 63; i++) {
-        if ( tmp[i] == '\\' )
-            continue;
         if ( tmp[i] == '"' ) {
-            offset_tzid[j] = 0; // stop at "
+            timezone[j] = 0; // stop at "
             break;
         }
-        offset_tzid[j] = tmp[i];
+        timezone[j] = tmp[i];
         j++;
     }
-    printf("Debug : offset_tzid[] = %s\n", offset_tzid);
+    printf("Debug : timezone[] = %s\n", timezone);
 
-    // get timezone
-    index = strstr(buf, "tz_string"); // find "tz_string":"ABCDE" ex: CST-8
-    if ( index == NULL ) {
-        printf("tz_string not found!\n");
-        return false;
-    }
-    strncpy(tz_string, index+12, 63); // copy start at A, example "tz_string":"ABCDE",
-    for (i = 0; i < 63; i++) {
-        if ( tz_string[i] == '"' ) {
-            tz_string[i] = 0; // stop at "
-            break;
-        }
-    }
-    printf("Debug : tz_string[] = %s\n", tz_string);
-
-    // get date time
-    index = strstr(buf, "\"date_time\""); // ex find "date_time":"07\/30\/2018 10:07:40"
-    if ( index == NULL ) {
-        printf("\"date_time\" not found!\n");
-        return false;
-    }
-    sscanf(index+13, "%d\\/%d\\/%d %d:%d:%d", &month, &day, &year, &hour, &minute, &second);
-    sprintf(tmp, "date -s \"%d-%d-%d %d:%d:%d\"", year, month, day, hour, minute, second);
-    printf("cmd = %s\n", tmp);
-
-    // save zonename in ini
-    /*pFile = NULL;
-    pFile = popen("grep -n zonename G320.ini | awk -F':' '{print $1}'", "r");
-    if ( pFile == NULL ) {
-        printf("popen fail!\n");
-        return false;
-    }
-    fgets(linenum, 8, pFile);
-    pclose(pFile);
-    for (i = 0; i < 8; i++) {
-        if ( linenum[i] == '\n' ) {
-            linenum[i] = 0;
-            break;
-        }
-    }
-    printf("Debug : linenum = %s\n", linenum);
-
-    sprintf(buf, "sed \"%sc zonename=%s\" G320.ini > G320_new.ini", linenum, offset_tzid);
-    printf("buf = %s\n", buf);
+    // get time offset
+    sprintf(buf, "curl %s --max-time 30 | grep -i %s | awk '{print $2}' > /tmp/time_offset", TIME_OFFSET_URL, timezone);
+    //printf("cmd = %s\n", buf);
     system(buf);
-    system("mv G320.ini G320_old.ini");
-    system("mv G320_new.ini G320.ini");
-    system("sync");
-
-    // save timezone in ini
-    pFile = NULL;
-    pFile = popen("grep -n timezone G320.ini | awk -F':' '{print $1}'", "r");
+    pFile = fopen("/tmp/time_offset", "rb");
     if ( pFile == NULL ) {
-        printf("popen fail!\n");
+        printf("Open /tmp/time_offset fail!\n");
         return false;
     }
-    fgets(linenum, 8, pFile);
-    pclose(pFile);
-    for (i = 0; i < 8; i++) {
-        if ( linenum[i] == '\n' ) {
-            linenum[i] = 0;
-            break;
-        }
-    }
-    printf("Debug : linenum = %s\n", linenum);
-    pclose(pFile);
+    fgets(time_offset, 64, pFile);
+    time_offset[strlen(time_offset)-1] = 0; // remove \n
+    printf("Debug : time_offset[] = %s\n", time_offset);
+    fclose(pFile);
 
-    sprintf(buf, "sed \"%sc timezone=%s\" G320.ini > G320_new.ini", linenum, tz_string);
-    printf("buf = %s\n", buf);
-    system(buf);
-    system("mv G320.ini G320_old.ini");
-    system("mv G320_new.ini G320.ini");
-    system("sync");*/
+    SetTimezone(timezone, time_offset);
+    m_do_get_TZ = false;
 
-    // set timezone to system
-    SetTimezone(offset_tzid, tz_string);
     usleep(1000000);
-    system(tmp);
+    GetNTPTime();
 
     printf("####################################\n");
 
     return true;
 }
 
+// zonename : ex Asia/Taipei, timazone : ex CST-8
 void CG320::SetTimezone(char *zonename, char *timazone)
 {
     char buf[128] = {0};
@@ -3888,38 +3984,64 @@ void CG320::GetLocalTime()
     return;
 }
 
-void CG320::GetNetTime()
+void CG320::GetNTPTime()
 {
     char buf[1024] = {0};
-    char *index = NULL;
-    int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
+    char NTP_SERVER[4][256] = {0};
+    int PID = 0, i = 0;
     FILE *fd = NULL;
 
-    printf("############ Get Net Time ############\n");
+    printf("############ Get NTP Time ############\n");
 
-    sprintf(buf, "curl %s --max-time 30", TIME_SERVER_URL);
-    printf("buf = %s\n", buf);
-    fd = popen(buf, "r");
+    fd = popen("uci get system.ntp.server", "r");
     if ( fd == NULL ) {
-        printf("popen fail!\n");
+        printf("GetNTPTime server fail!\n");
         return;
     }
-    memset(buf, 0, 1024);
     fread(buf, 1, 1024, fd);
     pclose(fd);
 
-    if ( strlen(buf) ) {
-        index = strstr(buf, "ThisTime");
-        if ( index ) {
-            sscanf(index+11, "%04d-%02d-%02dT%02d:%02d:%02d", &year, &month, &day, &hour, &minute, &second);
-            sprintf(buf, "date -s \"%04d-%02d-%02d %02d:%02d:%02d\"", year, month, day, hour, minute, second);
-            printf("buf = %s\n", buf);
-            system(buf);
-            printf("Set Net time OK\n");
-        }
+    if ( strlen(buf) == 0 ) {
+        printf("GetNTPTime server empty!\n");
+        return;
     }
 
-    printf("######################################\n");
+    sscanf(buf, "%s %s %s %s", NTP_SERVER[0], NTP_SERVER[1], NTP_SERVER[2], NTP_SERVER[3]);
+    printf("NTP_SERVER[0] = %s\n", NTP_SERVER[0]);
+    printf("NTP_SERVER[1] = %s\n", NTP_SERVER[1]);
+    printf("NTP_SERVER[2] = %s\n", NTP_SERVER[2]);
+    printf("NTP_SERVER[3] = %s\n", NTP_SERVER[3]);
+
+    for ( i = 0; i < 4; i++) {
+        sprintf(buf, "ntpd -n -d -q -p %s &", NTP_SERVER[i]);
+        system(buf);
+        printf("wait 10s for ntpd end\n");
+        usleep(10000000);
+
+        // check before ntpd process, if exist, kill it!
+        sprintf(buf, "ps | grep \"ntpd -n -d -q -p %s\" | grep -v grep | awk '{print $1}'", NTP_SERVER[i]);
+        fd = popen(buf, "r");
+        if ( fd == NULL ) {
+            printf("GetNTPTime check ntpd fail!\n");
+            break;
+        }
+        memset(buf, 0, 1024);
+        fread(buf, 1, 1024, fd);
+        pclose(fd);
+
+        if ( strlen(buf) == 0 ) {
+            printf("GetNTPTime check ntpd empty!\n");
+            break;
+        }
+
+        sscanf(buf, "%d", &PID);
+        sprintf(buf, "kill %d", PID);
+        system(buf);
+    }
+
+    printf("############ Get NTP END #############\n");
+
+    return;
 }
 
 void CG320::SetLogXML()
@@ -3941,7 +4063,7 @@ bool CG320::WriteLogXML(int index)
     SaveLog((char *)"DataLogger WriteLogXML() : run", m_st_time);
     printf("==================== Set Log XML start ====================\n");
     if ( strlen(m_log_buf) == 0 ) // empty, new file, add header <records>
-        strcpy(m_log_buf, "<records>\n");
+        strcpy(m_log_buf, "<records>");
 
     sscanf(arySNobj[index].m_Sn+4, "%04X", &model); // get 5-8 digit from SN
     //printf("Index %d model = %X\n", index, model);
@@ -3951,48 +4073,48 @@ bool CG320::WriteLogXML(int index)
         if ( model < 3 ) {
             // G240/300, G320, G321 single channel
             sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "\t<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">\n", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
                     1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
                     m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<Inv_Temp>%03.1f</Inv_Temp>\n", ((float)m_mi_power_info.Temperature)/10);
+            sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<total_KWH>%05.3f</total_KWH>\n", m_mi_power_info.Ch1_EacH*100 + ((float)m_mi_power_info.Ch1_EacL)*0.01);
+            sprintf(buf, "<total_KWH>%05.3f</total_KWH>", m_mi_power_info.Ch1_EacH*100 + ((float)m_mi_power_info.Ch1_EacL)*0.01);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<ac_power_A>%05.3f</ac_power_A>\n", ((float)m_mi_power_info.Ch1_Pac)/10000);
+            sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Ch1_Pac)/10000);
             strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<ac_power>%05.3f</ac_power>\n", ((float)m_mi_power_info.Total_Pac)/10000);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "\t\t<dcv_1>%03.1f</dcv_1>\n", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<dc_voltage>%03.1f</dc_voltage>\n", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
+            sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Total_Pac)/10000);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<dci_1>%04.2f</dci_1>\n", ((float)m_mi_power_info.Ch1_Ipv)/100);
+            sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
             strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<dc_current>%04.2f</dc_current>\n", ((float)m_mi_power_info.Ch1_Ipv)/100);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "\t\t<dc_power>%05.3f</dc_power>\n", ((float)m_mi_power_info.Ch1_Ppv)/10000);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<dc_power_1>%05.3f</dc_power_1>\n", ((float)m_mi_power_info.Ch1_Ppv)/10000);
+            sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<acv_AN>%03.1f</acv_AN>\n", ((float)m_mi_power_info.Vac)/10);
+            sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_mi_power_info.Ch1_Ipv)/100);
             strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<ac_voltage>%03.1f</ac_voltage>\n", ((float)m_mi_power_info.Vac)/10);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "\t\t<aci_A>%05.3f</aci_A>\n", ((float)m_mi_power_info.Total_Iac)/1000);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<ac_current>%05.3f</ac_current>\n", ((float)m_mi_power_info.Total_Iac)/1000);
+            sprintf(buf, "<dc_current>%04.2f</dc_current>", ((float)m_mi_power_info.Ch1_Ipv)/100);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<frequency>%04.2f</frequency>\n", ((float)m_mi_power_info.Fac)/100);
+            sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_mi_power_info.Ch1_Ppv)/10000);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_mi_power_info.Ch1_Ppv)/10000);
+            strcat(m_log_buf, buf);
+
+            sprintf(buf, "<acv_AN>%03.1f</acv_AN>", ((float)m_mi_power_info.Vac)/10);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_mi_power_info.Vac)/10);
+            strcat(m_log_buf, buf);
+
+            sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Total_Iac)/1000);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Total_Iac)/1000);
+            strcat(m_log_buf, buf);
+
+            sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
             strcat(m_log_buf, buf);
 
             // set error code
@@ -4002,17 +4124,17 @@ bool CG320::WriteLogXML(int index)
                 error_tmp = m_mi_power_info.Error_Code2;
             else
                 error_tmp = 0;
-            sprintf(buf, "\t\t<Error_Code>%d</Error_Code>\n", error_tmp);
+            sprintf(buf, "<Error_Code>%d</Error_Code>", error_tmp);
             strcat(m_log_buf, buf);
 
             // set status
             if ( error_tmp ) {
-                strcat(m_log_buf, "\t\t<Status>2</Status>\n");
+                strcat(m_log_buf, "<Status>2</Status>");
             } else {
                 if ( m_loopflag == 2 ) {
-                    strcat(m_log_buf, "\t\t<Status>1</Status>\n");
+                    strcat(m_log_buf, "<Status>1</Status>");
                 } else {
-                    strcat(m_log_buf, "\t\t<Status>0</Status>\n");
+                    strcat(m_log_buf, "<Status>0</Status>");
                 }
             }
 
@@ -4022,48 +4144,48 @@ bool CG320::WriteLogXML(int index)
             idtmp[0] = 'A';
             strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "\t<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">\n", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
                     1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
                     m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<Inv_Temp>%03.1f</Inv_Temp>\n", ((float)m_mi_power_info.Temperature)/10);
+            sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<total_KWH>%05.3f</total_KWH>\n", m_mi_power_info.Ch1_EacH*100 + ((float)m_mi_power_info.Ch1_EacL)*0.01);
+            sprintf(buf, "<total_KWH>%05.3f</total_KWH>", m_mi_power_info.Ch1_EacH*100 + ((float)m_mi_power_info.Ch1_EacL)*0.01);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<ac_power_A>%05.3f</ac_power_A>\n", ((float)m_mi_power_info.Ch1_Pac)/10000);
+            sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Ch1_Pac)/10000);
             strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<ac_power>%05.3f</ac_power>\n", ((float)m_mi_power_info.Total_Pac)/10000);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "\t\t<dcv_1>%03.1f</dcv_1>\n", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<dc_voltage>%03.1f</dc_voltage>\n", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
+            sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Total_Pac)/10000);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<dci_1>%04.2f</dci_1>\n", ((float)m_mi_power_info.Ch1_Ipv)/100);
+            sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
             strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<dc_current>%04.2f</dc_current>\n", ((float)m_mi_power_info.Ch1_Ipv)/100);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "\t\t<dc_power>%05.3f</dc_power>\n", ((float)m_mi_power_info.Ch1_Ppv)/10000);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<dc_power_1>%05.3f</dc_power_1>\n", ((float)m_mi_power_info.Ch1_Ppv)/10000);
+            sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<acv_AN>%03.1f</acv_AN>\n", ((float)m_mi_power_info.Vac)/10);
+            sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_mi_power_info.Ch1_Ipv)/100);
             strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<ac_voltage>%03.1f</ac_voltage>\n", ((float)m_mi_power_info.Vac)/10);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "\t\t<aci_A>%05.3f</aci_A>\n", ((float)m_mi_power_info.Total_Iac)/1000);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<ac_current>%05.3f</ac_current>\n", ((float)m_mi_power_info.Total_Iac)/1000);
+            sprintf(buf, "<dc_current>%04.2f</dc_current>", ((float)m_mi_power_info.Ch1_Ipv)/100);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<frequency>%04.2f</frequency>\n", ((float)m_mi_power_info.Fac)/100);
+            sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_mi_power_info.Ch1_Ppv)/10000);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_mi_power_info.Ch1_Ppv)/10000);
+            strcat(m_log_buf, buf);
+
+            sprintf(buf, "<acv_AN>%03.1f</acv_AN>", ((float)m_mi_power_info.Vac)/10);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_mi_power_info.Vac)/10);
+            strcat(m_log_buf, buf);
+
+            sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Total_Iac)/1000);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Total_Iac)/1000);
+            strcat(m_log_buf, buf);
+
+            sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
             strcat(m_log_buf, buf);
 
             // set error code
@@ -4073,68 +4195,68 @@ bool CG320::WriteLogXML(int index)
                 error_tmp = m_mi_power_info.Error_Code2;
             else
                 error_tmp = 0;
-            sprintf(buf, "\t\t<Error_Code>%d</Error_Code>\n", error_tmp);
+            sprintf(buf, "<Error_Code>%d</Error_Code>", error_tmp);
             strcat(m_log_buf, buf);
 
             // set status
             if ( error_tmp ) {
-                strcat(m_log_buf, "\t\t<Status>2</Status>\n");
+                strcat(m_log_buf, "<Status>2</Status>");
             } else {
                 if ( m_loopflag == 2 ) {
-                    strcat(m_log_buf, "\t\t<Status>1</Status>\n");
+                    strcat(m_log_buf, "<Status>1</Status>");
                 } else {
-                    strcat(m_log_buf, "\t\t<Status>0</Status>\n");
+                    strcat(m_log_buf, "<Status>0</Status>");
                 }
             }
 
-            strcat(m_log_buf, "\t</record>\n");
+            strcat(m_log_buf, "</record>");
 
             // set ch2
             idtmp[0] = 'B';
             //strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "\t<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">\n", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
                     1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
                     m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<Inv_Temp>%03.1f</Inv_Temp>\n", ((float)m_mi_power_info.Temperature)/10);
+            sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<total_KWH>%05.3f</total_KWH>\n", m_mi_power_info.Ch2_EacH*100 + ((float)m_mi_power_info.Ch2_EacL)*0.01);
+            sprintf(buf, "<total_KWH>%05.3f</total_KWH>", m_mi_power_info.Ch2_EacH*100 + ((float)m_mi_power_info.Ch2_EacL)*0.01);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<ac_power_A>%05.3f</ac_power_A>\n", ((float)m_mi_power_info.Ch2_Pac)/10000);
+            sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Ch2_Pac)/10000);
             strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<ac_power>%05.3f</ac_power>\n", ((float)m_mi_power_info.Total_Pac)/10000);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "\t\t<dcv_1>%03.1f</dcv_1>\n", ((float)m_mi_power_info.Ch2_Vpv)*0.1);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<dc_voltage>%03.1f</dc_voltage>\n", ((float)m_mi_power_info.Ch2_Vpv)*0.1);
+            sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Total_Pac)/10000);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<dci_1>%04.2f</dci_1>\n", ((float)m_mi_power_info.Ch2_Ipv)/100);
+            sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_mi_power_info.Ch2_Vpv)*0.1);
             strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<dc_current>%04.2f</dc_current>\n", ((float)m_mi_power_info.Ch2_Ipv)/100);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "\t\t<dc_power>%05.3f</dc_power>\n", ((float)m_mi_power_info.Ch2_Ppv)/10000);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<dc_power_1>%05.3f</dc_power_1>\n", ((float)m_mi_power_info.Ch2_Ppv)/10000);
+            sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)m_mi_power_info.Ch2_Vpv)*0.1);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<acv_AN>%03.1f</acv_AN>\n", ((float)m_mi_power_info.Vac)/10);
+            sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_mi_power_info.Ch2_Ipv)/100);
             strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<ac_voltage>%03.1f</ac_voltage>\n", ((float)m_mi_power_info.Vac)/10);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "\t\t<aci_A>%05.3f</aci_A>\n", ((float)m_mi_power_info.Total_Iac)/1000);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "\t\t<ac_current>%05.3f</ac_current>\n", ((float)m_mi_power_info.Total_Iac)/1000);
+            sprintf(buf, "<dc_current>%04.2f</dc_current>", ((float)m_mi_power_info.Ch2_Ipv)/100);
             strcat(m_log_buf, buf);
 
-            sprintf(buf, "\t\t<frequency>%04.2f</frequency>\n", ((float)m_mi_power_info.Fac)/100);
+            sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_mi_power_info.Ch2_Ppv)/10000);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_mi_power_info.Ch2_Ppv)/10000);
+            strcat(m_log_buf, buf);
+
+            sprintf(buf, "<acv_AN>%03.1f</acv_AN>", ((float)m_mi_power_info.Vac)/10);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_mi_power_info.Vac)/10);
+            strcat(m_log_buf, buf);
+
+            sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Total_Iac)/1000);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Total_Iac)/1000);
+            strcat(m_log_buf, buf);
+
+            sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
             strcat(m_log_buf, buf);
 
             // set error code
@@ -4144,17 +4266,17 @@ bool CG320::WriteLogXML(int index)
                 error_tmp = m_mi_power_info.Error_Code2;
             else
                 error_tmp = 0;
-            sprintf(buf, "\t\t<Error_Code>%d</Error_Code>\n", error_tmp);
+            sprintf(buf, "<Error_Code>%d</Error_Code>", error_tmp);
             strcat(m_log_buf, buf);
 
             // set status
             if ( error_tmp ) {
-                strcat(m_log_buf, "\t\t<Status>2</Status>\n");
+                strcat(m_log_buf, "<Status>2</Status>");
             } else {
                 if ( m_loopflag == 2 ) {
-                    strcat(m_log_buf, "\t\t<Status>1</Status>\n");
+                    strcat(m_log_buf, "<Status>1</Status>");
                 } else {
-                    strcat(m_log_buf, "\t\t<Status>0</Status>\n");
+                    strcat(m_log_buf, "<Status>0</Status>");
                 }
             }
         }
@@ -4162,232 +4284,237 @@ bool CG320::WriteLogXML(int index)
         // Hybrid part
         // set slave ID, date time, SN
         sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
-        sprintf(buf, "\t<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">\n", dev_id,
+        sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
                 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
                 m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
         strcat(m_log_buf, buf);
 
         // set real time part///////////////////////////////////////////////////////////////////////////////////////////
         // set DC power (KW)
-        sprintf(buf, "\t\t<dc_power>%05.3f</dc_power>\n", ((float)m_hb_rt_info.PV_Total_Power)/1000);
+        sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_hb_rt_info.PV_Total_Power)/1000);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<dc_power_1>%05.3f</dc_power_1>\n", ((float)m_hb_rt_info.PV1_Power)/1000);
+        sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_hb_rt_info.PV1_Power)/1000);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<dc_power_2>%05.3f</dc_power_2>\n", ((float)m_hb_rt_info.PV2_Power)/1000);
+        sprintf(buf, "<dc_power_2>%05.3f</dc_power_2>", ((float)m_hb_rt_info.PV2_Power)/1000);
         strcat(m_log_buf, buf);
         // set DC voltage (V)
-        sprintf(buf, "\t\t<dcv_1>%d</dcv_1>\n", m_hb_rt_info.PV1_Voltage);
+        sprintf(buf, "<dcv_1>%d</dcv_1>", m_hb_rt_info.PV1_Voltage);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<dcv_2>%d</dcv_2>\n", m_hb_rt_info.PV2_Voltage);
+        sprintf(buf, "<dcv_2>%d</dcv_2>", m_hb_rt_info.PV2_Voltage);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<dc_voltage>%03.1f</dc_voltage>\n", ((float)(m_hb_rt_info.PV1_Voltage + m_hb_rt_info.PV2_Voltage))/2);
+        sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)(m_hb_rt_info.PV1_Voltage + m_hb_rt_info.PV2_Voltage))/2);
         strcat(m_log_buf, buf);
         // set DC current (A)
-        sprintf(buf, "\t\t<dci_1>%04.2f</dci_1>\n", ((float)m_hb_rt_info.PV1_Current)/100);
+        sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_hb_rt_info.PV1_Current)/100);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<dci_2>%04.2f</dci_2>\n", ((float)m_hb_rt_info.PV2_Current)/100);
+        sprintf(buf, "<dci_2>%04.2f</dci_2>", ((float)m_hb_rt_info.PV2_Current)/100);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<dc_current>%d</dc_current>\n", m_hb_rt_info.PV1_Current + m_hb_rt_info.PV2_Current);
+        sprintf(buf, "<dc_current>%d</dc_current>", m_hb_rt_info.PV1_Current + m_hb_rt_info.PV2_Current);
         strcat(m_log_buf, buf);
 
         // set AC power (KW)
-        sprintf(buf, "\t\t<ac_power_A>%05.3f</ac_power_A>\n", ((float)m_hb_rt_info.Load_Power)/1000);
+        sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_hb_rt_info.Load_Power)/1000);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<ac_power>%05.3f</ac_power>\n", ((float)m_hb_rt_info.Load_Power)/1000);
+        sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_hb_rt_info.Load_Power)/1000);
         strcat(m_log_buf, buf);
         // set AC voltage (V)
-        sprintf(buf, "\t\t<acv_AN>%d</acv_AN>\n", m_hb_rt_info.Load_Voltage);
+        sprintf(buf, "<acv_AN>%d</acv_AN>", m_hb_rt_info.Load_Voltage);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<ac_voltage>%d</ac_voltage>\n", m_hb_rt_info.Load_Voltage);
+        sprintf(buf, "<ac_voltage>%d</ac_voltage>", m_hb_rt_info.Load_Voltage);
         strcat(m_log_buf, buf);
         // set AC current (A)
-        sprintf(buf, "\t\t<aci_A>%04.2f</aci_A>\n", ((float)m_hb_rt_info.Load_Current)/100);
+        sprintf(buf, "<aci_A>%04.2f</aci_A>", ((float)m_hb_rt_info.Load_Current)/100);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<ac_current>%04.2f</ac_current>\n", ((float)m_hb_rt_info.Load_Current)/100);
+        sprintf(buf, "<ac_current>%04.2f</ac_current>", ((float)m_hb_rt_info.Load_Current)/100);
         strcat(m_log_buf, buf);
 
         // set total power
-        sprintf(buf, "\t\t<total_KWH>%04.2f</total_KWH>\n", m_hb_rt_info.PV_Total_EnergyH*100 + ((float)m_hb_rt_info.PV_Total_EnergyL)*0.01);
+        sprintf(buf, "<total_KWH>%04.2f</total_KWH>", m_hb_rt_info.PV_Total_EnergyH*100 + ((float)m_hb_rt_info.PV_Total_EnergyL)*0.01);
         strcat(m_log_buf, buf);
 
         // set battery SOC
-        sprintf(buf, "\t\t<soc>%d</soc>\n", m_hb_rt_info.Battery_SOC);
+        sprintf(buf, "<soc>%d</soc>", m_hb_rt_info.Battery_SOC);
         strcat(m_log_buf, buf);
 
         // set temperature
-        sprintf(buf, "\t\t<Inv_Temp>%03.1f</Inv_Temp>\n", ((float)m_hb_rt_info.Inv_Temp)/10);
+        sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_hb_rt_info.Inv_Temp)/10);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<PV1_Temp>%03.1f</PV1_Temp>\n", ((float)m_hb_rt_info.PV1_Temp)/10);
+        sprintf(buf, "<PV1_Temp>%03.1f</PV1_Temp>", ((float)m_hb_rt_info.PV1_Temp)/10);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<PV2_Temp>%03.1f</PV2_Temp>\n", ((float)m_hb_rt_info.PV2_Temp)/10);
+        sprintf(buf, "<PV2_Temp>%03.1f</PV2_Temp>", ((float)m_hb_rt_info.PV2_Temp)/10);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<DD_Temp>%03.1f</DD_Temp>\n", ((float)m_hb_rt_info.DD_Temp)/10);
+        sprintf(buf, "<DD_Temp>%03.1f</DD_Temp>", ((float)m_hb_rt_info.DD_Temp)/10);
         strcat(m_log_buf, buf);
 
         // set Grid
-        sprintf(buf, "\t\t<VGrid_A>%d</VGrid_A>\n", m_hb_rt_info.Grid_Voltage);
+        sprintf(buf, "<VGrid_A>%d</VGrid_A>", m_hb_rt_info.Grid_Voltage);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<IGrid_A>%04.2f</IGrid_A>\n", ((float)m_hb_rt_info.Grid_Current)/100);
+        sprintf(buf, "<IGrid_A>%04.2f</IGrid_A>", ((float)m_hb_rt_info.Grid_Current)/100);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<PGrid_A>%05.3f</PGrid_A>\n", ((float)m_hb_rt_info.Grid_Power)/1000);
+        sprintf(buf, "<PGrid_A>%05.3f</PGrid_A>", ((float)m_hb_rt_info.Grid_Power)/1000);
         strcat(m_log_buf, buf);
 
         // set battery
-        sprintf(buf, "\t\t<VBattery>%03.1f</VBattery>\n", ((float)m_hb_rt_info.Battery_Voltage)/10);
+        sprintf(buf, "<VBattery>%03.1f</VBattery>", ((float)m_hb_rt_info.Battery_Voltage)/10);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<IBattery>%03.1f</IBattery>\n", ((float)m_hb_rt_info.Battery_Current)/10);
+        sprintf(buf, "<IBattery>%03.1f</IBattery>", ((float)m_hb_rt_info.Battery_Current)/10);
         strcat(m_log_buf, buf);
 
         // set bus
-        sprintf(buf, "\t\t<Vbus>%03.1f</Vbus>\n", ((float)m_hb_rt_info.Bus_Voltage)/10);
+        sprintf(buf, "<Vbus>%03.1f</Vbus>", ((float)m_hb_rt_info.Bus_Voltage)/10);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<Ibus>%03.1f</Ibus>\n", ((float)m_hb_rt_info.Bus_Current)/10);
+        sprintf(buf, "<Ibus>%03.1f</Ibus>", ((float)m_hb_rt_info.Bus_Current)/10);
         strcat(m_log_buf, buf);
 
         // set battery power
-        sprintf(buf, "\t\t<Pbat_Total>%04.2f</Pbat_Total>\n", m_hb_rt_info.Bat_Total_EnergyH*100 + ((float)m_hb_rt_info.Bat_Total_EnergyL)*0.01);
+        sprintf(buf, "<Pbat_Total>%04.2f</Pbat_Total>", m_hb_rt_info.Bat_Total_EnergyH*100 + ((float)m_hb_rt_info.Bat_Total_EnergyL)*0.01);
         strcat(m_log_buf, buf);
 
         // set load power
-        sprintf(buf, "\t\t<Pload_Total>%04.2f</Pload_Total>\n", m_hb_rt_info.Load_Total_EnergyH*100 + ((float)m_hb_rt_info.Load_Total_EnergyL)*0.01);
+        sprintf(buf, "<Pload_Total>%04.2f</Pload_Total>", m_hb_rt_info.Load_Total_EnergyH*100 + ((float)m_hb_rt_info.Load_Total_EnergyL)*0.01);
         strcat(m_log_buf, buf);
 
         // set grid feed power
-        sprintf(buf, "\t\t<GridFeed_Total>%04.2f</GridFeed_Total>\n", m_hb_rt_info.GridFeed_TotalH*100 + ((float)m_hb_rt_info.GridFeed_TotalL)*0.01);
+        sprintf(buf, "<GridFeed_Total>%04.2f</GridFeed_Total>", m_hb_rt_info.GridFeed_TotalH*100 + ((float)m_hb_rt_info.GridFeed_TotalL)*0.01);
         strcat(m_log_buf, buf);
 
         // set grid charge power
-        sprintf(buf, "\t\t<GridCharge_Total>%04.2f</GridCharge_Total>\n", m_hb_rt_info.GridCharge_TotalH*100 + ((float)m_hb_rt_info.GridCharge_TotalL)*0.01);
+        sprintf(buf, "<GridCharge_Total>%04.2f</GridCharge_Total>", m_hb_rt_info.GridCharge_TotalH*100 + ((float)m_hb_rt_info.GridCharge_TotalL)*0.01);
         strcat(m_log_buf, buf);
 
         // set on grid mode
-        sprintf(buf, "\t\t<On_grid_Mode>%d</On_grid_Mode>\n", m_hb_rt_info.OnGrid_Mode);
+        sprintf(buf, "<On_grid_Mode>%d</On_grid_Mode>", m_hb_rt_info.OnGrid_Mode);
         strcat(m_log_buf, buf);
 
         // set system state
-        sprintf(buf, "\t\t<Sys_State>%d</Sys_State>\n", m_hb_rt_info.Sys_State);
+        sprintf(buf, "<Sys_State>%d</Sys_State>", m_hb_rt_info.Sys_State);
         strcat(m_log_buf, buf);
 
         // set Icon
-        sprintf(buf, "\t\t<Hybrid_Icon>%d</Hybrid_Icon>\n", (m_hb_rt_info.Hybrid_IconH << 16) + m_hb_rt_info.Hybrid_IconL);
+        sprintf(buf, "<Hybrid_Icon>%d</Hybrid_Icon>", (m_hb_rt_info.Hybrid_IconH << 16) + m_hb_rt_info.Hybrid_IconL);
         strcat(m_log_buf, buf);
 
         // set error code
-        sprintf(buf, "\t\t<Error_Code>%d</Error_Code>\n", m_hb_rt_info.Error_Code);
+        sprintf(buf, "<Error_Code>%d</Error_Code>", m_hb_rt_info.Error_Code);
         strcat(m_log_buf, buf);
 
         // set frequency
-        sprintf(buf, "\t\t<Inverterfrequency>%03.1f</Inverterfrequency>\n", ((float)m_hb_rt_info.Invert_Frequency)/10);
+        sprintf(buf, "<Inverterfrequency>%03.1f</Inverterfrequency>", ((float)m_hb_rt_info.Invert_Frequency)/10);
         strcat(m_log_buf, buf);
 
-        sprintf(buf, "\t\t<frequency>%03.1f</frequency>\n", ((float)m_hb_rt_info.Grid_Frequency)/10);
+        sprintf(buf, "<frequency>%03.1f</frequency>", ((float)m_hb_rt_info.Grid_Frequency)/10);
         strcat(m_log_buf, buf);
 
         // set status
         if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1 || m_hb_rt_info.PV_Inv_Error_COD2 || m_hb_rt_info.DD_Error_COD ) {
-            strcat(m_log_buf, "\t\t<Status>2</Status>\n");
+            strcat(m_log_buf, "<Status>2</Status>");
         } else {
             if ( m_loopflag == 6 ) {
-                strcat(m_log_buf, "\t\t<Status>1</Status>\n");
+                strcat(m_log_buf, "<Status>1</Status>");
             } else {
-                strcat(m_log_buf, "\t\t<Status>0</Status>\n");
+                strcat(m_log_buf, "<Status>0</Status>");
             }
         }
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         // set BMS module0
-        sprintf(buf, "\t\t<BMS_Voltage>%04.2f</BMS_Voltage>\n", ((float)m_hb_bms_info.Voltage/100));
+        sprintf(buf, "<BMS_Voltage>%04.2f</BMS_Voltage>", ((float)m_hb_bms_info.Voltage/100));
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BMS_Current>%04.2f</BMS_Current>\n", ((float)m_hb_bms_info.Current/100));
+        sprintf(buf, "<BMS_Current>%04.2f</BMS_Current>", ((float)m_hb_bms_info.Current/100));
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BMS_SOC>%d</BMS_SOC>\n", m_hb_bms_info.SOC);
+        sprintf(buf, "<BMS_SOC>%d</BMS_SOC>", m_hb_bms_info.SOC);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BMS_Max_Temp>%d</BMS_Max_Temp>\n", m_hb_bms_info.MaxTemperature);
+        sprintf(buf, "<BMS_Max_Temp>%d</BMS_Max_Temp>", m_hb_bms_info.MaxTemperature);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BMS_CycleCount>%d</BMS_CycleCount>\n", m_hb_bms_info.CycleCount);
+        sprintf(buf, "<BMS_CycleCount>%d</BMS_CycleCount>", m_hb_bms_info.CycleCount);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BMS_Status>%d</BMS_Status>\n", m_hb_bms_info.Status);
+        sprintf(buf, "<BMS_Status>%d</BMS_Status>", m_hb_bms_info.Status);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BMS_Error>%d</BMS_Error>\n", m_hb_bms_info.Error);
+        sprintf(buf, "<BMS_Error>%d</BMS_Error>", m_hb_bms_info.Error);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BMS_ModuleNo>%d</BMS_ModuleNo>\n", m_hb_bms_info.Number);
+        sprintf(buf, "<BMS_ModuleNo>%d</BMS_ModuleNo>", m_hb_bms_info.Number);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BMS_Info>%d</BMS_Info>\n", m_hb_bms_info.BMS_Info);
+        sprintf(buf, "<BMS_Info>%d</BMS_Info>", m_hb_bms_info.BMS_Info);
         strcat(m_log_buf, buf);
 
 
         // set remote setting
-        sprintf(buf, "\t\t<InverterMode>%d</InverterMode>\n", m_hb_rs_info.Mode);
+        sprintf(buf, "<InverterMode>%d</InverterMode>", m_hb_rs_info.Mode);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<StarHour>%d</StarHour>\n", m_hb_rs_info.StarHour);
+        sprintf(buf, "<StarHour>%d</StarHour>", m_hb_rs_info.StarHour);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<StarMin>%d</StarMin>\n", m_hb_rs_info.StarMin);
+        sprintf(buf, "<StarMin>%d</StarMin>", m_hb_rs_info.StarMin);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<EndHour>%d</EndHour>\n", m_hb_rs_info.EndHour);
+        sprintf(buf, "<EndHour>%d</EndHour>", m_hb_rs_info.EndHour);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<EndMin>%d</EndMin>\n", m_hb_rs_info.EndMin);
+        sprintf(buf, "<EndMin>%d</EndMin>", m_hb_rs_info.EndMin);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<Multi_Module>%d</Multi_Module>\n", m_hb_rs_info.MultiModuleSetting);
+        sprintf(buf, "<Multi_Module>%d</Multi_Module>", m_hb_rs_info.MultiModuleSetting);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<Battery_Type>%d</Battery_Type>\n", m_hb_rs_info.BatteryType);
+        sprintf(buf, "<Battery_Type>%d</Battery_Type>", m_hb_rs_info.BatteryType);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<ChargeCurrent>%d</ChargeCurrent>\n", m_hb_rs_info.BatteryCurrent);
+        sprintf(buf, "<ChargeCurrent>%d</ChargeCurrent>", m_hb_rs_info.BatteryCurrent);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BatShutdownVolt>%03.1f</BatShutdownVolt>\n", ((float)m_hb_rs_info.BatteryShutdownVoltage)/10);
+        sprintf(buf, "<BatShutdownVolt>%03.1f</BatShutdownVolt>", ((float)m_hb_rs_info.BatteryShutdownVoltage)/10);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BatFloatingVolt>%03.1f</BatFloatingVolt>\n", ((float)m_hb_rs_info.BatteryFloatingVoltage)/10);
+        sprintf(buf, "<BatFloatingVolt>%03.1f</BatFloatingVolt>", ((float)m_hb_rs_info.BatteryFloatingVoltage)/10);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<BatReservePercent>%d</BatReservePercent>\n", m_hb_rs_info.BatteryReservePercentage);
+        sprintf(buf, "<BatReservePercent>%d</BatReservePercent>", m_hb_rs_info.BatteryReservePercentage);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<Q_Value>%d</Q_Value>\n", m_hb_rs_info.Volt_VAr);
+        sprintf(buf, "<Q_Value>%d</Q_Value>", m_hb_rs_info.Volt_VAr);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<StartFrequency>%03.1f</StartFrequency>\n", ((float)m_hb_rs_info.StartFrequency)/10);
+        sprintf(buf, "<StartFrequency>%03.1f</StartFrequency>", ((float)m_hb_rs_info.StartFrequency)/10);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<EndFrequency>%03.1f</EndFrequency>\n", ((float)m_hb_rs_info.EndFrequency)/10);
+        sprintf(buf, "<EndFrequency>%03.1f</EndFrequency>", ((float)m_hb_rs_info.EndFrequency)/10);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<FeedInPower>%05.3f</FeedInPower>\n", ((float)m_hb_rs_info.FeedinPower)/1000);
+        sprintf(buf, "<FeedInPower>%05.3f</FeedInPower>", ((float)m_hb_rs_info.FeedinPower)/1000);
         strcat(m_log_buf, buf);
 
         // set ID part
         // set grid voltage
-        sprintf(buf, "\t\t<Grid_Voltage>%d</Grid_Voltage>\n", m_hb_id_data.Grid_Voltage);
+        sprintf(buf, "<Grid_Voltage>%d</Grid_Voltage>", m_hb_id_data.Grid_Voltage);
         strcat(m_log_buf, buf);
         // set model
-        sprintf(buf, "\t\t<Model>%d</Model>\n", m_hb_id_data.Model);
+        sprintf(buf, "<Model>%d</Model>", m_hb_id_data.Model);
         strcat(m_log_buf, buf);
         // set date
-        sprintf(buf, "\t\t<Product_Y>%04d</Product_Y>\n", m_hb_id_data.Year);
+        sprintf(buf, "<Product_Y>%04d</Product_Y>", m_hb_id_data.Year);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<Product_M>%02d</Product_M>\n", m_hb_id_data.Month);
+        sprintf(buf, "<Product_M>%02d</Product_M>", m_hb_id_data.Month);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<Product_D>%02d</Product_D>\n", m_hb_id_data.Date);
+        sprintf(buf, "<Product_D>%02d</Product_D>", m_hb_id_data.Date);
         strcat(m_log_buf, buf);
         // set version
-        sprintf(buf, "\t\t<Ver_HW>%d</Ver_HW>\n", m_hb_id_data.Inverter_Ver);
+        sprintf(buf, "<Ver_HW>%d</Ver_HW>", m_hb_id_data.Inverter_Ver);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<Ver_FW>%d</Ver_FW>\n", m_hb_id_data.DD_Ver);
+        sprintf(buf, "<Ver_FW>%d</Ver_FW>", m_hb_id_data.DD_Ver);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<Ver_EE>%d</Ver_EE>\n", m_hb_id_data.EEPROM_Ver);
+        sprintf(buf, "<Ver_EE>%d</Ver_EE>", m_hb_id_data.EEPROM_Ver);
         strcat(m_log_buf, buf);
-        // set flags
-        sprintf(buf, "\t\t<Rule_Flag>%d</Rule_Flag>\n", m_hb_id_data.Flags);
+        // set flags1
+        sprintf(buf, "<Rule_Flag1>%d</Rule_Flag1>", m_hb_id_data.Flags1);
+        strcat(m_log_buf, buf);
+        // set flags2
+        sprintf(buf, "<Rule_Flag2>%d</Rule_Flag2>", m_hb_id_data.Flags2);
         strcat(m_log_buf, buf);
 
         // set remote real time setting
-        sprintf(buf, "\t\t<ChargeSetting>%d</ChargeSetting>\n", m_hb_rrs_info.ChargeSetting);
+        sprintf(buf, "<ChargeSetting>%d</ChargeSetting>", m_hb_rrs_info.ChargeSetting);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<ChargePower>%05.3f</ChargePower>\n", ((float)m_hb_rrs_info.ChargePower)/1000);
+        sprintf(buf, "<ChargePower>%05.3f</ChargePower>", ((float)m_hb_rrs_info.ChargePower)/1000);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<DischargePower>%05.3f</DischargePower>\n", ((float)m_hb_rrs_info.DischargePower)/1000);
+        sprintf(buf, "<DischargePower>%05.3f</DischargePower>", ((float)m_hb_rrs_info.DischargePower)/1000);
         strcat(m_log_buf, buf);
         // charge discharge power undefine in web server
-        sprintf(buf, "\t\t<RampRate>%d</RampRate>\n", m_hb_rrs_info.RampRatePercentage);
+        sprintf(buf, "<RampRate>%d</RampRate>", m_hb_rrs_info.RampRatePercentage);
         strcat(m_log_buf, buf);
-        sprintf(buf, "\t\t<Degree>%d</Degree>\n", m_hb_rrs_info.DegreeLeadLag);
+        sprintf(buf, "<Degree>%d</Degree>", m_hb_rrs_info.DegreeLeadLag);
+        strcat(m_log_buf, buf);
+        sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb_rrs_info.PeakShavingPower)/1000);
         strcat(m_log_buf, buf);
     }
 
-    strcat(m_log_buf, "\t</record>\n");
+    strcat(m_log_buf, "</record>");
     printf("===================== Set Log XML end =====================\n");
     return true;
 }
@@ -4395,24 +4522,66 @@ bool CG320::WriteLogXML(int index)
 bool CG320::SaveLogXML()
 {
     FILE *fd = NULL;
+    char buf[256] = {0};
+    int offset = 0;
 
     if ( strlen(m_log_buf) )
-        strcat(m_log_buf, "</records>\n");
+        strcat(m_log_buf, "</records>");
     else
         return false;
 
     while ( strlen(m_log_buf) % 3 != 0 )
-        strcat(m_log_buf, "\n");
+        //strcat(m_log_buf, "\n");
+        m_log_buf[strlen(m_log_buf)] = 0x20; // space
 
+    // save to storage
     fd = fopen(m_log_filename, "wb");
-    if ( fd == NULL )
-        return false;
-    fwrite(m_log_buf, 1, strlen(m_log_buf), fd);
-    fclose(fd);
+    if ( fd != NULL ) {
+        if ( fwrite(m_log_buf, 1, strlen(m_log_buf), fd) ) {
+            sprintf(buf, "DataLogger SaveLogXML() : write %s OK", m_log_filename);
+            SaveLog(buf, m_st_time);
+            if ( strstr(m_log_filename, USB_PATH) )
+                m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+            fclose(fd);
+            return true;
+        } else {
+            sprintf(buf, "DataLogger SaveLogXML() : write %s Fail", m_log_filename);
+            SaveLog(buf, m_st_time);
+            if ( strstr(m_log_filename, USB_PATH) )
+                m_sys_error |= SYS_0002_Save_USB_Fail;
+            fclose(fd);
+        }
+    } else {
+        sprintf(buf, "DataLogger SaveLogXML() : open %s Fail", m_log_filename);
+        SaveLog(buf, m_st_time);
+        if ( strstr(m_log_filename, USB_PATH) )
+            m_sys_error |= SYS_0002_Save_USB_Fail;
+    }
 
-    SaveLog((char *)"DataLogger SaveLogXML() : OK", m_st_time);
+    if ( strstr(m_log_filename, DEF_PATH) == NULL ) {
+        strcpy(buf, DEF_PATH);
+        if ( strstr(m_log_filename, USB_PATH) != NULL )
+            offset = strlen(USB_PATH);
+        // save to tmp
+        strcat(buf, m_log_filename+offset);
+        fd = fopen(buf, "wb");
+        if ( fd != NULL ) {
+            if ( fwrite(m_log_buf, 1, strlen(m_log_buf), fd) ) {
+                SaveLog((char *)"DataLogger SaveLogXML() : write to tmp OK", m_st_time);
+                fclose(fd);
+                return true;
+            } else {
+                SaveLog((char *)"DataLogger SaveLogXML() : write to tmp Fail", m_st_time);
+                fclose(fd);
+                return false;
+            }
+        } else {
+            SaveLog((char *)"DataLogger SaveLogXML() : open tmp Fail", m_st_time);
+            return false;
+        }
+    }
 
-    return true;
+    return false;
 }
 
 void CG320::SetErrorLogXML()
@@ -4430,198 +4599,203 @@ bool CG320::WriteErrorLogXML(int index)
     SaveLog((char *)"DataLogger WriteErrorLogXML() : run", m_st_time);
     printf("==================== Set Error Log XML start ====================\n");
     if ( strlen(m_errlog_buf) == 0 ) // empty, new file, add header <records>
-        strcpy(m_errlog_buf, "<records>\n");
+        strcpy(m_errlog_buf, "<records>");
 
     sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
-    sprintf(buf, "\t<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">\n", dev_id,
+    sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
         1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
         m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
     strcat(m_errlog_buf, buf);
-
-    // for test
-    //m_mi_power_info.Error_Code1 = 0x5000;
-    //m_mi_power_info.Error_Code2 = 0x0000;
-    // for test
-    //m_hb_rt_info.PV_Inv_Error_COD1 = 0x0070;
-    //m_hb_rt_info.PV_Inv_Error_COD2 = 0xF000;
-    //m_hb_rt_info.DD_Error_COD = 0x0800;
 
     if ( arySNobj[index].m_Device < 0x0A ) {
         // MI part
         // Error_Code1
         if ( m_mi_power_info.Error_Code1 & 0x0001 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0001</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0001</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0002 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0002</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0002</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0004 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0004</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0004</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0008 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0008</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0008</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0010 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0010</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0010</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0020 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0020</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0020</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0040 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0040</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0040</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0080 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0080</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0080</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0100 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0100</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0100</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0200 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0200</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0200</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0400 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0400</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0400</code>");
         if ( m_mi_power_info.Error_Code1 & 0x0800 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_0800</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0800</code>");
         if ( m_mi_power_info.Error_Code1 & 0x1000 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_1000</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_1000</code>");
         if ( m_mi_power_info.Error_Code1 & 0x2000 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_2000</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_2000</code>");
         if ( m_mi_power_info.Error_Code1 & 0x4000 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_4000</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_4000</code>");
         if ( m_mi_power_info.Error_Code1 & 0x8000 )
-            strcat(m_errlog_buf, "\t\t<code>CODE1_8000</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_8000</code>");
         // Error_Code2
         if ( m_mi_power_info.Error_Code2 & 0x0001 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0001</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0001</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0002 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0002</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0002</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0004 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0004</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0004</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0008 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0001</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0001</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0010 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0010</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0010</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0020 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0020</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0020</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0040 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0040</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0040</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0080 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0080</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0080</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0100 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0100</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0100</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0200 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0200</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0200</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0400 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0400</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0400</code>");
         if ( m_mi_power_info.Error_Code2 & 0x0800 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_0800</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0800</code>");
         if ( m_mi_power_info.Error_Code2 & 0x1000 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_1000</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_1000</code>");
         if ( m_mi_power_info.Error_Code2 & 0x2000 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_2000</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_2000</code>");
         if ( m_mi_power_info.Error_Code2 & 0x4000 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_4000</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_4000</code>");
         if ( m_mi_power_info.Error_Code2 & 0x8000 )
-            strcat(m_errlog_buf, "\t\t<code>CODE2_8000</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_8000</code>");
     } else {
         // Hybrid part
         // 0xDB : error code
         if ( m_hb_rt_info.Error_Code ) {
-            sprintf(buf, "\t\t<code>%d</code>\n", m_hb_rt_info.Error_Code);
+            sprintf(buf, "<code>%d</code>", m_hb_rt_info.Error_Code);
             strcat(m_errlog_buf, buf);
         }
         // PV_Inv_Error_COD1_Record
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0001 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0001_Fac_HL</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0001_Fac_HL</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0002 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0002_PV_low</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0002_PV_low</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0004 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0004_Islanding</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0004_Islanding</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0008 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0008_Vac_H</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0008_Vac_H</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0010 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0010_Vac_L</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0010_Vac_L</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0020 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0020_Fac_H</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0020_Fac_H</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0040 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0040_Fac_L</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0040_Fac_L</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0080 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0080_Fac_LL</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0080_Fac_LL</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0100 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0100_Vac_OCP</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0100_Vac_OCP</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0200 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0200_Vac_HL</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0200_Vac_HL</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0400 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0400_Vac_LL</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0400_Vac_LL</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0800 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_0800_GFDI</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_0800_GFDI</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x1000 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_1000_Iac_H</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_1000_Iac_H</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x2000 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_2000_Ipv_H</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_2000_Ipv_H</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x4000 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_4000_ADCINT_OVF</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_4000_ADCINT_OVF</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x8000 )
-            strcat(m_errlog_buf, "\t\t<code>COD1_8000_Vbus_H</code>\n");
+            strcat(m_errlog_buf, "<code>COD1_8000_Vbus_H</code>");
         // PV_Inv_Error_COD2_Record
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0001 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0001_Arc</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0001_Arc</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0002 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0002_Vac_Relay_fault</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0002_Vac_Relay_fault</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0004 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0004_Ipv1_short</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0004_Ipv1_short</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0008 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0008_Ipv2_short</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0008_Ipv2_short</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0010 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0010_Vac_Short</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0010_Vac_Short</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0020 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0020_CT_fault</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0020_CT_fault</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0040 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0040_PVOverPower</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0040_PVOverPower</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0080 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0080_NO_GRID</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0080_NO_GRID</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0100 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0100_PV_Input_High</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0100_PV_Input_High</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0200 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0200_INV_Overload</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0200_INV_Overload</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0400 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0400_RCMU_30</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0400_RCMU_30</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0800 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_0800_RCMU_60</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_0800_RCMU_60</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x1000 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_1000_RCMU_150</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_1000_RCMU_150</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x2000 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_2000_RCMU_300</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_2000_RCMU_300</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x4000 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_4000_RCMUtest_Fault</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_4000_RCMUtest_Fault</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x8000 )
-            strcat(m_errlog_buf, "\t\t<code>COD2_8000_Vac_LM</code>\n");
+            strcat(m_errlog_buf, "<code>COD2_8000_Vac_LM</code>");
         // DD_Error_COD_Record
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0001 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0001_Vbat_H</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0001_Vbat_H</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0002 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0002_Vbat_L_fault</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0002_Vbat_L_fault</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0004 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0004_Vbus_H</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0004_Vbus_H</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0008 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0008_Vbus_L</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0008_Vbus_L</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0010 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0010_Ibus_H</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0010_Ibus_H</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0020 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0020_Ibat_H</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0020_Ibat_H</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0040 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0040_Charger_T</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0040_Charger_T</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0080 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0080_Code</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0080_Code</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0100 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0100_VBL</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0100_VBL</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0200 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0200_INV_fault</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0200_INV_fault</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0400 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0400_GND_Fault</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0400_GND_Fault</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0800 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_0800_No_Bat</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_0800_No_Bat</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x1000 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_1000_BMS_Comute_fault</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_1000_BMS_Comute_fault</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x2000 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_2000_BMS_Over_Current</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_2000_BMS_Over_Current</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x4000 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_4000_Restart</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_4000_Restart</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x8000 )
-            strcat(m_errlog_buf, "\t\t<code>COD3_8000_Bat_Setting_fault</code>\n");
+            strcat(m_errlog_buf, "<code>COD3_8000_Bat_Setting_fault</code>");
     }
-    strcat(m_errlog_buf, "\t</record>\n");
+
+    // set system error log
+    if ( m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0) ) {
+        if ( m_sys_error & SYS_0001_No_USB )
+            strcat(m_errlog_buf, "<code>SYS_0001_No_USB</code>");
+        if ( m_sys_error & SYS_0002_Save_USB_Fail )
+            strcat(m_errlog_buf, "<code>SYS_0002_Save_USB_Fail</code>");
+        if ( m_sys_error & SYS_0004_No_SD )
+            strcat(m_errlog_buf, "<code>SYS_0004_No_SD</code>");
+        if ( m_sys_error & SYS_0008_Save_SD_Fail )
+            strcat(m_errlog_buf, "<code>SYS_0008_Save_SD_Fail</code>");
+    }
+
+    strcat(m_errlog_buf, "</record>");
 
     printf("===================== Set Error Log XML end =====================\n");
 
@@ -4631,21 +4805,62 @@ bool CG320::WriteErrorLogXML(int index)
 bool CG320::SaveErrorLogXML()
 {
     FILE *fd = NULL;
+    char buf[256] = {0};
+    int offset = 0;
 
     if ( strlen(m_errlog_buf) )
-        strcat(m_errlog_buf, "</records>\n");
+        strcat(m_errlog_buf, "</records>");
     else
         return false;
 
+    // save to storage
     fd = fopen(m_errlog_filename, "wb");
-    if ( fd == NULL )
-        return false;
-    fwrite(m_errlog_buf, 1, strlen(m_errlog_buf), fd);
-    fclose(fd);
+    if ( fd != NULL ) {
+        if ( fwrite(m_errlog_buf, 1, strlen(m_errlog_buf), fd) ) {
+            sprintf(buf, "DataLogger SaveErrorLogXML() : write %s OK", m_errlog_filename);
+            SaveLog(buf, m_st_time);
+            if ( strstr(m_log_filename, USB_PATH) )
+                m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+            fclose(fd);
+            return true;
+        } else {
+            sprintf(buf, "DataLogger SaveErrorLogXML() : write %s Fail", m_errlog_filename);
+            SaveLog(buf, m_st_time);
+            if ( strstr(m_log_filename, USB_PATH) )
+                m_sys_error  |= SYS_0002_Save_USB_Fail;
+            fclose(fd);
+        }
+    } else {
+        sprintf(buf, "DataLogger SaveErrorLogXML() : open %s Fail", m_errlog_filename);
+        SaveLog(buf, m_st_time);
+        if ( strstr(m_log_filename, USB_PATH) )
+            m_sys_error  |= SYS_0002_Save_USB_Fail;
+    }
 
-    SaveLog((char *)"DataLogger SaveErrorLogXML() : OK", m_st_time);
+    if ( strstr(m_errlog_filename, DEF_PATH) == NULL ) {
+        strcpy(buf, DEF_PATH);
+        if ( strstr(m_errlog_filename, USB_PATH) != NULL )
+            offset = strlen(USB_PATH);
+        // save to tmp
+        strcat(buf, m_errlog_filename+offset);
+        fd = fopen(buf, "wb");
+        if ( fd != NULL ) {
+            if ( fwrite(m_errlog_buf, 1, strlen(m_errlog_buf), fd) ) {
+                SaveLog((char *)"DataLogger SaveErrorLogXML() : write to tmp OK", m_st_time);
+                fclose(fd);
+                return true;
+            } else {
+                SaveLog((char *)"DataLogger SaveErrorLogXML() : write to tmp Fail", m_st_time);
+                fclose(fd);
+                return false;
+            }
+        } else {
+            SaveLog((char *)"DataLogger SaveErrorLogXML() : open tmp Fail", m_st_time);
+            return false;
+        }
+    }
 
-    return true;
+    return false;
 }
 
 void CG320::SetBMSPath(int index)
@@ -4659,20 +4874,73 @@ bool CG320::SaveBMS()
 {
     char buf[256] = {0};
     FILE *pFile = NULL;
+    int offset = 0;
+    struct stat st;
+    bool set_header = false;
 
+    if ( stat(m_bms_filename, &st) == -1 )
+        set_header = true;
+    else
+        set_header = false;
+
+    // save to storage
     pFile = fopen(m_bms_filename, "ab");
-    if ( pFile == NULL ) {
-        printf("open %s fail\n", m_bms_filename);
-        sprintf(buf, "DataLogger SaveBMS() : fopen %s fail", m_bms_filename);
+    if ( pFile != NULL ) {
+        if ( set_header )
+            fwrite(m_bms_header, 1, strlen(m_bms_header), pFile);
+        if ( fwrite(m_bms_mainbuf, 1, strlen(m_bms_mainbuf), pFile) ) {
+            sprintf(buf, "DataLogger SaveBMS() : write %s OK", m_bms_filename);
+            SaveLog(buf, m_st_time);
+            if ( strstr(m_log_filename, USB_PATH) )
+                m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+            fclose(pFile);
+            return true;
+        } else {
+            sprintf(buf, "DataLogger SaveBMS() : write %s Fail", m_bms_filename);
+            SaveLog(buf, m_st_time);
+            if ( strstr(m_log_filename, USB_PATH) )
+                m_sys_error  |= SYS_0002_Save_USB_Fail;
+            fclose(pFile);
+        }
+    } else {
+        sprintf(buf, "DataLogger SaveBMS() : open %s Fail", m_bms_filename);
         SaveLog(buf, m_st_time);
-        return false;
+        if ( strstr(m_log_filename, USB_PATH) )
+            m_sys_error  |= SYS_0002_Save_USB_Fail;
     }
-    fwrite(m_bms_mainbuf, 1, strlen(m_bms_mainbuf), pFile);
-    fclose(pFile);
 
-    SaveLog((char *)"DataLogger SaveBMS() : OK", m_st_time);
+    if ( strstr(m_bms_filename, DEF_PATH) == NULL ) {
+        strcpy(buf, DEF_PATH);
+        if ( strstr(m_bms_filename, USB_PATH) != NULL )
+            offset = strlen(USB_PATH);
+        // save to tmp
+        strcat(buf, m_bms_filename+offset);
 
-    return true;
+        if ( stat(buf, &st) == -1 )
+            set_header = true;
+        else
+            set_header = false;
+
+        pFile = fopen(buf, "ab");
+        if ( pFile != NULL ) {
+            if ( set_header )
+                fwrite(m_bms_header, 1, strlen(m_bms_header), pFile);
+            if ( fwrite(m_bms_mainbuf, 1, strlen(m_bms_mainbuf), pFile) ) {
+                SaveLog((char *)"DataLogger SaveBMS() : write to tmp OK", m_st_time);
+                fclose(pFile);
+                return true;
+            } else {
+                SaveLog((char *)"DataLogger SaveBMS() : write to tmp Fail", m_st_time);
+                fclose(pFile);
+                return false;
+            }
+        } else {
+            SaveLog((char *)"DataLogger SaveBMS() : open tmp Fail", m_st_time);
+            return false;
+        }
+    }
+
+    return false;
 }
 
 bool CG320::WriteMIListXML()
@@ -4685,11 +4953,10 @@ bool CG320::WriteMIListXML()
     FILE *pFile = NULL;
 
     // clean old MIList
-    sprintf(buf, "rm %s/MIList*", m_dl_path.m_xml_path);
-    system(buf);
+    system("rm /tmp/MIList*");
 
     GetLocalTime();
-    sprintf(buf, "%s/MIList_%4d%02d%02d_%02d%02d%02d", m_dl_path.m_xml_path,
+    sprintf(buf, "/tmp/MIList_%4d%02d%02d_%02d%02d%02d",
             1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
             m_st_time->tm_hour, m_st_time->tm_min, m_st_time->tm_sec);
     //printf("buf = %s\n", buf);
@@ -4724,7 +4991,7 @@ bool CG320::WriteMIListXML()
                 //printf("%s", buf);
                 fputs(buf, pFile);
 
-                sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_port);
+                sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_inverter_port);
                 //printf("%s", buf);
                 fputs(buf, pFile);
 
@@ -4760,7 +5027,7 @@ bool CG320::WriteMIListXML()
                 //printf("%s", buf);
                 fputs(buf, pFile);
 
-                sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_port);
+                sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_inverter_port);
                 //printf("%s", buf);
                 fputs(buf, pFile);
 
@@ -4795,7 +5062,7 @@ bool CG320::WriteMIListXML()
                 //printf("%s", buf);
                 fputs(buf, pFile);
 
-                sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_port);
+                sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_inverter_port);
                 //printf("%s", buf);
                 fputs(buf, pFile);
 
@@ -4830,7 +5097,7 @@ bool CG320::WriteMIListXML()
             //printf("%s", buf);
             fputs(buf, pFile);
 
-            sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_port);
+            sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_inverter_port);
             //printf("%s", buf);
             fputs(buf, pFile);
 
@@ -4865,7 +5132,7 @@ bool CG320::WriteMIListXML()
             //printf("%s", buf);
             fputs(buf, pFile);
 
-            sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_port);
+            sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_inverter_port);
             //printf("%s", buf);
             fputs(buf, pFile);
 

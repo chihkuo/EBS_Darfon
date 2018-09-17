@@ -105,10 +105,15 @@ typedef struct stHybrid_ID_Data {
     int Inverter_Ver;
     int DD_Ver;
     int EEPROM_Ver;
-    int Flags;
+    int Flags1;
+    int Flags2;
 }HB_ID_DATA;
 
-typedef struct stHybrid_ID_Flags {
+typedef struct stHybrid_ID_Flags1 {
+    char B0B1_External_Sensor;
+}HB_ID_FLAGS1;
+
+typedef struct stHybrid_ID_Flags2 {
     char B0_Rule21;
     char B1_PVParallel;
     char B2_PVOffGrid;
@@ -116,7 +121,8 @@ typedef struct stHybrid_ID_Flags {
     char B4_Heco2;
     char B5_ACCoupling;
     char B6_FreControl;
-}HB_ID_FLAGS;
+    char B7_ArcDetection;
+}HB_ID_FLAGS2;
 
 typedef struct stHybrid_RTC_Data {
     int Second;
@@ -151,6 +157,7 @@ typedef struct stHybrid_Remote_Realtime_Setting_Info {
     int DischargePower;
     int RampRatePercentage;
     int DegreeLeadLag;
+    int PeakShavingPower;
 }HB_RRS_INFO;
 
 typedef struct stHybrid_Realtime_Info {
@@ -312,15 +319,13 @@ typedef struct stDL_CMD {
 typedef struct stDL_Config {
     char    m_sms_server[128];
     int     m_sms_port;
-    char    m_update_server[128];
-    int     m_update_port;
     int     m_sample_time;
     int     m_delay_time; // us, 1000000 us = 1 s
-    int     m_port;
-    int     m_baud;
-    int     m_data_bits;
-    char    m_parity[8];
-    int     m_stop_bits;
+    int     m_inverter_port;
+    int     m_inverter_baud;
+    int     m_inverter_data_bits;
+    char    m_inverter_parity[8];
+    int     m_inverter_stop_bits;
 }DL_CONFIG;
 
 typedef struct stDL_Path {
