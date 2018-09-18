@@ -2472,11 +2472,11 @@ bool CG320::SetHybridIDData(int index)
     szIDData[29] = 0x00;
     szIDData[30] = 0x00;
     // flags1
-    szIDData[31] = 0x00;
-    szIDData[32] = (unsigned char)m_hb_id_data.Flags1;
+    szIDData[31] = (unsigned char)((m_hb_id_data.Flags1 >> 8) & 0x00FF);
+    szIDData[32] = (unsigned char)(m_hb_id_data.Flags1 & 0xFF);
     // flags2
-    szIDData[33] = 0x00;
-    szIDData[34] = (unsigned char)m_hb_id_data.Flags2;
+    szIDData[33] = (unsigned char)((m_hb_id_data.Flags2 >> 8) & 0x00FF);
+    szIDData[34] = (unsigned char)(m_hb_id_data.Flags2 & 0xFF);
     // data crc 0x0F
     crc = CalculateCRC(szIDData+7, 20);
     szIDData[35] = (unsigned char) (crc >> 8); // data crc hi
@@ -3568,7 +3568,7 @@ bool CG320::GetHybridBMSInfo(int index)
     int err = 0;
     byte *lpdata = NULL;
 
-    unsigned char szHBBMSinfo[]={0x00, 0x03, 0x02, 0x00, 0x00, 0x09, 0x00, 0x00};
+    unsigned char szHBBMSinfo[]={0x00, 0x03, 0x02, 0x00, 0x00, 0x0B, 0x00, 0x00};
     szHBBMSinfo[0]=arySNobj[index].m_Addr;
     MakeReadDataCRC(szHBBMSinfo,8);
 
@@ -3582,7 +3582,7 @@ bool CG320::GetHybridBMSInfo(int index)
         MStartTX();
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(23, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(27, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridBMSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridBMSInfo() : OK", m_st_time);
@@ -3615,6 +3615,8 @@ void CG320::DumpHybridBMSInfo(unsigned char *buf)
     m_hb_bms_info.Error = (*(buf+12) << 8) + *(buf+13);
     m_hb_bms_info.Number = (*(buf+14) << 8) + *(buf+15);
     m_hb_bms_info.BMS_Info = (*(buf+16) << 8) + *(buf+17);
+    m_hb_bms_info.BMS_Max_Cell = (*(buf+18) << 8) + *(buf+19);
+    m_hb_bms_info.BMS_Min_Cell = (*(buf+20) << 8) + *(buf+21);
 
 /*    printf("#### Dump Hybrid BMS Info ####\n");
     printf("Voltage           = %d mV\n", m_hb_bms_info.Voltage*10);
@@ -3626,6 +3628,8 @@ void CG320::DumpHybridBMSInfo(unsigned char *buf)
     printf("Error             = 0x%04X\n", m_hb_bms_info.Error);
     printf("Module Number     = %d\n", m_hb_bms_info.Number);
     printf("BMS Info          = %d\n", m_hb_bms_info.BMS_Info);
+    printf("BMS Max Cell      = %d mV\n", m_hb_bms_info.BMS_Max_Cell);
+    printf("BMS Min Cell      = %d mV\n", m_hb_bms_info.BMS_Min_Cell);
     printf("##############################\n");*/
 }
 
@@ -3635,8 +3639,8 @@ bool CG320::SetHybridBMSModule(int index)
     bool ret = true;
 
     // save Panasonic module
-    if ( GetHybridPanasonicModule(index) )
-        SetHybridPanasonicModule(index);
+    //if ( GetHybridPanasonicModule(index) )
+    //    SetHybridPanasonicModule(index);
 
     // save all 16 module
     for (i = 0; i < 16; i++) {
@@ -4436,7 +4440,10 @@ bool CG320::WriteLogXML(int index)
         strcat(m_log_buf, buf);
         sprintf(buf, "<BMS_Info>%d</BMS_Info>", m_hb_bms_info.BMS_Info);
         strcat(m_log_buf, buf);
-
+        sprintf(buf, "<BMS_MaxCell>%05.3f</BMS_MaxCell>", ((float)m_hb_bms_info.Voltage/1000));
+        strcat(m_log_buf, buf);
+        sprintf(buf, "<BMS_MinCell>%05.3f</BMS_MinCell>", ((float)m_hb_bms_info.Current/1000));
+        strcat(m_log_buf, buf);
 
         // set remote setting
         sprintf(buf, "<InverterMode>%d</InverterMode>", m_hb_rs_info.Mode);
@@ -4492,10 +4499,10 @@ bool CG320::WriteLogXML(int index)
         sprintf(buf, "<Ver_EE>%d</Ver_EE>", m_hb_id_data.EEPROM_Ver);
         strcat(m_log_buf, buf);
         // set flags1
-        sprintf(buf, "<Rule_Flag1>%d</Rule_Flag1>", m_hb_id_data.Flags1);
+        sprintf(buf, "<SystemFlag>%d</SystemFlag>", m_hb_id_data.Flags1);
         strcat(m_log_buf, buf);
         // set flags2
-        sprintf(buf, "<Rule_Flag2>%d</Rule_Flag2>", m_hb_id_data.Flags2);
+        sprintf(buf, "<Rule_Flag>%d</Rule_Flag>", m_hb_id_data.Flags2);
         strcat(m_log_buf, buf);
 
         // set remote real time setting

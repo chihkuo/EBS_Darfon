@@ -307,6 +307,8 @@ typedef struct stHybrid_BMS_Info {
     int Error;
     int Number;
     int BMS_Info;
+    int BMS_Max_Cell;
+    int BMS_Min_Cell;
 }HB_BMS_INFO;
 
 typedef struct stDL_CMD {
