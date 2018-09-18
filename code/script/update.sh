@@ -14,3 +14,7 @@ chmod 644 /etc/config/$ST
 cp $UPDATE_DIR/$ST /usr/home/
 chmod 644 /usr/home/$ST
 
+rm /tmp/luci-indexcache
+rm /tmp/luci-modulecache/*
+sync
+
