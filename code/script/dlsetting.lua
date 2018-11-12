@@ -36,12 +36,18 @@ local comport = map:section(TypedSection, "comport", "COM Port setting")
 comport.addremove = false
 comport.anonymous = true
 
+--[[
 comport:tab("port_select",  translate("COM Port select"))
 local allport = {"COM1", "COM2", "COM3", "COM4"}
+--local allmodel = {"Darfon", "Test"}
 local inverter_port = comport:taboption("port_select", ListValue, "inverter_port", translate("Inverter Port"))
 for i = 1,#allport do
 	inverter_port:value(allport[i])
 end
+--local inverter_model = comport:taboption("port_select", ListValue, "inverter_model", translate("Inverter Model"))
+--for i = 1,#allmodel do
+--	inverter_model:value(allmodel[i])
+--end
 local other1_port = comport:taboption("port_select", ListValue, "other1_port", translate("Other1 Port"))
 for i = 1,#allport do
 	other1_port:value(allport[i])
@@ -54,6 +60,7 @@ local other3_port = comport:taboption("port_select", ListValue, "other3_port", t
 for i = 1,#allport do
 	other3_port:value(allport[i])
 end
+]]
 
 comport:tab("com1_setting",  translate("COM1"))
 local baudrate = {4800, 9600, 19200, 28800, 38400, 57600, 115200}

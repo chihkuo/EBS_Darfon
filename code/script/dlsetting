@@ -1,10 +1,10 @@
 
 config sms
-	option sms_server '60.251.36.232'
-	option sms_port '80'
-	option update_server '60.251.36.232'
-	option update_port '80'
-	option sample_time '3'
+	option sms_server 'portal.darfon.com'
+	option sms_port '8080'
+	option update_server 'portal.darfon.com'
+	option update_port '8080'
+	option sample_time '5'
 	option upload_time '10'
 	option delay_time '500'
 	option cleartx_delay '1000'
@@ -12,13 +12,11 @@ config sms
 	option update_SW_time '30'
 
 config comport
-	option other2_port 'COM3'
-	option other3_port 'COM4'
 	option com1_data_bits '8'
 	option com1_parity 'None'
 	option com1_stop_bits '1'
-	option com3_baud '57600'
-	option com4_baud '115200'
+	option com3_baud '9600'
+	option com4_baud '9600'
 	option com4_data_bits '8'
 	option com4_parity 'None'
 	option com4_stop_bits '1'
@@ -30,12 +28,10 @@ config comport
 	option com2_stop_bits '1'
 	option com2_baud '9600'
 	option com1_baud '9600'
-	option inverter_port 'COM1'
-	option other1_port 'COM2'
 
 config swver
-	option dlver '1.0.0'
-	option dpver '1.0.0'
+	option dlver '2.0.0'
+	option dpver '2.0.0'
 
 config button
 

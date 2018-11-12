@@ -6,6 +6,14 @@
 
 #include <time.h>
 
+#define WHITE_LIST_SIZE 2048
+#define QUERY_SIZE      4096
+#define RESPOND_SIZE    4096
+#define LOG_BUF_SIZE    640*500
+#define BMS_BUF_SIZE    1024*16
+#define BMS_PANAMOD_SIZE 94 //47*2
+#define BMS_MODULE_SIZE 112 //56*2
+
 extern "C" {
 /* global variables */
 #ifndef STR_MOD_PACKET
@@ -16,32 +24,6 @@ typedef struct MODBUS_REPLY_PACKET
 	unsigned short crc;
 }MODBUS_REPLY_PACKET;
 #endif
-
-#define WHITE_LIST_SIZE 2048
-#define QUERY_SIZE      4096
-#define RESPOND_SIZE    4096
-#define LOG_BUF_SIZE    640*500
-#define BMS_BUF_SIZE    1024*16
-#define BMS_PANAMOD_SIZE 94 //47*2
-#define BMS_MODULE_SIZE 112 //56*2
-#define DEF_PATH        "/tmp/test"
-#define BMS_PATH        DEF_PATH"/BMS"
-#define XML_PATH        DEF_PATH"/XML"
-#define SYSLOG_PATH     DEF_PATH"/SYSLOG"
-#define DEVICELIST_PATH "/tmp/DeviceList"
-#define DEV_XML_PATH        "/tmp/XML_PATH"
-//#define USB_PATH        "/tmp/usb"
-#define USB_PATH        "/tmp/run/mountd/sda1"
-#define SDCARD_PATH     "/tmp/sdcard"
-
-#define WHITE_LIST_PATH "/usr/home/White-List.txt"
-#define TODOLIST_PATH   "/tmp/TODOList"
-#define WL_CHANGED_PATH "/tmp/WL_Changed"
-
-#define TIMEZONE_URL    "http://ip-api.com/json"
-#define TIME_OFFSET_URL "http://svn.fonosfera.org/fon-ng/trunk/luci/modules/admin-fon/root/etc/timezones.db"
-//#define KEY             "O10936IZHJTQ"
-#define TIME_SERVER_URL "https://www.worldtimeserver.com/handlers/GetData.ashx?action=GCTData"
 
 #define MODBUS_TX_BUFFER_SIZE		1544
 extern unsigned int txsize;
@@ -69,6 +51,7 @@ extern int ModbusDrvDeinit(void);
 extern unsigned char respond_buff[RESPOND_SIZE];
 extern unsigned char *GetRespond(int iSize, int delay);
 extern int GetQuery(unsigned char *buf, int buf_size);
+extern void CleanRespond();
 }
 
 class CG320
@@ -77,8 +60,11 @@ public:
 	CG320();
 	virtual ~CG320();
 
-	void    Init();
+	bool    Init(int addr, int com, bool open_com, bool first);
+	int     DoReRegister(time_t time);
+	int     DoAllRegister(time_t time);
 	void    Start();
+	void    GetData(time_t data_time, bool first, bool last);
 	void    Pause();
 	void    Play();
 	void    Stop();
@@ -105,13 +91,13 @@ protected:
     bool    LoadWhiteList();
     bool    SavePLCWhiteList();
     bool    SaveWhiteList();
-    bool    SaveDeviceList();
+    bool    SaveDeviceList(bool first, bool last);
 
     int     WhiteListRegister();
     int     StartRegisterProcess();
     int     AllocateProcess(unsigned char *query, int len);
     bool    GetDevice(int index);
-    bool    ReRegiser(int index);
+    bool    ReRegister(int index);
 
     bool    GetMiIDInfo(int index);
     void    DumpMiIDInfo(unsigned char *buf);
@@ -153,10 +139,10 @@ protected:
 
     void    SetLogXML();
     bool    WriteLogXML(int index);
-    bool    SaveLogXML();
+    bool    SaveLogXML(bool first, bool last);
     void    SetErrorLogXML();
     bool    WriteErrorLogXML(int index);
-    bool    SaveErrorLogXML();
+    bool    SaveErrorLogXML(bool first, bool last);
     void    SetBMSPath(int index);
     bool    SaveBMS();
     bool    WriteMIListXML();
@@ -172,6 +158,10 @@ protected:
     unsigned char m_bms_buf[BMS_MODULE_SIZE];
     SNOBJ   arySNobj[253];
     int     m_snCount;
+    int     m_addr;
+    bool    m_first;
+    bool    m_last;
+    int     m_milist_size;
     int     m_loopstate;
     int     m_loopflag;
     int     m_sys_error;

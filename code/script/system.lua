@@ -42,6 +42,7 @@ function index()
 
 	entry({"admin", "system", "dlsetting"}, cbi("admin_system/dlsetting"), _("DL Setting"), 80)
 	entry({"admin", "system", "dldevice"}, cbi("admin_system/dldevice"), _("DL Device"), 81)
+	entry({"admin", "system", "dllist"}, cbi("admin_system/dllist"), _("Model List"), 82)
 
 	entry({"admin", "system", "reboot"}, template("admin_system/reboot"), _("Reboot"), 90)
 	entry({"admin", "system", "reboot", "call"}, post("action_reboot"))

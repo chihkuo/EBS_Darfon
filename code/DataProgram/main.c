@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "1.0.1"
+#define VERSION         "2.0.0"
 //#define USB_PATH        "/tmp/usb"
 #define USB_PATH        "/tmp/run/mountd/sda1"
 #define SDCARD_PATH     "/tmp/sdcard"
@@ -29,7 +29,7 @@
 #define CURL_FILE       "/tmp/Curlfile"
 #define TIMEOUT         "30"
 #define CURL_CMD        "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
-#define UPDATE_MAX      20
+#define UPDATE_MAX      500
 
 
 char SOAP_HEAD[] =
@@ -40,7 +40,7 @@ char SOAP_HEAD[] =
 char SOAP_TAIL[] = "\t</soap:Body>\n</soap:Envelope>";
 
 char MAC[18] = {0};
-char SMS_SERVER[16] = {0};
+char SMS_SERVER[128] = {0};
 int sms_port = 0;
 char g_ROOT_PATH[64] = {0};
 char g_XML_PATH[64] = {0};
@@ -53,6 +53,7 @@ int update_interval = 0; // min
 int shelf_life = 0; // day
 int save_time = 3600*24*30;
 char g_CURL_CMD[256] = {0};
+int check_milist = 1;
 
 struct tm st_log_time = {0};
 struct tm st_errlog_time = {0};
@@ -124,7 +125,7 @@ void getConfig()
         printf("popen fail!\n");
         return;
     }
-    fgets(SMS_SERVER, 16, fd);
+    fgets(SMS_SERVER, 128, fd);
     pclose(fd);
     if ( strlen(SMS_SERVER) )
         SMS_SERVER[strlen(SMS_SERVER)-1] = 0; // clean \n
@@ -299,17 +300,21 @@ int PostMIList()
     //printf("File time : %04d/%02d/%02d %02d:%02d:%02d\n",
     //    st_file_time.tm_year+1900, st_file_time.tm_mon+1, st_file_time.tm_mday, st_file_time.tm_hour, st_file_time.tm_min, st_file_time.tm_sec);
 
-    // check time,
-    if ( CheckTime(st_list_time, st_file_time, 0) ) {
-        printf("Find new MIList\n");
-        // set new time to st_list_time
-        //st_list_time = st_file_time;
-        //printf("List time : %04d/%02d/%02d %02d:%02d:%02d\n",
-        //    st_list_time.tm_year+1900, st_list_time.tm_mon+1, st_list_time.tm_mday, st_list_time.tm_hour, st_list_time.tm_min, st_list_time.tm_sec);
-    } else {
-        printf("Old MIList file %s\n", FILENAME);
-        //printf("Not to do update\n");
-        return 3;
+    if ( check_milist )
+        printf("CheckWhiteListUploaded() not succes, run PostMIList() again\n");
+    else {
+        // check time,
+        if ( CheckTime(st_list_time, st_file_time, 0) ) {
+            printf("Find new MIList\n");
+            // set new time to st_list_time
+            //st_list_time = st_file_time;
+            //printf("List time : %04d/%02d/%02d %02d:%02d:%02d\n",
+            //    st_list_time.tm_year+1900, st_list_time.tm_mon+1, st_list_time.tm_mday, st_list_time.tm_hour, st_list_time.tm_min, st_list_time.tm_sec);
+        } else {
+            printf("Old MIList file %s\n", FILENAME);
+            //printf("Not to do update\n");
+            return 3;
+        }
     }
 
     // set curl file
@@ -378,6 +383,92 @@ int PostMIList()
     }
 }
 
+int CheckWhiteListUploaded()
+{
+    // CheckWhiteListUploaded result date length about = 403
+    char buf[512] = {0};
+    char *index = NULL;
+    FILE *fd = NULL;
+    time_t current_time;
+    struct tm *st_time;
+    int ret = 0;
+    struct stat st;
+
+    current_time = time(NULL);
+    st_time = localtime(&current_time);
+
+    printf("====================== CheckWhiteListUploaded start ======================\n");
+    // set CheckWhiteListUploaded xml file
+    fd = fopen(CURL_FILE, "wb");
+    if ( fd == NULL ) {
+        printf("#### CheckWhiteListUploaded() open %s Fail ####\n", CURL_FILE);
+        return 1;
+    }
+    memset(buf, 0, 512);
+    fputs(SOAP_HEAD, fd);
+    sprintf(buf, "\t\t<CheckWhiteListUploaded xmlns=\"http://tempuri.org/\">\n");
+    fputs(buf, fd);
+    sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
+    fputs(buf, fd);
+    sprintf(buf, "\t\t</CheckWhiteListUploaded>\n");
+    fputs(buf, fd);
+    fputs(SOAP_TAIL, fd);
+    fclose(fd);
+
+    // run curl soap command, save result to /tmp/CheckWhiteListUploaded
+    sprintf(buf, "%s > /tmp/CheckWhiteListUploaded", g_CURL_CMD);
+    system(buf);
+
+    // check responds
+    if ( stat("/tmp/CheckWhiteListUploaded", &st) == 0 )
+        if ( st.st_size == 0 ) {
+            printf("#### CheckWhiteListUploaded() /tmp/CheckWhiteListUploaded empty ####\n");
+            SaveLog("DataProgram CheckWhiteListUploaded() : /tmp/CheckWhiteListUploaded empty", st_time);
+            return 2;
+        }
+    // read result
+    fd = fopen("/tmp/CheckWhiteListUploaded", "rb");
+    if ( fd == NULL ) {
+        printf("#### CheckWhiteListUploaded() open /tmp/CheckWhiteListUploaded Fail ####\n");
+        return 3;
+    }
+    memset(buf, 0, 512);
+    fread(buf, 1, 512, fd);
+    fclose(fd);
+    //printf("/tmp/CheckWhiteListUploaded : \n%s\n", buf);
+
+    // check result
+    index = strstr(buf, "<CheckWhiteListUploadedResult>");
+    if ( index == NULL ) {
+        printf("#### CheckWhiteListUploaded() <CheckWhiteListUploadedResult> not found ####\n");
+        SaveLog("DataProgram CheckWhiteListUploaded() : <CheckWhiteListUploadedResult> not found", st_time);
+        index = strstr(buf, "<CheckWhiteListUploadedResult />");
+        if ( index == NULL )
+            printf("#### CheckWhiteListUploaded() <CheckWhiteListUploadedResult /> not found ####\n");
+        else {
+            printf("<CheckWhiteListUploadedResult /> find, result data not exist!\n");
+            SaveLog("DataProgram CheckWhiteListUploaded() : result data not exist", st_time);
+        }
+
+        return 4;
+    }
+    sscanf(index, "<UpdheartbeattimeResult>%02d</UpdheartbeattimeResult>", &ret);
+    printf("ret = %02d\n", ret);
+    if ( ret == 0 ) {
+        check_milist = 0;
+        printf("CheckWhiteListUploaded update OK\n");
+        SaveLog("DataProgram CheckWhiteListUploaded() : update OK", st_time);
+        printf("======================= CheckWhiteListUploaded end =======================\n");
+        return 0;
+    } else {
+        printf("CheckWhiteListUploaded update Fail\n");
+        SaveLog("DataProgram CheckWhiteListUploaded() : update Fail", st_time);
+        printf("======================= CheckWhiteListUploaded end =======================\n");
+        return 5;
+    }
+
+}
+
 int Qrylogdata()
 {
     // Qrylogdata result date length about = 371
@@ -385,6 +476,7 @@ int Qrylogdata()
     char *index = NULL;
     FILE *fd = NULL;
     time_t current_time;
+    time_t data_time;
     struct tm *st_time;
     struct stat st;
 
@@ -436,22 +528,27 @@ int Qrylogdata()
         printf("#### Qrylogdata() <QrylogdataResult> not found ####\n");
         SaveLog("DataProgram Qrylogdata() : <QrylogdataResult> not found", st_time);
         index = strstr(buf, "<QrylogdataResult />");
-        if ( index == NULL )
+        if ( index == NULL ) {
             printf("#### Qrylogdata() <QrylogdataResult /> not found ####\n");
+            st_log_time.tm_year = 0;
+            st_log_time.tm_mon = 0;
+            st_log_time.tm_mday = 0;
+            st_log_time.tm_hour = 0;
+            st_log_time.tm_min = 0;
+            st_log_time.tm_sec = 0;
+            printf("========================= Qrylogdata end =========================\n");
+            return 4;
+        }
         else {
             printf("<QrylogdataResult /> find, last time data not exist!\n");
             SaveLog("DataProgram Qrylogdata() : last time data not exist", st_time);
+            data_time = current_time - (update_interval*60);
+            st_log_time = *localtime(&data_time);
+            printf("Set Qrylogdata time : %04d/%02d/%02d %02d:%02d:%02d\n",
+            st_log_time.tm_year+1900, st_log_time.tm_mon+1, st_log_time.tm_mday, st_log_time.tm_hour, st_log_time.tm_min, st_log_time.tm_sec);
+            printf("========================= Qrylogdata end =========================\n");
+            return 0;
         }
-
-        st_log_time.tm_year = 0;
-        st_log_time.tm_mon = 0;
-        st_log_time.tm_mday = 0;
-        st_log_time.tm_hour = 0;
-        st_log_time.tm_min = 0;
-        st_log_time.tm_sec = 0;
-
-        printf("========================= Qrylogdata end =========================\n");
-        return 4;
     }
 
     sscanf(index, "<QrylogdataResult>%04d/%02d/%02d %02d:%02d:%02d</QrylogdataResult>",
@@ -683,6 +780,7 @@ int Qryerrlogdata()
     char *index = NULL;
     FILE *fd = NULL;
     time_t current_time;
+    time_t data_time;
     struct tm *st_time;
     struct stat st;
 
@@ -735,22 +833,27 @@ int Qryerrlogdata()
         printf("#### Qryerrlogdata() <QryerrlogdataResult> not found ####\n");
         SaveLog("DataProgram Qryerrlogdata() : <QryerrlogdataResult> not found", st_time);
         index = strstr(buf, "<QryerrlogdataResult />");
-        if ( index == NULL )
+        if ( index == NULL ) {
             printf("#### Qryerrlogdata() <QryerrlogdataResult /> not found ####\n");
+            st_errlog_time.tm_year = 0;
+            st_errlog_time.tm_mon = 0;
+            st_errlog_time.tm_mday = 0;
+            st_errlog_time.tm_hour = 0;
+            st_errlog_time.tm_min = 0;
+            st_errlog_time.tm_sec = 0;
+            printf("========================= Qryerrlogdata end =========================\n");
+            return 4;
+        }
         else {
             printf("<QryerrlogdataResult /> find, last time data not exist!\n");
             SaveLog("DataProgram Qryerrlogdata() : last time data not exist", st_time);
+            data_time = current_time - (update_interval*60);
+            st_errlog_time = *localtime(&data_time);
+            printf("Set Qrylogdata time : %04d/%02d/%02d %02d:%02d:%02d\n",
+            st_errlog_time.tm_year+1900, st_errlog_time.tm_mon+1, st_errlog_time.tm_mday, st_errlog_time.tm_hour, st_errlog_time.tm_min, st_errlog_time.tm_sec);
+            printf("========================= Qryerrlogdata end =========================\n");
+            return 0;
         }
-
-        st_errlog_time.tm_year = 0;
-        st_errlog_time.tm_mon = 0;
-        st_errlog_time.tm_mday = 0;
-        st_errlog_time.tm_hour = 0;
-        st_errlog_time.tm_min = 0;
-        st_errlog_time.tm_sec = 0;
-
-        printf("======================= Qryerrlogdata end =======================\n");
-        return 4;
     }
 
     sscanf(index, "<QryerrlogdataResult>%04d/%02d/%02d %02d:%02d:%02d</QryerrlogdataResult>",
@@ -2341,7 +2444,7 @@ int main(int argc, char* argv[])
     time_t  previous_time;
     time_t  current_time;
     struct tm *st_time = NULL;
-    int counter = 0, myhour = -1, myday = 0;
+    int counter = 0, myhour = -1, myday = 0, state = 0, ret = -1;
 
     char opt;
     while( (opt = getopt(argc, argv, "vVtT")) != -1 )
@@ -2401,6 +2504,14 @@ int main(int argc, char* argv[])
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);
 
+            if ( state == 0)
+                state = 1;
+            else if ( state == 1 ) {
+                if ( check_milist )
+                    CheckWhiteListUploaded();
+                else
+                    state = 2;
+            }
             // update white list if has new file
             PostMIList();
             //printf("press enter key to next loop~\n");
@@ -2409,17 +2520,19 @@ int main(int argc, char* argv[])
             // get white list change
             // get to do command
 
-            Qrylogdata();
+            ret = Qrylogdata();
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);
-            Rcvlog();
+            if ( ret == 0 )
+                Rcvlog();
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);
 
-            Qryerrlogdata();
+            ret = Qryerrlogdata();
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);
-            Rcverrorlog();
+            if ( ret == 0 )
+                Rcverrorlog();
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);
 
@@ -2456,7 +2569,7 @@ int main(int argc, char* argv[])
             printf("CheckUpdateInterval() change update interval %d OK\n", update_interval);
 
         // update alive
-        if ( Updheartbeattime(current_time) )
+        if ( !Updheartbeattime(current_time) )
             printf("Updheartbeattime() OK\n");
 
         // clean host data

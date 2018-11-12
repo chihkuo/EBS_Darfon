@@ -44,5 +44,7 @@ int ModbusDrvInit(void);
 int ModbusDrvDeinit(void);
 unsigned char *GetRespond(int iSize, int iTimeout);
 int GetQuery(unsigned char *buf, int buf_size);
+unsigned char *GetCyberPowerRespond(int iSize, int delay);
+void CleanRespond();
 
 #endif /* __MODBUS_DRV_H__ */

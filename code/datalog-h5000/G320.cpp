@@ -4,6 +4,26 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+#define DEF_PATH        "/tmp/test"
+#define BMS_PATH        DEF_PATH"/BMS"
+#define XML_PATH        DEF_PATH"/XML"
+#define SYSLOG_PATH     DEF_PATH"/SYSLOG"
+#define DEVICELIST_TMP "/tmp/tmpDeviceList"
+#define DEVICELIST_PATH "/tmp/DeviceList"
+#define DEV_XML_PATH        "/tmp/XML_PATH"
+//#define USB_PATH        "/tmp/usb"
+#define USB_PATH        "/tmp/run/mountd/sda1"
+#define SDCARD_PATH     "/tmp/sdcard"
+
+#define WHITE_LIST_PATH "/usr/home/White-List.txt"
+#define TODOLIST_PATH   "/tmp/TODOList"
+#define WL_CHANGED_PATH "/tmp/WL_Changed"
+
+#define TIMEZONE_URL    "http://ip-api.com/json"
+#define TIME_OFFSET_URL "http://svn.fonosfera.org/fon-ng/trunk/luci/modules/admin-fon/root/etc/timezones.db"
+//#define KEY             "O10936IZHJTQ"
+#define TIME_SERVER_URL "https://www.worldtimeserver.com/handlers/GetData.ashx?action=GCTData"
+
 extern "C"
 {
     #include "../common/SaveLog.h"
@@ -33,10 +53,14 @@ CG320::CG320()
     m_wl_checksum = 0;
     m_wl_maxid = 0;
     m_snCount = 0;
+    m_addr = 1;
+    m_first = true;
+    m_last = true;
+    m_milist_size = 0;
     m_loopstate = 0;
     m_loopflag = 0;
     m_sys_error = 0;
-    m_do_get_TZ = true;
+    m_do_get_TZ = false;
     m_st_time = NULL;
     m_last_read_time = 0;
     m_last_register_time = 0;
@@ -69,7 +93,7 @@ CG320::CG320()
 
     int i = 0;
     for (i=0; i<253; i++) {
-        arySNobj[i].m_Addr=i+1; // address range 1 ~ 253
+        arySNobj[i].m_Addr=i+m_addr; // address range 1 ~ 253
         memset(arySNobj[i].m_Sn, 0x00, 17);
         arySNobj[i].m_Device = -2;
         arySNobj[i].m_Err = 0;
@@ -98,30 +122,55 @@ CG320::~CG320()
     ModbusDrvDeinit();
 }
 
-void CG320::Init()
+bool CG320::Init(int addr, int com, bool open_com, bool first)
 {
+    int i = 0, idc = 0;
+    char buf[256] = {0};
+    char *port = NULL;
+    char szbuf[32] = {0};
+    char inverter_parity = 0;
+    bool ret = true;
+
     printf("#### G320 Init Start ####\n");
+    // set addr
+    m_addr = addr;
+    for (i=0; i<253; i++) {
+        arySNobj[i].m_Addr=(unsigned char)(i+m_addr); // address range 1 ~ 253
+        if ( arySNobj[i].m_Addr > 253 )
+            arySNobj[i].m_Addr = 253;
+        memset(arySNobj[i].m_Sn, 0x00, 17);
+        arySNobj[i].m_Device = -2;
+        arySNobj[i].m_Err = 0;
+        arySNobj[i].m_state = 0;
+        //printf("i=%u, addr=%d\n",i,arySNobj[i].m_Addr );
+    }
+
+    // set com port
+    m_dl_config.m_inverter_port = com;
 
     GetMAC();
     GetDLConfig();
 
-    char *port;
-    port = szPort[m_dl_config.m_inverter_port-1]; // COM1~4 <==> /dev/ttyS0~3
-    char szbuf[32];
-    sprintf(szbuf,"port = %s \n",port);
-    printf(szbuf);
-    char inverter_parity = 0;
-    if ( strstr(m_dl_config.m_inverter_parity, "Odd") )
-        inverter_parity = 'O';
-    else if ( strstr(m_dl_config.m_inverter_parity, "Even") )
-        inverter_parity = 'E';
-    else
-        inverter_parity = 'N';
-    MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits);
+    if ( open_com ) {
+        port = szPort[com-1]; // COM1~4 <==> /dev/ttyS0~3 or ttyUSB0~3
+        sprintf(szbuf,"port = %s \n",port);
+        printf(szbuf);
+
+        if ( strstr(m_dl_config.m_inverter_parity, "Odd") )
+            inverter_parity = 'O';
+        else if ( strstr(m_dl_config.m_inverter_parity, "Even") )
+            inverter_parity = 'E';
+        else
+            inverter_parity = 'N';
+        if ( MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits) != 0 )
+            ret = false;
+    }
 
     // get time zone
-    GetTimezone();
-    usleep(1000000);
+    if ( first ) {
+        GetTimezone();
+        usleep(1000000);
+    }
 
     // set save file path
     GetLocalTime();
@@ -139,6 +188,21 @@ void CG320::Init()
                 WhiteListRegister();
             }
     }
+
+    GetLocalTime();
+    idc = StartRegisterProcess();
+    if ( idc ) {
+        printf("StartRegisterProcess success find %d new invert\n", idc);
+        sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", idc);
+        SaveLog(buf, m_st_time);
+        SaveWhiteList();
+    }
+    CloseLog();
+
+    printf("################ m_snCount = %d #################\n", m_snCount);
+    for (i=0; i<m_snCount; i++)
+        printf("i = %d, addr = %d, dev = %d, sn = %s\n", i, arySNobj[i].m_Addr, arySNobj[i].m_Device, arySNobj[i].m_Sn);
+    printf("################################################\n");
 
     //GetWhiteListCount();
     //if ( m_wl_count > 0 )
@@ -195,6 +259,75 @@ void CG320::Init()
     //char ch;
     //printf("press enter key to next loop~\n");
     //while ((ch = getchar()) != '\n' && ch != EOF);
+
+    return ret;
+}
+
+int CG320::DoReRegister(time_t time)
+{
+    int i = 0, ret = 0;
+
+    printf("==== ReRegister part start ====\n");
+
+    m_current_time = time;
+    m_last_register_time = m_current_time;
+    m_st_time = localtime(&m_current_time);
+    SetPath();
+    CheckConfig();
+
+    OpenLog(m_dl_path.m_syslog_path, m_st_time);
+    for ( i = 0; i < m_snCount; i++) {
+        if ( !arySNobj[i].m_state ) {
+            if ( ReRegister(i) ) {
+                ret++;
+                if ( !GetDevice(i) )
+                    arySNobj[i].m_Err++;
+                else {
+                    // ReRegiser OK, GetDevice OK, know MI or Hybrid
+                    WriteMIListXML();
+                    if ( arySNobj[i].m_Device >= 0x0A )
+                        SetHybridRTCData(i);
+                }
+            }
+        }
+    }
+    CloseLog();
+
+    printf("===== ReRegister part end =====\n");
+
+    return ret;
+}
+
+int CG320::DoAllRegister(time_t time)
+{
+    int i = 0, ret = 0;
+    char buf[256] = {0};
+
+    printf("==== AllRegister part start ====\n");
+
+    m_current_time = time;
+    m_last_search_time = m_current_time;
+    m_st_time = localtime(&m_current_time);
+    SetPath();
+    CheckConfig();
+
+    OpenLog(m_dl_path.m_syslog_path, m_st_time);
+
+    ret = StartRegisterProcess();
+    if ( ret ) {
+        printf("Add %d new device to list\n", ret);
+        sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", ret);
+        SaveLog(buf, m_st_time);
+        for (i = 1; i <= ret; i++)
+            GetDevice(m_snCount-i);
+        SaveWhiteList();
+        WriteMIListXML();
+    }
+    CloseLog();
+
+    printf("===== AllRegister part end =====\n");
+
+    return ret;
 }
 
 void CG320::Start()
@@ -282,7 +415,7 @@ void CG320::Start()
                             m_loopflag++;
                         }
 
-                        WriteLogXML(i);
+                        //WriteLogXML(i);
                         if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
                             (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
                             WriteErrorLogXML(i);
@@ -347,7 +480,7 @@ void CG320::Start()
                             m_loopflag++;
                         }
 
-                        WriteLogXML(i);
+                        //WriteLogXML(i);
                         if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ||
                             (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
                             WriteErrorLogXML(i);
@@ -366,8 +499,8 @@ void CG320::Start()
             }
             if ( (m_loopstate != 0) && (m_snCount > 0) ) {
                 if ( stat(m_log_filename, &st) != 0 ) {
-                    SaveLogXML();
-                    SaveErrorLogXML();
+                    //SaveLogXML();
+                    //SaveErrorLogXML();
                     dosave = true;
                 }
             }
@@ -396,7 +529,7 @@ void CG320::Start()
             printf("#### Debug : read span time : %ld ####\n", m_current_time - m_last_read_time);
         }
         if ( dosave ) {
-            SaveDeviceList();
+            //SaveDeviceList();
             dosave = false;
         }
 
@@ -428,7 +561,7 @@ void CG320::Start()
             m_last_register_time = m_current_time;
             for ( i = 0; i < m_snCount; i++) {
                 if ( !arySNobj[i].m_state ) {
-                    if ( ReRegiser(i) ) {
+                    if ( ReRegister(i) ) {
                         if ( !GetDevice(i) )
                             arySNobj[i].m_Err++;
                         else {
@@ -489,6 +622,196 @@ void CG320::Start()
 
     printf("#### G320 start() End ####\n");
     getchar();
+}
+
+void CG320::GetData(time_t data_time, bool first, bool last)
+{
+    int     i = 0;
+    struct  stat st;
+    bool    dosave = true;
+
+    m_first = first;
+    m_last = last;
+
+    //m_current_time = time(NULL);
+    m_current_time = data_time;
+    m_st_time = localtime(&m_current_time);
+    // set path
+    SetPath();
+    SetLogXML();
+    SetErrorLogXML();
+    CheckConfig();
+
+    OpenLog(m_dl_path.m_syslog_path, m_st_time);
+
+    if ( (m_loopstate != 0) && (m_snCount > 0) ) {
+        // before read, get write command
+        RunTODOList();
+        RunWhiteListChanged();
+
+        // init about XML file
+        memset(m_log_buf, 0x00, LOG_BUF_SIZE);
+        memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
+    }
+
+    // read data loop
+    for (i=0; i<m_snCount; i++) {
+        if ( m_loopstate != 0 ) {
+            if ( stat(m_log_filename, &st) == 0 ) {
+                printf("======== %s exist! ========\n", m_log_filename);
+                break;
+            }
+        }
+        printf("#### i = %d ####\n", i);
+        if ( !arySNobj[i].m_state ) {   // offline
+            continue;                   // read part skip
+        }
+        if( arySNobj[i].m_Err < 3 ) {
+            if ( arySNobj[i].m_Device == -1 ) { // unknown device, first time to do
+                if ( GetDevice(i) )
+                    dosave = true;
+                else
+                    arySNobj[i].m_Err++;
+            } else if ( arySNobj[i].m_Device < 0x0A ) { // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
+            // MI part
+                CleanParameter();
+
+                if ( GetMiPowerInfo(i) )
+                    arySNobj[i].m_Err = 0;
+                else {
+                    if ( m_loopflag == 0 )
+                        arySNobj[i].m_Err++;
+                    m_loopflag++;
+                }
+
+                WriteLogXML(i);
+                if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                    (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                    WriteErrorLogXML(i);
+                }
+                dosave = true;
+
+            } else {
+            // Hybrid part
+                CleanParameter();
+
+                // first set rtc time
+                if ( m_loopstate == 1 )
+                    SetHybridRTCData(i);
+
+                if ( GetHybridIDData(i) )
+                    arySNobj[i].m_Err = 0;
+                else {
+                    if ( m_loopflag == 0 )
+                        arySNobj[i].m_Err++;
+                    m_loopflag++;
+                }
+
+                if ( GetHybridRTCData(i) )
+                    arySNobj[i].m_Err = 0;
+                else {
+                    if ( m_loopflag == 0 )
+                        arySNobj[i].m_Err++;
+                    m_loopflag++;
+                }
+
+                if ( GetHybridRSInfo(i) )
+                    arySNobj[i].m_Err = 0;
+                else {
+                    if ( m_loopflag == 0 )
+                        arySNobj[i].m_Err++;
+                    m_loopflag++;
+                }
+
+                if ( GetHybridRRSInfo(i) )
+                    arySNobj[i].m_Err = 0;
+                else {
+                    if ( m_loopflag == 0 )
+                        arySNobj[i].m_Err++;
+                    m_loopflag++;
+                }
+
+                if ( GetHybridRTInfo(i) )
+                    arySNobj[i].m_Err = 0;
+                else {
+                    if ( m_loopflag == 0 )
+                        arySNobj[i].m_Err++;
+                    m_loopflag++;
+                }
+
+                SetBMSPath(i);
+                if ( GetHybridBMSInfo(i) ) {
+                    arySNobj[i].m_Err = 0;
+                    SetHybridBMSModule(i);
+                    SaveBMS();
+                } else {
+                    if ( m_loopflag == 0 )
+                        arySNobj[i].m_Err++;
+                    m_loopflag++;
+                }
+
+                WriteLogXML(i);
+                if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ||
+                    (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                    WriteErrorLogXML(i);
+                }
+                dosave = true;
+            }
+        } else {
+            printf("Addr %d Error 3 times, call ReRegiser() later\n", arySNobj[i].m_Addr);
+            // set state to offline
+            arySNobj[i].m_state = 0;
+            //ReRegiser(i);
+        }
+
+        printf("Debug : index %d, m_Err = %d, m_loopflag = %d\n", i, arySNobj[i].m_Err, m_loopflag);
+        m_loopflag = 0;
+    }
+
+    if ( (m_loopstate != 0) /*&& (m_snCount > 0)*/ ) {
+        if ( stat(m_log_filename, &st) != 0 ) {
+            SaveLogXML(first, last);
+            SaveErrorLogXML(first, last);
+            dosave = true;
+        }
+    }
+
+    if ( m_loopstate == 0 ) { // init : device get OK
+        m_loopstate = 1;
+        //if ( m_snCount > 0 ) { // MI or Hybrid checked : save white list
+        //    SaveLog((char *)"DataLogger Start() : run WriteMIListXML()", m_st_time);
+        //    WriteMIListXML();
+        //}
+    } else if ( m_loopstate == 1 ) {
+        m_loopstate = 2;
+        // find new device
+        if ( m_wl_count < m_snCount ) {
+            SaveLog((char *)"DataLogger Start() : run SaveWhiteList()", m_st_time);
+            SaveWhiteList();
+        }
+    } else { // m_loopstate > 2 to do other thing, undefined
+        if ( m_snCount > 0 )
+            ;
+    }
+
+    if ( m_snCount > 0 ) {
+        SaveLog((char *)"DataLogger Start() : run WriteMIListXML()", m_st_time);
+        WriteMIListXML();
+    }
+
+    if ( dosave ) {
+        SaveDeviceList(first, last);
+        dosave = false;
+    }
+
+    //CloseLog(); // cancel, move to main loop execute at loop end
+    system("sync");
+
+    // get timezone if before not succss
+    if ( m_do_get_TZ )
+        GetTimezone();
+
+    return;
 }
 
 void CG320::Pause()
@@ -572,8 +895,9 @@ bool CG320::GetDLConfig()
     sscanf(buf, "%d", &m_dl_config.m_delay_time);
     printf("Delay time (us.) = %d\n", m_dl_config.m_delay_time);
 
+    // cancel, set it in init()
     // get serial port
-    pFile = popen("uci get dlsetting.@comport[0].inverter_port", "r");
+/*    pFile = popen("uci get dlsetting.@comport[0].inverter_port", "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
@@ -581,7 +905,7 @@ bool CG320::GetDLConfig()
     fgets(buf, 32, pFile);
     pclose(pFile);
     sscanf(buf, "COM%d", &m_dl_config.m_inverter_port);
-    printf("Serial Port = %d\n", m_dl_config.m_inverter_port);
+    printf("Serial Port = %d\n", m_dl_config.m_inverter_port);*/
     // get baud
     sprintf(cmd, "uci get dlsetting.@comport[0].com%d_baud", m_dl_config.m_inverter_port);
     pFile = popen(cmd, "r");
@@ -1116,7 +1440,7 @@ bool CG320::RunWhiteListChanged()
 
     if ( save ) {
         SaveWhiteList();
-        SaveDeviceList();
+        //SaveDeviceList(); //cancel, do it in GetData() function
         WriteMIListXML();
     }
 
@@ -1649,16 +1973,19 @@ bool CG320::SaveWhiteList()
     return true;
 }
 
-bool CG320::SaveDeviceList()
+bool CG320::SaveDeviceList(bool first, bool last)
 {
     FILE *pFile;
-    char buf[4096] = {0};
-    int i = 0, type = 0, offset = 0, model = 0;
+    char buf[4096] = {0}, device[32] = {0};
+    int i = 0, offset = 0, model = 0;
     char *index_tmp = NULL, *index_start = NULL, *index_end = NULL;
 
     printf("#### SaveDeviceList Start ####\n");
 
-    pFile = fopen(DEVICELIST_PATH, "w");
+    if ( first )
+        pFile = fopen(DEVICELIST_TMP, "w");
+    else
+        pFile = fopen(DEVICELIST_TMP, "a");
     if ( pFile == NULL ) {
         printf("#### SaveDeviceList open file Fail ####\n");
         SaveLog((char *)"DataLogger SaveDeviceList() : fopen fail", m_st_time);
@@ -1668,12 +1995,13 @@ bool CG320::SaveDeviceList()
     for ( i = 0; i < m_snCount; i++) {
         if ( strlen(arySNobj[i].m_Sn) ) {
             if ( arySNobj[i].m_Device < 0 )
-                type = 0; // unknown
+                strcpy(device, "Darfon_unknown"); // unknown
             else if ( arySNobj[i].m_Device < 0x0A )
-                type = 1; // MI
+                strcpy(device, "Darfon-MI"); // MI
             else
-                type = 2; // Hybrid
-            sprintf(buf, "%03d %s %d %d ", arySNobj[i].m_Addr, arySNobj[i].m_Sn, arySNobj[i].m_state, type);
+                strcpy(device, "Darfon-Hybrid"); // Hybrid
+            // addr fixed 3 digit, state fixed 1 digit, sn
+            sprintf(buf, "%03d <SN>%s</SN> <STATE>%d</STATE> <DEVICE>%s</DEVICE> ", arySNobj[i].m_Addr, arySNobj[i].m_Sn, arySNobj[i].m_state, device);
 
             if (arySNobj[i].m_state) {
                 // set log data
@@ -1686,7 +2014,7 @@ bool CG320::SaveDeviceList()
 
                     index_end = strstr(index_start, "</record>");
                     offset = index_end - index_start + 9;
-                    strcat(buf, "ENERGY_START");
+                    strcat(buf, "<ENERGY>");
                     strncat(buf, index_start, offset);
 
                     if ( arySNobj[i].m_Device < 0x0A ) {
@@ -1701,10 +2029,10 @@ bool CG320::SaveDeviceList()
                             }
                         }
                     }
-                    strcat(buf, "ENERGY_END");
+                    strcat(buf, "</ENERGY>");
 
                 } else {
-                    printf("index_tmp = NULL!\n");
+                    printf("%d log index_tmp = NULL!\n", arySNobj[i].m_Addr);
                     strcat(buf, "Empty");
                 }
 
@@ -1718,11 +2046,11 @@ bool CG320::SaveDeviceList()
 
                     index_end = strstr(index_start, "</record>");
                     offset = index_end - index_start + 9;
-                    strcat(buf, "ERROR_START");
+                    strcat(buf, "<ERROR>");
                     strncat(buf, index_start, offset);
-                    strcat(buf, "ERROR_END");
+                    strcat(buf, "</ERROR>");
                 } else {
-                    printf("index_tmp = NULL!\n");
+                    printf("%d errlog index_tmp = NULL!\n", arySNobj[i].m_Addr);
                     strcat(buf, "Empty");
                 }
             } else
@@ -1733,6 +2061,12 @@ bool CG320::SaveDeviceList()
         }
     }
     fclose(pFile);
+
+    if ( last ) {
+        sprintf(buf, "cp -f %s %s", DEVICELIST_TMP, DEVICELIST_PATH);
+        system(buf);
+        system("sync");
+    }
 
     printf("#### SaveDeviceList OK ####\n");
     SaveLog((char *)"DataLogger SaveDeviceList() : OK", m_st_time);
@@ -1842,10 +2176,13 @@ int CG320::WhiteListRegister()
 
 	if (m_snCount==0) {
         RemoveRegisterQuery(0);
+        CleanRespond();
         usleep(500000);
         RemoveRegisterQuery(0);
+        CleanRespond();
         usleep(500000);
         RemoveRegisterQuery(0);
+        CleanRespond();
         usleep(500000);
 	}
 
@@ -1905,10 +2242,13 @@ int CG320::StartRegisterProcess()
 
 	if (m_snCount==0) {
         RemoveRegisterQuery(0);
+        CleanRespond();
         usleep(500000);
         RemoveRegisterQuery(0);
+        CleanRespond();
         usleep(500000);
         RemoveRegisterQuery(0);
+        CleanRespond();
         usleep(500000);
 	}
 
@@ -1917,18 +2257,26 @@ int CG320::StartRegisterProcess()
         ret = MySyncOffLineQuery(0x00, (byte)byMOD, m_query_buf, QUERY_SIZE);
         if ( ret > 0) {
             printf("#### MySyncOffLineQuery return %d ####\n", ret);
-            printf("============================= Debug date value =============================");
+            printf("========================================= Debug date value =========================================");
             for ( i = 0; i < ret; i++ ) {
-                if ( i%13 == 0 )
-                    printf("\nCount %d : ", i/13 + 1);
+                if ( i%16 == 0 )
+                    printf("\n 0x%04X ~ 0x%04X : ", i, i+15);
                 printf("0x%02X ", m_query_buf[i]);
             }
-            printf("\n============================================================================\n");
+            printf("\n====================================================================================================\n");
             goto Allocate_address;
         } else {
             while ( m_snCount<253 && byMOD>=0 ) {
                 ret = MyOffLineQuery(0x00, m_query_buf, QUERY_SIZE);
                 if ( ret != -1 ) {
+                    printf("#### MyOffLineQuery return %d ####\n", ret);
+                    printf("========================================= Debug date value =========================================");
+                    for ( i = 0; i < ret; i++ ) {
+                        if ( i%16 == 0 )
+                            printf("\n 0x%04X ~ 0x%04X : ", i, i+15);
+                        printf("0x%02X ", m_query_buf[i]);
+                    }
+                    printf("\n====================================================================================================\n");
                     if ( !CheckCRC(m_query_buf, 13) ) {
                         printf("#### Conflict! ####\n");
                         Conflict = true;
@@ -2019,7 +2367,7 @@ int CG320::AllocateProcess(unsigned char *query, int len)
     return cnt;
 }
 
-bool CG320::ReRegiser(int index)
+bool CG320::ReRegister(int index)
 {
     // send remove the slave address, send MySyncOffLineQuery, send MyAssignAddress
     unsigned int tmp[9] = {0};
@@ -3901,6 +4249,7 @@ bool CG320::GetTimezone()
     FILE *pFile = NULL;
     int i = 0, j = 0;
 
+    m_do_get_TZ = true;
     printf("\n########### Get Timezone ###########\n");
     // get timezone from ip
     sprintf(buf, "curl %s --max-time 30 > /tmp/timezone", TIMEZONE_URL);
@@ -3931,6 +4280,8 @@ bool CG320::GetTimezone()
         j++;
     }
     printf("Debug : timezone[] = %s\n", timezone);
+    if ( strlen(timezone) == 0 )
+        return false;
 
     // get time offset
     sprintf(buf, "curl %s --max-time 30 | grep -i %s | awk '{print $2}' > /tmp/time_offset", TIME_OFFSET_URL, timezone);
@@ -3945,6 +4296,8 @@ bool CG320::GetTimezone()
     time_offset[strlen(time_offset)-1] = 0; // remove \n
     printf("Debug : time_offset[] = %s\n", time_offset);
     fclose(pFile);
+    if ( strlen(time_offset) == 0 )
+        return false;
 
     SetTimezone(timezone, time_offset);
     m_do_get_TZ = false;
@@ -4063,11 +4416,10 @@ bool CG320::WriteLogXML(int index)
     int error_tmp = 0;
     int model = 0;
 
-
     SaveLog((char *)"DataLogger WriteLogXML() : run", m_st_time);
     printf("==================== Set Log XML start ====================\n");
-    if ( strlen(m_log_buf) == 0 ) // empty, new file, add header <records>
-        strcpy(m_log_buf, "<records>");
+    //if ( first && (strlen(m_log_buf) == 0) ) // empty, new file, add header <records>
+    //    strcpy(m_log_buf, "<records>");
 
     sscanf(arySNobj[index].m_Sn+4, "%04X", &model); // get 5-8 digit from SN
     //printf("Index %d model = %X\n", index, model);
@@ -4526,64 +4878,83 @@ bool CG320::WriteLogXML(int index)
     return true;
 }
 
-bool CG320::SaveLogXML()
+bool CG320::SaveLogXML(bool first, bool last)
 {
     FILE *fd = NULL;
+    struct stat filest;
     char buf[256] = {0};
-    int offset = 0;
+    char tmp[256] = {0};
+    int filesize = 0, offset = 0, ret = 0;
 
-    if ( strlen(m_log_buf) )
-        strcat(m_log_buf, "</records>");
-    else
-        return false;
-
-    while ( strlen(m_log_buf) % 3 != 0 )
-        //strcat(m_log_buf, "\n");
-        m_log_buf[strlen(m_log_buf)] = 0x20; // space
-
-    // save to storage
-    fd = fopen(m_log_filename, "wb");
-    if ( fd != NULL ) {
-        if ( fwrite(m_log_buf, 1, strlen(m_log_buf), fd) ) {
-            sprintf(buf, "DataLogger SaveLogXML() : write %s OK", m_log_filename);
-            SaveLog(buf, m_st_time);
-            if ( strstr(m_log_filename, USB_PATH) )
-                m_sys_error  &= ~SYS_0002_Save_USB_Fail;
-            fclose(fd);
-            return true;
-        } else {
-            sprintf(buf, "DataLogger SaveLogXML() : write %s Fail", m_log_filename);
-            SaveLog(buf, m_st_time);
-            if ( strstr(m_log_filename, USB_PATH) )
-                m_sys_error |= SYS_0002_Save_USB_Fail;
-            fclose(fd);
+    if ( first ) {
+        fd = fopen("/tmp/tmplog", "wb");
+        if ( fd != NULL ) {
+            fwrite("<records>", 1, 9, fd);
+            filesize = 9;
         }
     } else {
-        sprintf(buf, "DataLogger SaveLogXML() : open %s Fail", m_log_filename);
+        stat("/tmp/tmplog", &filest);
+        filesize = filest.st_size;
+        fd = fopen("/tmp/tmplog", "ab");
+    }
+
+    if ( last ) {
+        strcat(m_log_buf, "</records>");
+        while ( (strlen(m_log_buf) + filesize) % 3 != 0 ) {
+            m_log_buf[strlen(m_log_buf)] = 0x20; // add space to end
+        }
+    }
+
+    if ( fd != NULL ) {
+        fwrite(m_log_buf, 1, strlen(m_log_buf), fd);
+        filesize += strlen(m_log_buf);
+        //printf("Log filesize = %d\n", filesize);
+        fclose(fd);
+    } else {
+        SaveLog((char *)"DataLogger SaveLogXML() : open /tmp/tmplog Fail", m_st_time);
+        printf("open /tmp/tmplog Fail!\n");
+        return false;
+    }
+
+    if ( !last )
+        return true;
+    else {
+        if ( filesize < 42 ) {
+            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            return true;
+        }
+    }
+
+    // copy file to target
+    sprintf(buf, "cp /tmp/tmplog %s", m_log_filename);
+    ret = system(buf);
+    if ( ret == 0 ) {
+        sprintf(buf, "DataLogger SaveLogXML() : write %s OK", m_log_filename);
+        SaveLog(buf, m_st_time);
+        if ( strstr(m_log_filename, USB_PATH) )
+            m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+        return true;
+    } else {
+        sprintf(buf, "DataLogger SaveLogXML() : write %s Fail", m_log_filename);
         SaveLog(buf, m_st_time);
         if ( strstr(m_log_filename, USB_PATH) )
             m_sys_error |= SYS_0002_Save_USB_Fail;
     }
 
+    // if copy file to storage fail, then copy to tmp
     if ( strstr(m_log_filename, DEF_PATH) == NULL ) {
-        strcpy(buf, DEF_PATH);
+        strcpy(tmp, DEF_PATH);
         if ( strstr(m_log_filename, USB_PATH) != NULL )
             offset = strlen(USB_PATH);
         // save to tmp
-        strcat(buf, m_log_filename+offset);
-        fd = fopen(buf, "wb");
-        if ( fd != NULL ) {
-            if ( fwrite(m_log_buf, 1, strlen(m_log_buf), fd) ) {
-                SaveLog((char *)"DataLogger SaveLogXML() : write to tmp OK", m_st_time);
-                fclose(fd);
-                return true;
-            } else {
-                SaveLog((char *)"DataLogger SaveLogXML() : write to tmp Fail", m_st_time);
-                fclose(fd);
-                return false;
-            }
+        strcat(tmp, m_log_filename+offset);
+        sprintf(buf, "cp /tmp/tmplog %s", tmp);
+        ret = system(buf);
+        if ( ret == 0 ) {
+            SaveLog((char *)"DataLogger SaveLogXML() : write to tmp OK", m_st_time);
+            return true;
         } else {
-            SaveLog((char *)"DataLogger SaveLogXML() : open tmp Fail", m_st_time);
+            SaveLog((char *)"DataLogger SaveLogXML() : write to tmp Fail", m_st_time);
             return false;
         }
     }
@@ -4605,8 +4976,8 @@ bool CG320::WriteErrorLogXML(int index)
 
     SaveLog((char *)"DataLogger WriteErrorLogXML() : run", m_st_time);
     printf("==================== Set Error Log XML start ====================\n");
-    if ( strlen(m_errlog_buf) == 0 ) // empty, new file, add header <records>
-        strcpy(m_errlog_buf, "<records>");
+    //if ( strlen(m_errlog_buf) == 0 ) // empty, new file, add header <records>
+    //    strcpy(m_errlog_buf, "<records>");
 
     sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
     sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
@@ -4809,60 +5180,83 @@ bool CG320::WriteErrorLogXML(int index)
     return true;
 }
 
-bool CG320::SaveErrorLogXML()
+bool CG320::SaveErrorLogXML(bool first, bool last)
 {
     FILE *fd = NULL;
+    struct stat filest;
     char buf[256] = {0};
-    int offset = 0;
+    char tmp[256] = {0};
+    int filesize = 0, offset = 0, ret = 0;
 
-    if ( strlen(m_errlog_buf) )
-        strcat(m_errlog_buf, "</records>");
-    else
-        return false;
-
-    // save to storage
-    fd = fopen(m_errlog_filename, "wb");
-    if ( fd != NULL ) {
-        if ( fwrite(m_errlog_buf, 1, strlen(m_errlog_buf), fd) ) {
-            sprintf(buf, "DataLogger SaveErrorLogXML() : write %s OK", m_errlog_filename);
-            SaveLog(buf, m_st_time);
-            if ( strstr(m_log_filename, USB_PATH) )
-                m_sys_error  &= ~SYS_0002_Save_USB_Fail;
-            fclose(fd);
-            return true;
-        } else {
-            sprintf(buf, "DataLogger SaveErrorLogXML() : write %s Fail", m_errlog_filename);
-            SaveLog(buf, m_st_time);
-            if ( strstr(m_log_filename, USB_PATH) )
-                m_sys_error  |= SYS_0002_Save_USB_Fail;
-            fclose(fd);
+    if ( first ) {
+        fd = fopen("/tmp/tmperrlog", "wb");
+        if ( fd != NULL ) {
+            fwrite("<records>", 1, 9, fd);
+            filesize = 9;
         }
     } else {
-        sprintf(buf, "DataLogger SaveErrorLogXML() : open %s Fail", m_errlog_filename);
-        SaveLog(buf, m_st_time);
-        if ( strstr(m_log_filename, USB_PATH) )
-            m_sys_error  |= SYS_0002_Save_USB_Fail;
+        stat("/tmp/tmperrlog", &filest);
+        filesize = filest.st_size;
+        fd = fopen("/tmp/tmperrlog", "ab");
     }
 
+    if ( last ) {
+        strcat(m_errlog_buf, "</records>");
+        while ( (strlen(m_errlog_buf) + filesize) % 3 != 0 ) {
+            m_errlog_buf[strlen(m_errlog_buf)] = 0x20; // add space to end
+        }
+    }
+
+    if ( fd != NULL ) {
+        fwrite(m_errlog_buf, 1, strlen(m_errlog_buf), fd);
+        filesize += strlen(m_errlog_buf);
+        //printf("Errlog filesize = %d\n", filesize);
+        fclose(fd);
+    } else {
+        SaveLog((char *)"DataLogger SaveErrorLogXML() : open /tmp/tmperrlog Fail", m_st_time);
+        printf("open /tmp/tmperrlog Fail!\n");
+        return false;
+    }
+
+    if ( !last )
+        return true;
+    else {
+        if ( filesize < 42 ) {
+            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            return true;
+        }
+    }
+
+    // copy file to target
+    sprintf(buf, "cp /tmp/tmperrlog %s", m_errlog_filename);
+    ret = system(buf);
+    if ( ret == 0 ) {
+        sprintf(buf, "DataLogger SaveErrorLogXML() : write %s OK", m_errlog_filename);
+        SaveLog(buf, m_st_time);
+        if ( strstr(m_errlog_filename, USB_PATH) )
+            m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+        return true;
+    } else {
+        sprintf(buf, "DataLogger SaveErrorLogXML() : write %s Fail", m_errlog_filename);
+        SaveLog(buf, m_st_time);
+        if ( strstr(m_errlog_filename, USB_PATH) )
+            m_sys_error |= SYS_0002_Save_USB_Fail;
+    }
+
+    // if copy file to storage fail, then copy to tmp
     if ( strstr(m_errlog_filename, DEF_PATH) == NULL ) {
-        strcpy(buf, DEF_PATH);
+        strcpy(tmp, DEF_PATH);
         if ( strstr(m_errlog_filename, USB_PATH) != NULL )
             offset = strlen(USB_PATH);
         // save to tmp
-        strcat(buf, m_errlog_filename+offset);
-        fd = fopen(buf, "wb");
-        if ( fd != NULL ) {
-            if ( fwrite(m_errlog_buf, 1, strlen(m_errlog_buf), fd) ) {
-                SaveLog((char *)"DataLogger SaveErrorLogXML() : write to tmp OK", m_st_time);
-                fclose(fd);
-                return true;
-            } else {
-                SaveLog((char *)"DataLogger SaveErrorLogXML() : write to tmp Fail", m_st_time);
-                fclose(fd);
-                return false;
-            }
+        strcat(tmp, m_errlog_filename+offset);
+        sprintf(buf, "cp /tmp/tmperrlog %s", tmp);
+        ret = system(buf);
+        if ( ret == 0 ) {
+            SaveLog((char *)"DataLogger SaveErrorLogXML() : write to tmp OK", m_st_time);
+            return true;
         } else {
-            SaveLog((char *)"DataLogger SaveErrorLogXML() : open tmp Fail", m_st_time);
+            SaveLog((char *)"DataLogger SaveErrorLogXML() : write to tmp Fail", m_st_time);
             return false;
         }
     }
@@ -4955,20 +5349,19 @@ bool CG320::WriteMIListXML()
     char buf[256] = {0};
     char tmp[256] = {0};
     char idtmp[13] = {0};
-    int i = 0, model = 0;
+    int i = 0, model = 0, listsize = 0;
     unsigned long long int dev_id = 0;
+    struct stat filest;
     FILE *pFile = NULL;
 
-    // clean old MIList
-    system("rm /tmp/MIList*");
+    //GetLocalTime(); // cancel, GetData set time already
 
-    GetLocalTime();
-    sprintf(buf, "/tmp/MIList_%4d%02d%02d_%02d%02d%02d",
-            1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-            m_st_time->tm_hour, m_st_time->tm_min, m_st_time->tm_sec);
-    //printf("buf = %s\n", buf);
+    sprintf(buf, "/tmp/tmpMIList");
 
-    pFile = fopen(buf, "wb");
+    if ( m_first )
+        pFile = fopen(buf, "wb");
+    else
+        pFile = fopen(buf, "ab");
     if ( pFile == NULL ) {
         printf("open %s fail\n", buf);
         sprintf(tmp, "DataLogger WriteMIListXML() : fopen %s fail", buf);
@@ -4976,8 +5369,9 @@ bool CG320::WriteMIListXML()
         return false;
     }
 
-    //printf("==================== Set MIList XML start ====================\n");
-    fputs("<records>\n", pFile);
+    printf("==================== Set MIList XML start ====================\n");
+    if ( m_first )
+        fputs("<records>\n", pFile);
 
     for ( i = 0; i < m_snCount; i++) {
         if ( strlen(arySNobj[i].m_Sn) == 0 )
@@ -5166,10 +5560,29 @@ bool CG320::WriteMIListXML()
         }
     }
 
-    fputs("</records>", pFile);
-    //printf("===================== Set MIList XML end =====================\n");
+    if ( m_last )
+        fputs("</records>", pFile);
+    printf("===================== Set MIList XML end =====================\n");
 
     fclose(pFile);
+
+    if ( m_last ) {
+        system("sync");
+        stat("/tmp/tmpMIList", &filest);
+        listsize = filest.st_size;
+        //printf("listsize = %d\n", listsize);
+        if ( m_milist_size != listsize ) {
+            // clean old MIList
+            printf("clean old MIList\n");
+            system("rm /tmp/MIList_*");
+            sprintf(buf, "cp /tmp/tmpMIList /tmp/MIList_%4d%02d%02d_%02d%02d00",
+                    1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
+                    m_st_time->tm_hour, m_st_time->tm_min);
+            printf("run command : \n%s\n", buf);
+            system(buf);
+            m_milist_size = listsize;
+        }
+    }
 
     SaveLog((char *)"DataLogger WriteMIListXML() : OK", m_st_time);
 

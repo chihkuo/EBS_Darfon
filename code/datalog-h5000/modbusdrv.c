@@ -1464,7 +1464,8 @@ unsigned char *GetRespond(int iSize, int delay)
         //usleep(g_global.g_delay1*1000);
         //i=read(fdModbus, p, iSize-len);
         //i=read(fdModbus, buff, 511);
-        i=read(fdModbus, respond_buff, iSize);
+        //i=read(fdModbus, respond_buff, iSize);
+        i=read(fdModbus, respond_buff, 4096); // get all data(if 0x00 start command), clean return data
         if (i==-1) {
             printf("read error code=%d (%s) \n",errno, strerror(errno));
             have_respond = false;
@@ -1472,9 +1473,10 @@ unsigned char *GetRespond(int iSize, int delay)
             break;
         }
         //printf("read %d / %d bytes \n",i, iSize-len);
-        printf("read %d / %d bytes \n",i, 511);
+        printf("read %d / %d bytes \n",i, 4096);
         //DebugPrint(p, i, "receive");
-        len += i;
+        //len += i;
+        len = i;
         //DebugPrint(respond_buff, len, "recv");
         have_respond = true;
         //p+=i;
@@ -1487,7 +1489,7 @@ unsigned char *GetRespond(int iSize, int delay)
         count++;*/
 
         if ( len >= iSize ) {
-            for (i = 0; i < iSize-6; i++) {
+            for (i = 0; i < len-6; i++) {
                 if ( respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode ) {
                     switch ( respond_buff[i+1] )
                     {
@@ -1580,7 +1582,7 @@ unsigned char *GetRespond(int iSize, int delay)
 	//DebugPrint(respond_buff, len, "recv");
 	printf("#### GetRespond() clean buf ####\n");
 	while ( i != -1 ) {
-        i=read(fdModbus, respond_buff, 511);
+        i=read(fdModbus, respond_buff, 4096);
         DebugPrint(respond_buff, i, "Clean");
 	}
     printf("#### GetRespond() clean OK ####\n");
@@ -1603,4 +1605,92 @@ int GetQuery(unsigned char *buf, int buf_size)
     //DebugPrint(buf, len, "recv");
 
     return len;
+}
+
+unsigned char *GetCyberPowerRespond(int iSize, int delay)
+{
+    //unsigned char buff[512];
+	int i = 0, err = 0, count = 0;
+	int len=0;
+	int  iRet=1;
+	unsigned char *pbuf, *p;
+	//pbuf = (unsigned char *)malloc(iSize+1);
+	//p = pbuf;
+
+	memset(respond_buff, 0x00, 4096);
+	while (err < 3) {
+//printf("wait recv data need:%d, Recved: %d \n", iSize, len);
+//printf("wait Slave Address : 0x%02X, wait Function Code : 0x%02X \n", waitAddr, waitFCode);
+        //getchar();
+        //usleep(g_global.g_delay1*1000);
+        //i=read(fdModbus, p, iSize-len);
+        //i=read(fdModbus, buff, 511);
+        i=read(fdModbus, respond_buff, iSize);
+        if (i==-1) {
+            printf("read error code=%d (%s) \n",errno, strerror(errno));
+            have_respond = false;
+            return NULL;
+            break;
+        }
+        //printf("read %d / %d bytes \n",i, iSize-len);
+        printf("read %d / %d bytes \n",i, 511);
+        //DebugPrint(p, i, "receive");
+        len += i;
+        //DebugPrint(respond_buff, len, "recv");
+        have_respond = true;
+        //p+=i;
+        //usleep(g_delay2*1000);
+        /*if (i==0 && count > iTimeout) {
+	       //free(pbuf);
+           return NULL;
+           break;
+        }
+        count++;*/
+
+        if ( len >= iSize ) {
+            for (i = 0; i < iSize-6; i++) {
+                if ( respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode ) {
+                    // check function code
+                    switch ( respond_buff[i+1] )
+                    {
+                        case 0x04: // read input registers
+                            count = respond_buff[i+2];
+                            if ( CheckCRC(respond_buff+i, count+5) ) {
+                                DebugPrint(respond_buff+i, count+5, "Read recv");
+                                return respond_buff+i;
+                            }
+                            break;
+                        default:
+                            printf("Function code %d not found!\n", respond_buff[i+1]);
+                    }
+                }
+            }
+        }
+        else
+            err++;
+
+        usleep(delay);
+	}
+	//DebugPrint(respond_buff, len, "recv");
+	printf("#### GetCyberPowerRespond() clean buf ####\n");
+	while ( i != -1 ) {
+        i=read(fdModbus, respond_buff, 511);
+        DebugPrint(respond_buff, i, "Clean");
+	}
+    printf("#### GetCyberPowerRespond() clean OK ####\n");
+
+	return NULL;
+}
+
+void CleanRespond()
+{
+    int i = 0;
+
+    printf("#### CleanRespond() start ####\n");
+	while ( i != -1 ) {
+        i=read(fdModbus, respond_buff, 4096);
+        if ( i > 0 )
+            DebugPrint(respond_buff, i, "Clean");
+	}
+    printf("#### CleanRespond() clean OK ####\n");
 }
