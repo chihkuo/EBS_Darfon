@@ -774,6 +774,11 @@ void CG320::GetData(time_t data_time, bool first, bool last)
             SaveErrorLogXML(first, last);
             dosave = true;
         }
+    } else { // m_loopstate == 0
+        memset(m_log_buf, 0x00, LOG_BUF_SIZE);
+        memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
+        SaveLogXML(first, last);
+        SaveErrorLogXML(first, last);
     }
 
     if ( m_loopstate == 0 ) { // init : device get OK
