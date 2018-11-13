@@ -13,6 +13,7 @@
 
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
+//#include "../datalog-h5000/inverter.h"
 
 #define VERSION         "2.0.0"
 //#define USB_PATH        "/tmp/usb"
@@ -31,6 +32,7 @@
 #define CURL_CMD        "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
 #define UPDATE_MAX      500
 
+#define MODEL_LIST_PATH "/usr/home/ModelList"
 
 char SOAP_HEAD[] =
 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
@@ -1299,20 +1301,30 @@ int Updheartbeattime(time_t time)
     }
 }
 
-// not use now
 int GetMIList()
 {
-    char buf[256] = {0};
+    char buf[256] = {0}, manufacturer[64] = {0}, model[64] = {0};
     FILE *fd = NULL;
-    int size = 0, inlen = 0, outlen = 0;
-    char *data = NULL, *start_index = NULL, *end_index = NULL;
+    int size = 0, inlen = 0, outlen = 0, slaveid = 0, devid = 0, comport = 0, tmp_slaveid = 256, tmp_devid = 256, tmp_comport = 256;
+    char *data = NULL, *start_index = NULL, *end_index = NULL, *data_index = NULL;
     unsigned char *decode_data = NULL;
+    char *comport_index = NULL, *slaveid_index = NULL, *devid_index = NULL;
+    char *manufacturer_index_s = NULL, *manufacturer_index_e = NULL, *model_index_s = NULL, *model_index_e = NULL;
     time_t current_time;
     struct tm *st_time;
     struct stat st;
 
     current_time = time(NULL);
     st_time = localtime(&current_time);
+
+    init();
+    getConfig();
+    setCMD();
+    setPath();
+    OpenLog(g_SYSLOG_PATH, st_time);
+    SaveLog("DataProgram GetMIList() : start", st_time);
+
+    system("rm /tmp/GetMIList; sync");
 
     printf("====================== GetMIList start ======================\n");
 
@@ -1390,10 +1402,127 @@ int GetMIList()
             free(data);
         return 6;
     }
-    //printf("decode_data len = %d, : \n%s\n", outlen, decode_data);
+    printf("decode_data len = %d, : \n%s\n", outlen, decode_data);
     SaveLog("DataProgram GetMIList() : OK", st_time);
+    CloseLog();
 
-    // do something
+    // make model list
+    fd = fopen(MODEL_LIST_PATH, "wb");
+    if ( fd == NULL ) {
+        printf("#### GetMIList() open MODEL_LIST_PATH Fail ####\n");
+        SaveLog("DataProgram GetMIList() : open MODEL_LIST_PATH Fail", st_time);
+        if ( data )
+            free(data);
+        if ( decode_data )
+            free(decode_data);
+        return 7;
+    }
+    printf("parser data\n");
+    data_index = (char*)decode_data;
+    while( data_index != NULL ) {
+        memset(manufacturer, 0x00, 64);
+        memset(model, 0x00, 64);
+        // find com port
+        data_index = strstr(data_index, "<port>");
+        if ( data_index != NULL )
+            comport_index = data_index;
+        else {
+            printf("<port> not found\n");
+            break;
+        }
+
+        // find Manufacturer
+        data_index = strstr(data_index, "<Manufacturer>");
+        if ( data_index != NULL )
+            manufacturer_index_s = data_index;
+        else {
+            printf("<Manufacturer> not found\n");
+            break;
+        }
+        data_index = strstr(data_index, "</Manufacturer>");
+        if ( data_index != NULL )
+            manufacturer_index_e = data_index;
+        else {
+            printf("</Manufacturer> not found\n");
+            break;
+        }
+
+        // find Model
+        data_index = strstr(data_index, "<Model>");
+        if ( data_index != NULL )
+            model_index_s = data_index;
+        else {
+            printf("<Model> not found\n");
+            break;
+        }
+        data_index = strstr(data_index, "</Model>");
+        if ( data_index != NULL )
+            model_index_e = data_index;
+        else {
+            printf("</Model> not found\n");
+            break;
+        }
+
+        // find slaveId
+        data_index = strstr(data_index, "<slaveId>");
+        if ( data_index != NULL )
+            slaveid_index = data_index;
+        else {
+            printf("<slaveId> not found\n");
+            break;
+        }
+
+        // find dev_id
+        data_index = strstr(data_index, "<dev_id>");
+        if ( data_index != NULL )
+            devid_index = data_index;
+        else {
+            printf("<dev_id> not found\n");
+            break;
+        }
+
+        if ( (comport_index != NULL) && (manufacturer_index_s != NULL) && (model_index_s != NULL) && (slaveid_index != NULL) && (devid_index != NULL) ) {
+            strncpy(manufacturer, manufacturer_index_s+14, manufacturer_index_e-manufacturer_index_s-14);
+            //printf("get Manufacturer = %s\n", manufacturer);
+            // check Manufacturer
+            if ( !strcmp(manufacturer, "DARFON") ) {
+                //printf("Match DARFON\n");
+                sscanf(comport_index, "<port>COM%d</port>", &comport);
+                //printf("comport = %d\n", comport);
+                sscanf(slaveid_index, "<slaveId>%d</slaveId>", &slaveid);
+                //printf("slaveid = %d\n", slaveid);
+                // save minumum slave id setting
+                if ( slaveid < tmp_slaveid) {
+                    tmp_slaveid = slaveid;
+                    tmp_devid = slaveid;
+                    tmp_comport = comport;
+                }
+            } else {
+                //printf("Other model\n");
+                sscanf(comport_index, "<port>COM%d</port>", &comport);
+                //printf("comport = %d\n", comport);
+                strncpy(model, model_index_s+7, model_index_e-model_index_s-7);
+                //printf("model = %s\n", model);
+                sscanf(slaveid_index, "<slaveId>%d</slaveId>", &slaveid);
+                //printf("slaveid = %d\n", slaveid);
+                sscanf(devid_index, "<dev_id>%d</dev_id>", &devid);
+                //printf("devid = %d\n", devid);
+                sprintf(buf, "Addr:%03d DEVID:%d Port:COM%d Model:%s\n", slaveid, devid, comport, model);
+                fputs(buf, fd);
+            }
+        }
+    }
+    //printf("end\n");
+    if ( tmp_slaveid < 256 ) {
+        //printf("tmp_slaveid = %d\n", tmp_slaveid);
+        //printf("tmp_devid = %d\n", tmp_devid);
+        //printf("tmp_comport = %d\n", tmp_comport);
+        sprintf(buf, "Addr:%03d DEVID:%d Port:COM%d Model:Darfon\n", tmp_slaveid, tmp_devid, tmp_comport);
+        fputs(buf, fd);
+    }
+    fclose(fd);
+
+    SaveLog("DataProgram GetMIList() : make model list OK", st_time);
 
     if ( data )
         free(data);
@@ -2447,7 +2576,7 @@ int main(int argc, char* argv[])
     int counter = 0, myhour = -1, myday = 0, state = 0, ret = -1;
 
     char opt;
-    while( (opt = getopt(argc, argv, "vVtT")) != -1 )
+    while( (opt = getopt(argc, argv, "vVtTdD")) != -1 )
     {
         switch (opt)
         {
@@ -2461,6 +2590,12 @@ int main(int argc, char* argv[])
                 init();
                 // do something for test
                 return 0;
+            case 'd':
+            case 'D':
+                printf("Run GetMIList()\n");
+                ret = GetMIList();
+                //printf("ret = %d\n", ret);
+                return ret;
             case '?':
                 return 1;
         }
@@ -2588,8 +2723,6 @@ int main(int argc, char* argv[])
         //char ch;
         //while ((ch = getchar()) != '\n' && ch != EOF);
     }
-
-    //GetMIList();
 
     return 0;
 }

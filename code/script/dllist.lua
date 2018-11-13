@@ -106,6 +106,14 @@ function clean.write(self, section)
 	luci.sys.call(cleancmd)
 	luci.sys.call("sync")
 end
+
+local download = list:option(Button, "Download Model List", translate("Download Model List"))
+download.inputtitle = translate("Download Execute")
+download.inputstyle = "apply"
+function download.write(self, section)
+	local dlcmd = "/usr/home/DataProgram.exe -d &"
+	luci.sys.exec(dlcmd)
+end
 ------------------------------------------------------------------------------------------------------------
 
 
