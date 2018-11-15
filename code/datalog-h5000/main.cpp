@@ -6,9 +6,9 @@
 #include <unistd.h>
 #include <time.h>
 
-#define VERSION         "2.0.0"
+#define VERSION         "2.0.1"
 #define MODEL_LIST_PATH "/usr/home/ModelList"
-#define MODEL_NUM       255
+#define MODEL_NUM       1020 //255*4
 
 CG320 *pg320 = NULL;
 CyberPower *pcyberpower = NULL;
@@ -155,8 +155,8 @@ bool GetConfig()
 
 bool GetModelList()
 {
-    char buf[128] = {0};
-    int tmp = 0;
+    char buf[128] = {0}, tmpmodel[64] = {0};
+    int i = 0, tmpaddr = 0, tmpid = 0, tmpport = 0;
     FILE *pfile = NULL;
 
     // get model list
@@ -166,22 +166,27 @@ bool GetModelList()
         return false;
     }
     // clean addr, reload model list addr again
-    for (tmp = 0; tmp < MODEL_NUM; tmp++)
-        MList[tmp].addr = 0;
+    for (i = 0; i < MODEL_NUM; i++)
+        MList[i].addr = 0;
     while ( fgets(buf, 128, pfile) != NULL ) {
         if ( strlen(buf) == 0 )
             break;
 
-        sscanf(buf, "Addr:%03d", &tmp);
-        sscanf(buf, "Addr:%03d DEVID:%d Port:COM%d Model:%63s", &MList[tmp-1].addr, &MList[tmp-1].devid, &MList[tmp-1].port, MList[tmp-1].model);
-        printf("Get [%03d] Addr = %03d, DEVID = %d, port = %d, model = %s\n", tmp-1, MList[tmp-1].addr, MList[tmp-1].devid, MList[tmp-1].port, MList[tmp-1].model);
+        sscanf(buf, "Addr:%03d DEVID:%d Port:COM%d Model:%63s", &tmpaddr, &tmpid, &tmpport, tmpmodel);
+        //sscanf(buf, "Addr:%03d DEVID:%d Port:COM%d Model:%63s", &MList[tmp-1].addr, &MList[tmp-1].devid, &MList[tmp-1].port, MList[tmp-1].model);
+        i = (tmpport-1)*255 + tmpaddr;
+        MList[i-1].addr = tmpaddr;
+        MList[i-1].devid = tmpid;
+        MList[i-1].port = tmpport;
+        strcpy(MList[i-1].model, tmpmodel);
+        printf("Get [%03d] Addr = %03d, DEVID = %d, port = %d, model = %s\n", i-1, MList[i-1].addr, MList[i-1].devid, MList[i-1].port, MList[i-1].model);
     }
     fclose(pfile);
 
     // if addr = 0 , it's meean model list delete the model from luci page if it exist before, so clean other data
-    for (tmp = 0; tmp < MODEL_NUM; tmp++) {
-        if ( MList[tmp].addr == 0 ) {
-            memset(&MList[tmp], 0, sizeof(MList[tmp]));
+    for (i = 0; i < MODEL_NUM; i++) {
+        if ( MList[i].addr == 0 ) {
+            memset(&MList[i], 0, sizeof(MList[i]));
         }
     }
 
@@ -197,7 +202,7 @@ void Init()
     ////////////////////////
 
     // find first index
-    for (i = 0; i < 255; i++) {
+    for (i = 0; i < MODEL_NUM; i++) {
         if ( MList[i].addr > 0 ) {
             MList[i].first = true;
             break;
@@ -205,7 +210,7 @@ void Init()
     }
 
     // fnd last index
-    for (i = 254; i >= 0; i--) {
+    for (i = MODEL_NUM-1; i >= 0; i--) {
         if ( MList[i].addr > 0 ) {
             MList[i].last = true;
             break;
@@ -581,7 +586,7 @@ void Show_State()
     int i = 0;
 
     printf("================================================================================================================\n");
-    for (i = 0; i < 255; i++) {
+    for (i = 0; i < MODEL_NUM; i++) {
         if ( MList[i].addr > 0 )
             printf("[%03d] Addr = %03d, devid = %d, port = %d, model_index = %d, init = %d, first = %d, lase = %d, model = %s\n",
                 i, MList[i].addr, MList[i].devid, MList[i].port, MList[i].model_index, MList[i].init, MList[i].first, MList[i].last, MList[i].model);

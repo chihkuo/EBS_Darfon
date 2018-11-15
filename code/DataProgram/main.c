@@ -13,9 +13,8 @@
 
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
-//#include "../datalog-h5000/inverter.h"
 
-#define VERSION         "2.0.0"
+#define VERSION         "2.0.1"
 //#define USB_PATH        "/tmp/usb"
 #define USB_PATH        "/tmp/run/mountd/sda1"
 #define SDCARD_PATH     "/tmp/sdcard"
@@ -1513,6 +1512,7 @@ int GetMIList()
         }
     }
     //printf("end\n");
+    // if have darfon model in list
     if ( tmp_slaveid < 256 ) {
         //printf("tmp_slaveid = %d\n", tmp_slaveid);
         //printf("tmp_devid = %d\n", tmp_devid);

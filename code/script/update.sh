@@ -6,7 +6,8 @@ DLD=dldevice.lua
 DLS=dlsetting.lua
 DLL=dllist.lua
 ST=dlsetting
-LIST=dllist
+DLIST=dllist
+MLIST=ModelList
 
 cp $UPDATE_DIR/$SYSTEM /usr/lib/lua/luci/controller/admin/
 chmod 755 /usr/lib/lua/luci/controller/admin/$SYSTEM
@@ -20,8 +21,10 @@ cp $UPDATE_DIR/$ST /etc/config/
 chmod 644 /etc/config/$ST
 cp $UPDATE_DIR/$ST /usr/home/
 chmod 644 /usr/home/$ST
-cp $UPDATE_DIR/$LIST /etc/config/
-chmod 644 /etc/config/$LIST
+cp $UPDATE_DIR/$DLIST /etc/config/
+chmod 644 /etc/config/$DLIST
+cp $UPDATE_DIR/$MLIST /usr/home/
+chmod 644 /etc/config/$MLIST
 
 rm /tmp/luci-indexcache
 rm /tmp/luci-modulecache/*
