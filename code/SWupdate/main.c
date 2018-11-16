@@ -14,7 +14,7 @@
 #define USB_PATH    "/tmp/run/mountd/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.0.0"
+#define VERSION             "2.0.2"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -31,9 +31,9 @@ char SOAP_HEAD[] =
 char SOAP_TAIL[] = "\t</soap:Body>\n</soap:Envelope>";
 
 char MAC[18] = {0};
-char SMS_SERVER[64] = {0};
+char SMS_SERVER[128] = {0};
 int sms_port = 0;
-char UPDATE_SERVER[64] = {0};
+char UPDATE_SERVER[128] = {0};
 int update_port = 0;
 int update_SW_time = 0;
 char g_CURL_CMD[256] = {0};
@@ -103,19 +103,19 @@ void getConfig()
     FILE *fd = NULL;
 
     // get sms server
-    fd = popen("uci get dlsetting.@sms[0].sms_server", "r");
+/*    fd = popen("uci get dlsetting.@sms[0].sms_server", "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
         return;
     }
-    fgets(SMS_SERVER, 16, fd);
+    fgets(SMS_SERVER, 128, fd);
     pclose(fd);
     if ( strlen(SMS_SERVER) )
         SMS_SERVER[strlen(SMS_SERVER)-1] = 0; // clean \n
     printf("Sms Server = %s\n", SMS_SERVER);
-
+*/
     // get sms server port
-    fd = popen("uci get dlsetting.@sms[0].sms_port", "r");
+/*    fd = popen("uci get dlsetting.@sms[0].sms_port", "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
         return;
@@ -124,14 +124,14 @@ void getConfig()
     pclose(fd);
     sscanf(buf, "%d", &sms_port);
     printf("Sms Port = %d\n", sms_port);
-
+*/
     // get update server
     fd = popen("uci get dlsetting.@sms[0].update_server", "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
         return;
     }
-    fgets(UPDATE_SERVER, 64, fd);
+    fgets(UPDATE_SERVER, 128, fd);
     pclose(fd);
     if ( strlen(UPDATE_SERVER) )
         UPDATE_SERVER[strlen(UPDATE_SERVER)-1] = 0; // clean \n
@@ -167,7 +167,7 @@ void setCMD()
     if ( strlen(UPDATE_SERVER) )
         sprintf(g_CURL_CMD, "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://%s:%d/SmsWebService1.asmx?WSDL -d @%s --max-time %s", UPDATE_SERVER, update_port, CURL_FILE, TIMEOUT);
     else
-        sprintf(g_CURL_CMD, "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232/SmsWebService1.asmx?WSDL -d @%s --max-time %s", CURL_FILE, TIMEOUT);
+        sprintf(g_CURL_CMD, "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.248.27.82:8080/SmsWebService1.asmx?WSDL -d @%s --max-time %s", CURL_FILE, TIMEOUT);
 
     return;
 }
@@ -592,6 +592,7 @@ int UpdDLSWStatus()
     FILE *fd = NULL;
     time_t current_time = 0;
     struct tm *st_time = NULL;
+    struct stat myst;
     int ret = 0;
 
     // set time
@@ -660,6 +661,13 @@ int UpdDLSWStatus()
             printf("UpdDLSWStatus() OK\n");
             SaveLog("SWupdate UpdDLSWStatus() : OK", st_time);
             printf("======================= UpdDLSWStatus end =======================\n");
+            // newSWupdate.sh if exist
+            if ( stat("/tmp/newSWupdate.sh", &myst) == 0 ) {
+                system("/tmp/newSWupdate.sh &");
+                printf("Wait update~\n");
+                usleep(10000000); // sleep 10s
+                printf("update end\n");
+            }
             return 0;
         } else {
             printf("UpdDLSWStatus() get result Fail\n");

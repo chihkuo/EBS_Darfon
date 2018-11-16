@@ -24,9 +24,33 @@ chmod 644 /usr/home/$ST
 cp $UPDATE_DIR/$DLIST /etc/config/
 chmod 644 /etc/config/$DLIST
 cp $UPDATE_DIR/$MLIST /usr/home/
-chmod 644 /etc/config/$MLIST
+chmod 644 /usr/home/$MLIST
 
 rm /tmp/luci-indexcache
 rm /tmp/luci-modulecache/*
 sync
 
+SWupdatesh=newSWupdate.sh
+SWupdate=SWupdate.exe
+if [ -f $SWupdate ]
+then
+#	cp $UPDATE_DIR/$SWupdatesh /tmp/
+#	chmod 755 /tmp/$SWupdatesh
+#	cp $UPDATE_DIR/$SWupdate /tmp/
+#	chmod 755 /tmp/$SWupdate
+
+killall -9 $SWupdate
+sleep 1
+sync
+
+cp -f $UPDATE_DIR/$SWupdate /usr/home/
+sleep 1
+chmod 755 /usr/home/$SWupdate
+sync
+
+/usr/home/SWupdate.exe &
+
+cd /tmp
+rm -rf $UPDATE_DIR
+
+fi
