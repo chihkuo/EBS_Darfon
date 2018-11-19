@@ -32,7 +32,7 @@ sync
 
 SWupdatesh=newSWupdate.sh
 SWupdate=SWupdate.exe
-if [ -f $SWupdate ]
+if [ -f $UPDATE_DIR/$SWupdate ]
 then
 #	cp $UPDATE_DIR/$SWupdatesh /tmp/
 #	chmod 755 /tmp/$SWupdatesh

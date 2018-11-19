@@ -30,8 +30,8 @@ config comport
 	option com1_baud '9600'
 
 config swver
-	option dlver '2.0.1'
-	option dpver '2.0.1'
+	option dlver '2.0.2'
+	option dpver '2.0.2'
 
 config button
 
