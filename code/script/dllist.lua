@@ -52,7 +52,10 @@ function add.write(self, section)
 			uci.set("dllist", "LIST", "dev_id", intdevid)
 			uci.commit("dllist")
 			local file = io.open(MODEL_LIST_PATH,"a")
-			local str = "Addr:" .. string.format("%03d", intaddr) ..
+			local comtmp = string.sub(uci.get("dllist", "LIST", "port"), 4, 4)
+			local idtmp = (comtmp-1)*255 + intaddr - 1
+			local str = string.format("%04d", idtmp) ..
+					" Addr:" .. string.format("%03d", intaddr) ..
 					" DEVID:" .. string.format("%d", intdevid) ..
 					" Port:" .. uci.get("dllist", "LIST", "port") ..
 					" Model:" .. uci.get("dllist", "LIST", "model") .. "\n"
@@ -127,7 +130,7 @@ local mytab = {}
 local num = 0
 if nixio.fs.access(MODEL_LIST_PATH) then
 	for line in io.lines(MODEL_LIST_PATH) do
-		local addr = string.sub(line, 6, 8)			-- 001 ~ 255
+		local addr = string.sub(line, 11, 13)			-- 001 ~ 255
 		local devid_start = string.find(line, "DEVID:")
 		local devid_end = string.find(line, " Port:")
 		local devid

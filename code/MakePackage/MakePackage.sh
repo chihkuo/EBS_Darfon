@@ -5,6 +5,7 @@ function copy() {
 	fi
 	cp ../datalog-h5000/dlg320.exe ./update/
 	cp ../DataProgram/DataProgram.exe ./update/
+	cp ../SWupdate/SWupdate.exe ./update/
 	cp ../script/dldevice.lua ./update/
 	cp ../script/dllist ./update/
 	cp ../script/dllist.lua ./update/

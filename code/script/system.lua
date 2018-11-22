@@ -7,13 +7,18 @@ module("luci.controller.admin.system", package.seeall)
 function index()
 	local fs = require "nixio.fs"
 
-	entry({"admin", "system"}, alias("admin", "system", "system"), _("System"), 30).index = true
-	entry({"admin", "system", "system"}, cbi("admin_system/system"), _("System"), 1)
+	entry({"admin", "system"}, alias("admin", "system", --[["system"]]"dlsetting"), _("System"), 10).index = true
+
+	entry({"admin", "system", "dlsetting"}, cbi("admin_system/dlsetting"), _("DL Setting"), 1)
+	entry({"admin", "system", "dldevice"}, cbi("admin_system/dldevice"), _("DL Device"), 2)
+	entry({"admin", "system", "dllist"}, cbi("admin_system/dllist"), _("Model List"), 3)
+	
+	entry({"admin", "system", "system"}, cbi("admin_system/system"), _("System"), 10)
 	entry({"admin", "system", "clock_status"}, post_on({ set = true }, "action_clock_status"))
 
-	entry({"admin", "system", "admin"}, cbi("admin_system/admin"), _("Administration"), 2)
+	entry({"admin", "system", "admin"}, cbi("admin_system/admin"), _("Administration"), 20)
 
-	if fs.access("/bin/opkg") then
+	--[[if fs.access("/bin/opkg") then
 		entry({"admin", "system", "packages"}, post_on({ exec = "1" }, "action_packages"), _("Software"), 10)
 		entry({"admin", "system", "packages", "ipkg"}, form("admin_system/ipkg"))
 	end
@@ -29,7 +34,7 @@ function index()
 
 	if fs.access("/sys/class/leds") then
 		entry({"admin", "system", "leds"}, cbi("admin_system/leds"), _("<abbr title=\"Light Emitting Diode\">LED</abbr> Configuration"), 60)
-	end
+	end]]
 
 	entry({"admin", "system", "flashops"}, call("action_flashops"), _("Backup / Flash Firmware"), 70)
 	entry({"admin", "system", "flashops", "reset"}, post("action_reset"))
@@ -39,10 +44,6 @@ function index()
 	-- call() instead of post() due to upload handling!
 	entry({"admin", "system", "flashops", "restore"}, call("action_restore"))
 	entry({"admin", "system", "flashops", "sysupgrade"}, call("action_sysupgrade"))
-
-	entry({"admin", "system", "dlsetting"}, cbi("admin_system/dlsetting"), _("DL Setting"), 80)
-	entry({"admin", "system", "dldevice"}, cbi("admin_system/dldevice"), _("DL Device"), 81)
-	entry({"admin", "system", "dllist"}, cbi("admin_system/dllist"), _("Model List"), 82)
 
 	entry({"admin", "system", "reboot"}, template("admin_system/reboot"), _("Reboot"), 90)
 	entry({"admin", "system", "reboot", "call"}, post("action_reboot"))

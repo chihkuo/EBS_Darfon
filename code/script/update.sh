@@ -9,8 +9,18 @@ ST=dlsetting
 DLIST=dllist
 MLIST=ModelList
 
+STAT=status.lua
+INDEX=index.lua
+LST=luci_statistics.lua
+
 cp $UPDATE_DIR/$SYSTEM /usr/lib/lua/luci/controller/admin/
 chmod 755 /usr/lib/lua/luci/controller/admin/$SYSTEM
+cp $UPDATE_DIR/$STAT /usr/lib/lua/luci/controller/admin/
+chmod 755 /usr/lib/lua/luci/controller/admin/$STAT
+cp $UPDATE_DIR/$INDEX /usr/lib/lua/luci/controller/admin/
+chmod 755 /usr/lib/lua/luci/controller/admin/$INDEX
+cp $UPDATE_DIR/$LST /usr/lib/lua/luci/controller/luci_statistics/
+chmod 755 /usr/lib/lua/luci/controller/luci_statistics/$LST
 cp $UPDATE_DIR/$DLD /usr/lib/lua/luci/model/cbi/admin_system/
 chmod 755 /usr/lib/lua/luci/model/cbi/admin_system/$DLD
 cp $UPDATE_DIR/$DLS /usr/lib/lua/luci/model/cbi/admin_system/

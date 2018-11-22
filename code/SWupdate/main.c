@@ -14,7 +14,7 @@
 #define USB_PATH    "/tmp/run/mountd/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.0.2"
+#define VERSION             "2.0.3"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -734,8 +734,28 @@ void CheckProcess()
     return;
 }
 
-int main()
+int main(int argc, char* argv[])
 {
+    char opt;
+    while( (opt = getopt(argc, argv, "vVtT")) != -1 )
+    {
+        switch (opt)
+        {
+            case 'v':
+            case 'V':
+                printf("%s\n", VERSION);
+                //printf("TIMESTAMP=%s\n", __TIMESTAMP__);
+                return 0;
+            case 't':
+            case 'T':
+                printf("========Test mode start========\n");
+                printf("=========Test mode end=========\n");
+                return 0;
+            case '?':
+                return 1;
+        }
+    }
+
     time_t  previous_time;
     time_t  current_time;
     struct tm   *st_time = NULL;

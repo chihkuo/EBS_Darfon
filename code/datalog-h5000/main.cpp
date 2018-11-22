@@ -1,17 +1,19 @@
 #include "datalog.h"
 #include "G320.h"
 #include "CyberPower.h"
+#include "ADtek_CS1.h"
 #include "inverter.h"
 
 #include <unistd.h>
 #include <time.h>
 
-#define VERSION         "2.0.2"
+#define VERSION         "2.0.3"
 #define MODEL_LIST_PATH "/usr/home/ModelList"
 #define MODEL_NUM       1020 //255*4
 
 CG320 *pg320 = NULL;
 CyberPower *pcyberpower = NULL;
+ADtek_CS1 *adtekcs1 = NULL;
 
 bool GetConfig(); // 20181003 : now only sample time
 bool GetModelList();
@@ -156,7 +158,7 @@ bool GetConfig()
 bool GetModelList()
 {
     char buf[128] = {0}, tmpmodel[64] = {0};
-    int i = 0, tmpaddr = 0, tmpid = 0, tmpport = 0;
+    int i = 0, num = 0, tmpaddr = 0, tmpid = 0, tmpport = 0;
     FILE *pfile = NULL;
 
     // get model list
@@ -172,14 +174,13 @@ bool GetModelList()
         if ( strlen(buf) == 0 )
             break;
 
-        sscanf(buf, "Addr:%03d DEVID:%d Port:COM%d Model:%63s", &tmpaddr, &tmpid, &tmpport, tmpmodel);
-        //sscanf(buf, "Addr:%03d DEVID:%d Port:COM%d Model:%63s", &MList[tmp-1].addr, &MList[tmp-1].devid, &MList[tmp-1].port, MList[tmp-1].model);
-        i = (tmpport-1)*255 + tmpaddr;
-        MList[i-1].addr = tmpaddr;
-        MList[i-1].devid = tmpid;
-        MList[i-1].port = tmpport;
-        strcpy(MList[i-1].model, tmpmodel);
-        printf("Get [%03d] Addr = %03d, DEVID = %d, port = %d, model = %s\n", i-1, MList[i-1].addr, MList[i-1].devid, MList[i-1].port, MList[i-1].model);
+        sscanf(buf, "%04d Addr:%03d DEVID:%d Port:COM%d Model:%63s", &num, &tmpaddr, &tmpid, &tmpport, tmpmodel);
+        //i = (tmpport-1)*255 + tmpaddr;
+        MList[num].addr = tmpaddr;
+        MList[num].devid = tmpid;
+        MList[num].port = tmpport;
+        strcpy(MList[num].model, tmpmodel);
+        printf("Get [%03d] Addr = %03d, DEVID = %d, port = %d, model = %s\n", num, MList[num].addr, MList[num].devid, MList[num].port, MList[num].model);
     }
     fclose(pfile);
 
@@ -282,6 +283,30 @@ void Init()
                                 }
                             }
                             printf("CyberPower init end.\n");
+                            break;
+                        case ID_ADtekCS1T:
+                            printf("%d ADtekCS1 init start~\n", MList[i].addr);
+                            if ( COM_OPENED[MList[i].port-1] == false ) {
+                                printf("Do open com port %d init\n", MList[i].port);
+                                initenv((char *)"/usr/home/G320.ini");
+                                if ( adtekcs1 == NULL )
+                                    adtekcs1 = new ADtek_CS1;
+                                if ( adtekcs1->Init(MList[i].port, true, MList[i].first) ) {
+                                    COM_OPENED[MList[i].port-1] = true;
+                                    MList[i].init = 1;
+                                }
+                            } else {
+                                if ( MList[i].init == 0 ) {
+                                    printf("Do init\n");
+                                    initenv((char *)"/usr/home/G320.ini");
+                                    if ( adtekcs1 == NULL )
+                                        adtekcs1 = new ADtek_CS1;
+                                    if ( adtekcs1->Init(MList[i].port, false, false) ) {
+                                        MList[i].init = 1;
+                                    }
+                                }
+                            }
+                            printf("ADtekCS1 init end.\n");
                             break;
                         case ID_Test:
                             // for test
