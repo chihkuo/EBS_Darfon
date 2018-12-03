@@ -16,7 +16,7 @@ local slave_addr = list:option(Value, "slave_addr", translate("Slave Address  (P
 local dev_id = list:option(Value, "dev_id", translate("Device ID  (Please input DEC positive integer [1 ~ 255])"))
 
 -- set all model in this table -----
-local allmodel = {"Darfon", "CyberPower-1P", "CyberPower-3P", "Test"}
+local allmodel = {"Darfon", "CyberPower-1P", "CyberPower-3P", "ADtek-CS1-T", "Test"}
 ------------------------------------
 local inverter_model = list:option(ListValue, "model", translate("Model"))
 for i = 1,#allmodel do

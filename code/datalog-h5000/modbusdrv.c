@@ -744,7 +744,7 @@ Chk_URI_Address:
 	Parameters: none
 	Returns: none
 */
-void MStartTX()
+void MStartTX(int fd)
 {
 	long i;
 	TRC_TXIDLE=0;
@@ -754,8 +754,9 @@ void MStartTX()
 	////writeLog(txbuffer);
 	////printf("enter MStartTX!!\n");
 	DebugPrint(txbuffer,txsize, "send");
-	i=write(fdModbus, txbuffer, txsize);
-	printf("write to %d, return %ld\n", fdModbus, i);
+	//i=write(fdModbus, txbuffer, txsize);
+	i=write(fd, txbuffer, txsize);
+	printf("write to %d, return %ld\n", fd, i);
 	//getchar();
 
     MClearTX_Noise(0.3);//mike20160407+
@@ -1237,7 +1238,7 @@ int ModbusDrvInit_232_485(void)//mikechiu20160226
 	Parameters: none
 	Returns: 0 for OK, minus for error
 */
-int ModbusDrvDeinit(void)
+int ModbusDrvDeinit(int fd)
 {
 	unsigned int cnt;
 	int end;
@@ -1252,7 +1253,8 @@ int ModbusDrvDeinit(void)
 		else if(receiveState==URS_End)end=1;
 		else receiveState=URS_End;
 	}
-	if(fdModbus!=-1)close(fdModbus);
+	//if(fdModbus!=-1)close(fdModbus);
+	if(fd!=-1)close(fd);
 	return 0;
 }
 
@@ -1443,10 +1445,10 @@ int MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_b
 
 	printf("MyModbusDrvInit OK, fdModbus=%d",fdModbus);
 	//getchar();
-	return 0;
+	return fdModbus;
 }
 
-unsigned char *GetRespond(int iSize, int delay)
+unsigned char *GetRespond(int fd, int iSize, int delay)
 {
     //unsigned char buff[512];
 	int i = 0, err = 0, count = 0;
@@ -1465,7 +1467,8 @@ unsigned char *GetRespond(int iSize, int delay)
         //i=read(fdModbus, p, iSize-len);
         //i=read(fdModbus, buff, 511);
         //i=read(fdModbus, respond_buff, iSize);
-        i=read(fdModbus, respond_buff, 4096); // get all data(if 0x00 start command), clean return data
+        //i=read(fdModbus, respond_buff, 4096); // get all data(if 0x00 start command), clean return data
+        i=read(fd, respond_buff, 4096); // get all data(if 0x00 start command), clean return data
         if (i==-1) {
             printf("read error code=%d (%s) \n",errno, strerror(errno));
             have_respond = false;
@@ -1582,7 +1585,8 @@ unsigned char *GetRespond(int iSize, int delay)
 	//DebugPrint(respond_buff, len, "recv");
 	printf("#### GetRespond() clean buf ####\n");
 	while ( i != -1 ) {
-        i=read(fdModbus, respond_buff, 4096);
+        //i=read(fdModbus, respond_buff, 4096);
+        i=read(fd, respond_buff, 4096);
         DebugPrint(respond_buff, i, "Clean");
 	}
     printf("#### GetRespond() clean OK ####\n");
@@ -1590,11 +1594,12 @@ unsigned char *GetRespond(int iSize, int delay)
 	return NULL;
 }
 
-int GetQuery(unsigned char *buf, int buf_size)
+int GetQuery(int fd, unsigned char *buf, int buf_size)
 {
     int len = 0;
 
-    len = read(fdModbus, buf, buf_size);
+    //len = read(fdModbus, buf, buf_size);
+    len = read(fd, buf, buf_size);
     if (len == -1) {
         printf("read error code=%d (%s) \n",errno, strerror(errno));
         have_respond = false;
@@ -1607,7 +1612,7 @@ int GetQuery(unsigned char *buf, int buf_size)
     return len;
 }
 
-unsigned char *GetCyberPowerRespond(int iSize, int delay)
+unsigned char *GetCyberPowerRespond(int fd, int iSize, int delay)
 {
     //unsigned char buff[512];
 	int i = 0, err = 0, count = 0;
@@ -1625,7 +1630,8 @@ unsigned char *GetCyberPowerRespond(int iSize, int delay)
         //usleep(g_global.g_delay1*1000);
         //i=read(fdModbus, p, iSize-len);
         //i=read(fdModbus, buff, 511);
-        i=read(fdModbus, respond_buff, iSize);
+        //i=read(fdModbus, respond_buff, iSize);
+        i=read(fd, respond_buff, iSize);
         if (i==-1) {
             printf("read error code=%d (%s) \n",errno, strerror(errno));
             have_respond = false;
@@ -1674,7 +1680,8 @@ unsigned char *GetCyberPowerRespond(int iSize, int delay)
 	//DebugPrint(respond_buff, len, "recv");
 	printf("#### GetCyberPowerRespond() clean buf ####\n");
 	while ( i != -1 ) {
-        i=read(fdModbus, respond_buff, 511);
+        //i=read(fdModbus, respond_buff, 511);
+        i=read(fd, respond_buff, 511);
         DebugPrint(respond_buff, i, "Clean");
 	}
     printf("#### GetCyberPowerRespond() clean OK ####\n");
@@ -1682,13 +1689,114 @@ unsigned char *GetCyberPowerRespond(int iSize, int delay)
 	return NULL;
 }
 
-void CleanRespond()
+unsigned char *GetADtekRespond(int fd, int iSize, int delay)
+{
+    //unsigned char buff[512];
+	int i = 0, err = 0, count = 0;
+	int len=0;
+	int  iRet=1;
+	unsigned char *pbuf, *p;
+	//pbuf = (unsigned char *)malloc(iSize+1);
+	//p = pbuf;
+
+	memset(respond_buff, 0x00, 4096);
+	while (err < 3) {
+//printf("wait recv data need:%d, Recved: %d \n", iSize, len);
+//printf("wait Slave Address : 0x%02X, wait Function Code : 0x%02X \n", waitAddr, waitFCode);
+        //getchar();
+        //usleep(g_global.g_delay1*1000);
+        //i=read(fdModbus, p, iSize-len);
+        //i=read(fdModbus, buff, 511);
+        //i=read(fdModbus, respond_buff, iSize);
+        i=read(fd, respond_buff, iSize);
+        if (i==-1) {
+            printf("read error code=%d (%s) \n",errno, strerror(errno));
+            // for test, set fack data
+            //have_respond = false;
+            //return NULL;
+            //break;
+            have_respond = true;
+            i = 7;
+            if ( txbuffer[3] == 0 ) {
+                respond_buff[0] = 0x01;
+                respond_buff[1] = 0x03;
+                respond_buff[2] = 0x02;
+                respond_buff[3] = 0x09;
+                respond_buff[4] = 0x29;
+                respond_buff[5] = 0x7F;
+                respond_buff[6] = 0xCA;
+            }
+            if ( txbuffer[3] == 8 ) {
+                respond_buff[0] = 0x01;
+                respond_buff[1] = 0x03;
+                respond_buff[2] = 0x02;
+                respond_buff[3] = 0x00;
+                respond_buff[4] = 0x02;
+                respond_buff[5] = 0x39;
+                respond_buff[6] = 0x85;
+            }
+
+        }
+        //printf("read %d / %d bytes \n",i, iSize-len);
+        printf("read %d / %d bytes \n",i, 511);
+        //DebugPrint(p, i, "receive");
+        //len += i;
+        len = i;
+        //DebugPrint(respond_buff, len, "recv");
+        have_respond = true;
+        //p+=i;
+        //usleep(g_delay2*1000);
+        /*if (i==0 && count > iTimeout) {
+	       //free(pbuf);
+           return NULL;
+           break;
+        }
+        count++;*/
+
+        if ( len >= iSize ) {
+            for (i = 0; i < iSize-5; i++) {
+                if ( respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode ) {
+                    // check function code
+                    switch ( respond_buff[i+1] )
+                    {
+                        case 0x03: // read input registers
+                            count = respond_buff[i+2];
+                            if ( CheckCRC(respond_buff+i, count+5) ) {
+                                DebugPrint(respond_buff+i, count+5, "Read recv");
+                                return respond_buff+i;
+                            }
+                            break;
+                        default:
+                            printf("Function code %d not found!\n", respond_buff[i+1]);
+                    }
+                }
+            }
+        }
+        else
+            err++;
+
+        usleep(delay);
+	}
+	//DebugPrint(respond_buff, len, "recv");
+	printf("#### GetADtekRespond() clean buf ####\n");
+	while ( i != -1 ) {
+        //i=read(fdModbus, respond_buff, 511);
+        i=read(fd, respond_buff, 511);
+        DebugPrint(respond_buff, i, "Clean");
+	}
+    printf("#### GetADtekRespond() clean OK ####\n");
+
+	return NULL;
+}
+
+void CleanRespond(int fd)
 {
     int i = 0;
 
     printf("#### CleanRespond() start ####\n");
 	while ( i != -1 ) {
-        i=read(fdModbus, respond_buff, 4096);
+        //i=read(fdModbus, respond_buff, 4096);
+        i=read(fd, respond_buff, 4096);
         if ( i > 0 )
             DebugPrint(respond_buff, i, "Clean");
 	}

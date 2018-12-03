@@ -35,16 +35,17 @@ extern unsigned int mrDcnt, mrCnt, mrLen;
 unsigned short CalculateCRC(unsigned char *p, unsigned int len);
 void *ModbusDriver(void *);
 //void ModbusDriver();
-extern void MStartTX();
+extern void MStartTX(int fd);
 extern void MClearRX();
 extern void MClearTX_Noise(float waittime_s);
 
 int ModbusDriverReady();
 int ModbusDrvInit(void);
-int ModbusDrvDeinit(void);
-unsigned char *GetRespond(int iSize, int iTimeout);
-int GetQuery(unsigned char *buf, int buf_size);
-unsigned char *GetCyberPowerRespond(int iSize, int delay);
-void CleanRespond();
+int ModbusDrvDeinit(int fd);
+unsigned char *GetRespond(int fd, int iSize, int iTimeout);
+int GetQuery(int fd, unsigned char *buf, int buf_size);
+unsigned char *GetCyberPowerRespond(int fd, int iSize, int delay);
+unsigned char *GetADtekRespond(int fd, int iSize, int delay);
+void CleanRespond(int fd);
 
 #endif /* __MODBUS_DRV_H__ */

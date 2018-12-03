@@ -36,7 +36,7 @@ extern unsigned int mrDcnt, mrCnt, mrLen;
 unsigned short CalculateCRC(unsigned char *, unsigned int );
 void *ModbusDriver(void *);
 //void ModbusDriver();
-extern void MStartTX();
+extern void MStartTX(int fd);
 extern void MClearRX();
 extern void MClearTX_Noise(float waittime_s);
 
@@ -47,10 +47,10 @@ extern void Dumpdata(unsigned char *, MI_INFO *);
 
 extern int ModbusDriverReady();
 extern int ModbusDrvInit(void);
-extern int ModbusDrvDeinit(void);
+extern int ModbusDrvDeinit(int fd);
 extern unsigned char respond_buff[RESPOND_SIZE];
-extern unsigned char *GetRespond(int iSize, int delay);
-extern int GetQuery(unsigned char *buf, int buf_size);
+extern unsigned char *GetRespond(int fd, int iSize, int delay);
+extern int GetQuery(int fd, unsigned char *buf, int buf_size);
 extern void CleanRespond();
 }
 
@@ -60,7 +60,7 @@ public:
 	CG320();
 	virtual ~CG320();
 
-	bool    Init(int addr, int com, bool open_com, bool first);
+	int     Init(int addr, int com, bool open_com, bool first, int busfd);
 	int     DoReRegister(time_t time);
 	int     DoAllRegister(time_t time);
 	void    Start();
@@ -146,6 +146,8 @@ protected:
     void    SetBMSPath(int index);
     bool    SaveBMS();
     bool    WriteMIListXML();
+    void    SetEnvXML();
+    bool    SaveEnvXML(bool first, bool last);
 
     FILE    *m_sitelogdata_fd;
 
@@ -159,6 +161,7 @@ protected:
     SNOBJ   arySNobj[253];
     int     m_snCount;
     int     m_addr;
+    int     m_busfd;
     bool    m_first;
     bool    m_last;
     int     m_milist_size;
@@ -200,6 +203,7 @@ protected:
     char            m_bms_mainbuf[BMS_BUF_SIZE];
     char            m_bms_filename[128];
     char            m_bms_header[8192];
+    char            m_env_filename[128];
 };
 
 #endif // G320_H_INCLUDED

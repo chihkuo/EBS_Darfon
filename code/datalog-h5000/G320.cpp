@@ -31,14 +31,14 @@ extern "C"
 
 extern "C" {
     extern int     MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_bits);
-    extern void    RemoveAllRegister(int times);
-    extern int    MyStartRegisterProcess(byte *psn);
-    extern int     ModbusDrvDeinit();
-    extern void    RemoveRegisterQuery(byte byAddr);
-    extern int    MySyncOffLineQuery(byte addr, byte MOD, byte buf[], int buf_size);
-    extern int   MyAssignAddress(unsigned char *ID, unsigned char Addr);
-    extern int  MyOffLineQuery(unsigned char addr, unsigned char  buf[], int buf_size);
-    extern int SendForceCoil(byte SlaveID, byte StartAddress, unsigned int Data);
+    //extern void    RemoveAllRegister(int times);
+    //extern int    MyStartRegisterProcess(byte *psn);
+    extern int     ModbusDrvDeinit(int fd);
+    extern void    RemoveRegisterQuery(int fd, byte byAddr);
+    extern int    MySyncOffLineQuery(int fd, byte addr, byte MOD, byte buf[], int buf_size);
+    extern int   MyAssignAddress(int fd, unsigned char *ID, unsigned char Addr);
+    extern int  MyOffLineQuery(int fd, unsigned char addr, unsigned char  buf[], int buf_size);
+    //extern int SendForceCoil(byte SlaveID, byte StartAddress, unsigned int Data);
     extern bool have_respond;
 }
 
@@ -90,6 +90,7 @@ CG320::CG320()
     memset(m_errlog_filename, 0x00, 128);
     memset(m_bms_mainbuf, 0x00, BMS_BUF_SIZE);
     memset(m_bms_filename, 0x00, 128);
+    memset(m_env_filename, 0x00, 128);
 
     int i = 0;
     for (i=0; i<253; i++) {
@@ -119,17 +120,17 @@ CG320::CG320()
 
 CG320::~CG320()
 {
-    ModbusDrvDeinit();
+    ModbusDrvDeinit(m_busfd);
 }
 
-bool CG320::Init(int addr, int com, bool open_com, bool first)
+int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
 {
     int i = 0, idc = 0;
     char buf[256] = {0};
     char *port = NULL;
     char szbuf[32] = {0};
     char inverter_parity = 0;
-    bool ret = true;
+    int ret = 0;
 
     printf("#### G320 Init Start ####\n");
     // set addr
@@ -162,8 +163,14 @@ bool CG320::Init(int addr, int com, bool open_com, bool first)
             inverter_parity = 'E';
         else
             inverter_parity = 'N';
-        if ( MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits) != 0 )
-            ret = false;
+
+        m_busfd = MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits);
+        if ( m_busfd < 0 )
+            ret = -1;
+        else
+            ret = m_busfd;
+    } else {
+        m_busfd = busfd;
     }
 
     // get time zone
@@ -640,6 +647,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
     SetPath();
     SetLogXML();
     SetErrorLogXML();
+    SetEnvXML();
     CheckConfig();
 
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
@@ -772,6 +780,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
         if ( stat(m_log_filename, &st) != 0 ) {
             SaveLogXML(first, last);
             SaveErrorLogXML(first, last);
+            SaveEnvXML(first, last);
             dosave = true;
         }
     } else { // m_loopstate == 0
@@ -779,6 +788,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
         memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
         SaveLogXML(first, last);
         SaveErrorLogXML(first, last);
+        SaveEnvXML(first, last);
     }
 
     if ( m_loopstate == 0 ) { // init : device get OK
@@ -1040,6 +1050,29 @@ bool CG320::SetPath()
             printf("mkdir %s OK\n", m_dl_path.m_errlog_path);
     }
 
+    // set env path
+    memset(buf, 0, 256);
+    sprintf(buf, "%s/ENV", m_dl_path.m_xml_path);
+    if ( stat(buf, &st) == -1 ) {
+        printf("%s not exist, run mkdir!\n", buf);
+        if ( mkdir(buf, 0755) == -1 )
+            printf("mkdir %s fail!\n", buf);
+        else
+            printf("mkdir %s OK\n", buf);
+    }
+
+    // set env date path
+    memset(buf, 0, 256);
+    sprintf(buf, "%s/ENV/%4d%02d%02d", m_dl_path.m_xml_path, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
+    strcpy(m_dl_path.m_env_path, buf);
+    if ( stat(m_dl_path.m_env_path, &st) == -1 ) {
+        printf("%s not exist, run mkdir!\n", m_dl_path.m_env_path);
+        if ( mkdir(m_dl_path.m_env_path, 0755) == -1 )
+            printf("mkdir %s fail!\n", m_dl_path.m_env_path);
+        else
+            printf("mkdir %s OK\n", m_dl_path.m_env_path);
+    }
+
     // set BMS path
     sprintf(buf, "%s/BMS", m_dl_path.m_root_path);
     if ( stat(buf, &st) == -1 ) {
@@ -1075,6 +1108,7 @@ bool CG320::SetPath()
     //printf("m_xml_path = %s\n", m_dl_path.m_xml_path);
     //printf("m_log_path = %s\n", m_dl_path.m_log_path);
     //printf("m_errlog_path = %s\n", m_dl_path.m_errlog_path);
+    //printf("m_env_path    = %s\n", m_dl_path.m_env_path);
     //printf("m_bms_path = %s\n", m_dl_path.m_bms_path);
     //printf("m_syslog_path = %s\n", m_dl_path.m_syslog_path);
 
@@ -1362,7 +1396,7 @@ bool CG320::RunWhiteListChanged()
                     // device off line
                     if ( arySNobj[i].m_state == 0 ) {
                         printf("Clean index %d data\n", i);
-                        RemoveRegisterQuery(arySNobj[i].m_Addr);
+                        RemoveRegisterQuery(m_busfd, arySNobj[i].m_Addr);
                         usleep(500000); // 0.5s
                         memset(arySNobj[i].m_Sn, 0x00, 17);
                         arySNobj[i].m_Device = -2;
@@ -1423,9 +1457,9 @@ bool CG320::RunWhiteListChanged()
                 AddWhiteList(1, tmp);
                 usleep(1000000); // 1s
 
-                RemoveRegisterQuery(arySNobj[i].m_Addr);
+                RemoveRegisterQuery(m_busfd, arySNobj[i].m_Addr);
                 usleep(500000);  // 0.5s
-                if ( MyAssignAddress(tmp, arySNobj[i].m_Addr) )
+                if ( MyAssignAddress(m_busfd, tmp, arySNobj[i].m_Addr) )
                 {
                     printf("#### MyAssignAddress(%d) OK! ####\n", arySNobj[i].m_Addr);
                     arySNobj[i].m_Device = -1;
@@ -1474,15 +1508,15 @@ bool CG320::GetWhiteListCount()
 
     while ( err < 3 ) {
         memcpy(txbuffer, szWLcount, 14);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(100000); // 0.1s
 
         if ( err == 0 )
-            lpdata = GetRespond(15, 100000); // 0.1s
+            lpdata = GetRespond(m_busfd, 15, 100000); // 0.1s
         else if ( err == 1 )
-            lpdata = GetRespond(15, 500000); // 0.5s
+            lpdata = GetRespond(m_busfd, 15, 500000); // 0.5s
         else
-            lpdata = GetRespond(15, 1000000); // 1s
+            lpdata = GetRespond(m_busfd, 15, 1000000); // 1s
         if ( lpdata ) {
             printf("#### GetWhiteListCount OK ####\n");
             SaveLog((char *)"DataLogger GetWhiteListCount() : OK", m_st_time);
@@ -1550,15 +1584,15 @@ bool CG320::GetWhiteListSN()
 
         while ( err < 3 ) {
             memcpy(txbuffer, szWLSN, 14);
-            MStartTX();
+            MStartTX(m_busfd);
             usleep(1000000); // 1s
 
             if ( err == 0 )
-                lpdata = GetRespond(11 + 8*num_of_data, 100000); // 0.1s
+                lpdata = GetRespond(m_busfd, 11 + 8*num_of_data, 100000); // 0.1s
             else if ( err == 1 )
-                lpdata = GetRespond(11 + 8*num_of_data, 500000); // 0.5s
+                lpdata = GetRespond(m_busfd, 11 + 8*num_of_data, 500000); // 0.5s
             else
-                lpdata = GetRespond(11 + 8*num_of_data, 1000000); // 1s
+                lpdata = GetRespond(m_busfd, 11 + 8*num_of_data, 1000000); // 1s
             if ( lpdata ) {
                 printf("#### GetWhiteListSN index %d, data %d OK ####\n", i, num_of_data);
                 printf("copy %d data to white list buf\n", 8*num_of_data);
@@ -1643,15 +1677,15 @@ bool CG320::ClearWhiteList()
 
     while ( err < 3 ) {
         memcpy(txbuffer, szClearWL, 15);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(1000000); // 1s
 
         if ( err == 0 )
-            lpdata = GetRespond(14, 100000); // 0.1s
+            lpdata = GetRespond(m_busfd, 14, 100000); // 0.1s
         else if ( err == 1 )
-            lpdata = GetRespond(14, 500000); // 0.5s
+            lpdata = GetRespond(m_busfd, 14, 500000); // 0.5s
         else
-            lpdata = GetRespond(14, 1000000); // 1s
+            lpdata = GetRespond(m_busfd, 14, 1000000); // 1s
         if ( lpdata ) {
             printf("#### ClearWhiteList OK ####\n");
             SaveLog((char *)"DataLogger ClearWhiteList() : OK", m_st_time);
@@ -1715,15 +1749,15 @@ bool CG320::WriteWhiteList(int num, unsigned char *listbuf)
 
         while ( err < 3 ) {
             memcpy(txbuffer, szWriteWL, szWriteWL[2]);
-            MStartTX();
+            MStartTX(m_busfd);
             usleep(1000000); // 1s
 
             if ( err == 0 )
-                lpdata = GetRespond(14, 100000); // 0.1s
+                lpdata = GetRespond(m_busfd, 14, 100000); // 0.1s
             else if ( err == 1 )
-                lpdata = GetRespond(14, 500000); // 0.5s
+                lpdata = GetRespond(m_busfd, 14, 500000); // 0.5s
             else
-                lpdata = GetRespond(14, 1000000); // 1s
+                lpdata = GetRespond(m_busfd, 14, 1000000); // 1s
             if ( lpdata ) {
                 printf("#### WriteWhiteList index %d, data %d OK ####\n", i, num_of_data);
                 SaveLog((char *)"DataLogger WriteWhiteList() : OK", m_st_time);
@@ -1798,15 +1832,15 @@ bool CG320::AddWhiteList(int num, unsigned char *listbuf)
 
         while ( err < 3 ) {
             memcpy(txbuffer, szAddWL, szAddWL[2]);
-            MStartTX();
+            MStartTX(m_busfd);
             usleep(1000000); // 1s
 
             if ( err == 0 )
-                lpdata = GetRespond(14, 100000); // 0.1s
+                lpdata = GetRespond(m_busfd, 14, 100000); // 0.1s
             else if ( err == 1 )
-                lpdata = GetRespond(14, 500000); // 0.5s
+                lpdata = GetRespond(m_busfd, 14, 500000); // 0.5s
             else
-                lpdata = GetRespond(14, 1000000); // 1s
+                lpdata = GetRespond(m_busfd, 14, 1000000); // 1s
             if ( lpdata ) {
                 printf("#### AddWhiteList index %d, data %d OK ####\n", i, num_of_data);
                 SaveLog((char *)"DataLogger AddWhiteList() : OK", m_st_time);
@@ -2120,15 +2154,15 @@ bool CG320::DeleteWhiteList(int num, unsigned char *listbuf)
 
         while ( err < 3 ) {
             memcpy(txbuffer, szDeleteWL, szDeleteWL[2]);
-            MStartTX();
+            MStartTX(m_busfd);
             usleep(1000000); // 1s
 
             if ( err == 0 )
-                lpdata = GetRespond(14, 100000); // 0.1s
+                lpdata = GetRespond(m_busfd, 14, 100000); // 0.1s
             else if ( err == 1 )
-                lpdata = GetRespond(14, 500000); // 0.5s
+                lpdata = GetRespond(m_busfd, 14, 500000); // 0.5s
             else
-                lpdata = GetRespond(14, 1000000); // 1s
+                lpdata = GetRespond(m_busfd, 14, 1000000); // 1s
             if ( lpdata ) {
                 printf("#### DeleteWhiteList index %d, data %d OK ####\n", i, num_of_data);
                 SaveLog((char *)"DataLogger DeleteWhiteList() : OK", m_st_time);
@@ -2180,13 +2214,13 @@ int CG320::WhiteListRegister()
 	}*/
 
 	if (m_snCount==0) {
-        RemoveRegisterQuery(0);
+        RemoveRegisterQuery(m_busfd, 0);
         CleanRespond();
         usleep(500000);
-        RemoveRegisterQuery(0);
+        RemoveRegisterQuery(m_busfd, 0);
         CleanRespond();
         usleep(500000);
-        RemoveRegisterQuery(0);
+        RemoveRegisterQuery(m_busfd, 0);
         CleanRespond();
         usleep(500000);
 	}
@@ -2201,7 +2235,7 @@ int CG320::WhiteListRegister()
         printf("m_Sn = %s\n", arySNobj[m_snCount].m_Sn);
         printf("################################\n");
 
-        if ( MyAssignAddress(m_white_list_buf + i*8,  arySNobj[m_snCount].m_Addr) )
+        if ( MyAssignAddress(m_busfd, m_white_list_buf + i*8,  arySNobj[m_snCount].m_Addr) )
         {
             printf("=================================\n");
             printf("#### MyAssignAddress(%d) OK! ####\n", arySNobj[m_snCount].m_Addr);
@@ -2246,20 +2280,20 @@ int CG320::StartRegisterProcess()
 	//m_snCount = 0;
 
 	if (m_snCount==0) {
-        RemoveRegisterQuery(0);
+        RemoveRegisterQuery(m_busfd, 0);
         CleanRespond();
         usleep(500000);
-        RemoveRegisterQuery(0);
+        RemoveRegisterQuery(m_busfd, 0);
         CleanRespond();
         usleep(500000);
-        RemoveRegisterQuery(0);
+        RemoveRegisterQuery(m_busfd, 0);
         CleanRespond();
         usleep(500000);
 	}
 
     SaveLog((char *)"DataLogger StartRegisterProcess() : run", m_st_time);
     while ( 1 ) {
-        ret = MySyncOffLineQuery(0x00, (byte)byMOD, m_query_buf, QUERY_SIZE);
+        ret = MySyncOffLineQuery(m_busfd, 0x00, (byte)byMOD, m_query_buf, QUERY_SIZE);
         if ( ret > 0) {
             printf("#### MySyncOffLineQuery return %d ####\n", ret);
             printf("========================================= Debug date value =========================================");
@@ -2272,7 +2306,7 @@ int CG320::StartRegisterProcess()
             goto Allocate_address;
         } else {
             while ( m_snCount<253 && byMOD>=0 ) {
-                ret = MyOffLineQuery(0x00, m_query_buf, QUERY_SIZE);
+                ret = MyOffLineQuery(m_busfd, 0x00, m_query_buf, QUERY_SIZE);
                 if ( ret != -1 ) {
                     printf("#### MyOffLineQuery return %d ####\n", ret);
                     printf("========================================= Debug date value =========================================");
@@ -2349,7 +2383,7 @@ int CG320::AllocateProcess(unsigned char *query, int len)
                 printf("m_Sn = %s\n", arySNobj[index].m_Sn);
                 printf("#########################################\n");
 
-                if ( MyAssignAddress(&query[i+3],  arySNobj[index].m_Addr) )
+                if ( MyAssignAddress(m_busfd, &query[i+3],  arySNobj[index].m_Addr) )
                 {
                     printf("=================================\n");
                     printf("#### MyAssignAddress(%d) OK! ####\n", arySNobj[index].m_Addr);
@@ -2385,7 +2419,7 @@ bool CG320::ReRegister(int index)
     SaveLog(buf, m_st_time);
     printf("#### ReRegiser start ####\n");
     printf("#### Remove %d Query ####\n", arySNobj[index].m_Addr);
-    RemoveRegisterQuery(arySNobj[index].m_Addr);
+    RemoveRegisterQuery(m_busfd, arySNobj[index].m_Addr);
     usleep(500000);
 
     printf("ReRegiser SN = %s\n", arySNobj[index].m_Sn);
@@ -2395,7 +2429,7 @@ bool CG320::ReRegister(int index)
         printf("buffer[%d] = %02X\n", i, buffer[i]);
     }
 
-    if ( MyAssignAddress(buffer, arySNobj[index].m_Addr) )
+    if ( MyAssignAddress(m_busfd, buffer, arySNobj[index].m_Addr) )
     {
         sprintf(buf, "DataLogger ReRegiser() : addr %d OK", arySNobj[index].m_Addr);
         SaveLog(buf, m_st_time);
@@ -2435,10 +2469,10 @@ bool CG320::GetDevice(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szDevice, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(7, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 7, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetDevice OK ####\n");
             arySNobj[index].m_Device = (*(lpdata+3) << 8) + *(lpdata+4);;
@@ -2487,10 +2521,10 @@ bool CG320::GetMiIDInfo(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szMIIDinfo, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(21, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 21, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetMiIDInfo OK ####\n");
             SaveLog((char *)"DataLogger GetMiIDInfo() : OK", m_st_time);
@@ -2578,10 +2612,10 @@ bool CG320::GetMiPowerInfo(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szMIPowerinfo, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(71, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 71, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetMiPowerInfo OK ####\n");
             SaveLog((char *)"DataLogger GetMiPowerInfo() : OK", m_st_time);
@@ -2687,10 +2721,10 @@ bool CG320::GetHybridIDData(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szHBIDdata, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(33, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 33, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridIDData OK ####\n");
             SaveLog((char *)"DataLogger GetHybridIDData() : OK", m_st_time);
@@ -2844,10 +2878,10 @@ bool CG320::SetHybridIDData(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szIDData, 39);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*1000);
 
-        lpdata = GetRespond(8, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridIDData OK ####\n");
@@ -2934,10 +2968,10 @@ bool CG320::GetHybridRTCData(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szHBRTCdata, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(17, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridRTCData OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRTCData() : OK", m_st_time);
@@ -3058,10 +3092,10 @@ bool CG320::SetHybridRTCData(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szRTCData, 41);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*1000);
 
-        lpdata = GetRespond(8, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRTCData OK ####\n");
@@ -3104,10 +3138,10 @@ bool CG320::GetHybridRSInfo(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szHBRSinfo, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(35, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 35, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridRSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRSInfo() : OK", m_st_time);
@@ -3300,10 +3334,10 @@ bool CG320::SetHybridRSInfo(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szRSInfo, 41);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*1000);
 
-        lpdata = GetRespond(8, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRSInfo OK ####\n");
@@ -3346,10 +3380,10 @@ bool CG320::GetHybridRRSInfo(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szHBRSinfo, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(15, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 15, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridRRSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", m_st_time);
@@ -3474,10 +3508,10 @@ bool CG320::SetHybridRRSInfo(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szRRSInfo, 41);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*1000);
 
-        lpdata = GetRespond(8, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRRSInfo OK ####\n");
@@ -3520,10 +3554,10 @@ bool CG320::GetHybridRTInfo(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szHBRTinfo, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(99, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 99, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridRTInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRTInfo() : OK", m_st_time);
@@ -3932,10 +3966,10 @@ bool CG320::GetHybridBMSInfo(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szHBBMSinfo, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(27, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 27, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridBMSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridBMSInfo() : OK", m_st_time);
@@ -4025,7 +4059,7 @@ bool CG320::GetHybridPanasonicModule(int index)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szHBPANAMOD, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         if ( err == 0 )
             usleep(m_dl_config.m_delay_time*100);
         else if ( err == 1 )
@@ -4033,7 +4067,7 @@ bool CG320::GetHybridPanasonicModule(int index)
         else
             usleep(m_dl_config.m_delay_time*1000);
 
-        lpdata = GetRespond(99, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 99, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridPanasonicModule OK ####\n");
             //SaveLog("DataLogger GetHybridPanasonicModule() : OK", m_st_time);
@@ -4129,7 +4163,7 @@ bool CG320::GetHybridBMSModule(int index, int module)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szHBBMSmodule, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         if ( err == 0 )
             usleep(m_dl_config.m_delay_time*100);
         else if ( err == 1 )
@@ -4137,7 +4171,7 @@ bool CG320::GetHybridBMSModule(int index, int module)
         else
             usleep(m_dl_config.m_delay_time*1000);
 
-        lpdata = GetRespond(61, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 61, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridBMSModule first half OK ####\n");
             //sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, first half OK", arySNobj[index].m_Addr, module+1);
@@ -4179,7 +4213,7 @@ bool CG320::GetHybridBMSModule(int index, int module)
 
     while ( err < 3 ) {
         memcpy(txbuffer, szHBBMSmodule, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         if ( err == 0 )
             usleep(m_dl_config.m_delay_time*100);
         else if ( err == 1 )
@@ -4187,7 +4221,7 @@ bool CG320::GetHybridBMSModule(int index, int module)
         else
             usleep(m_dl_config.m_delay_time*1000);
 
-        lpdata = GetRespond(61, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 61, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridBMSModule last half OK ####\n");
             //sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, last half OK", arySNobj[index].m_Addr, module+1);
@@ -5262,6 +5296,97 @@ bool CG320::SaveErrorLogXML(bool first, bool last)
             return true;
         } else {
             SaveLog((char *)"DataLogger SaveErrorLogXML() : write to tmp Fail", m_st_time);
+            return false;
+        }
+    }
+
+    return false;
+}
+
+void CG320::SetEnvXML()
+{
+    sprintf(m_env_filename, "%s/%02d%02d", m_dl_path.m_env_path, m_st_time->tm_hour, m_st_time->tm_min);
+    printf("env path = %s\n", m_env_filename);
+    return;
+}
+
+bool CG320::SaveEnvXML(bool first, bool last)
+{
+    FILE *fd = NULL;
+    struct stat filest;
+    char buf[256] = {0};
+    char tmp[256] = {0};
+    int filesize = 0, offset = 0, ret = 0;
+
+    if ( first ) {
+        fd = fopen("/tmp/tmpenv", "wb");
+        if ( fd != NULL ) {
+            fwrite("<records>", 1, 9, fd);
+            filesize = 9;
+        }
+    } else {
+        stat("/tmp/tmpenv", &filest);
+        filesize = filest.st_size;
+        fd = fopen("/tmp/tmpenv", "ab");
+    }
+
+    if ( last ) {
+        strcat(buf, "</records>");
+        while ( (strlen(buf) + filesize) % 3 != 0 ) {
+            buf[strlen(buf)] = 0x20; // add space to end
+        }
+    }
+
+    if ( fd != NULL ) {
+        fwrite(buf, 1, strlen(buf), fd);
+        filesize += strlen(buf);
+        //printf("Log filesize = %d\n", filesize);
+        fclose(fd);
+    } else {
+        SaveLog((char *)"CG320 SaveEnvXML() : open /tmp/tmpenv Fail", m_st_time);
+        printf("open /tmp/tmpenv Fail!\n");
+        return false;
+    }
+
+    if ( !last )
+        return true;
+    else {
+        if ( filesize < 42 ) {
+            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            return true;
+        }
+    }
+
+    // copy file to target
+    sprintf(buf, "cp /tmp/tmpenv %s", m_env_filename);
+    ret = system(buf);
+    if ( ret == 0 ) {
+        sprintf(buf, "CG320 SaveEnvXML() : write %s OK", m_env_filename);
+        SaveLog(buf, m_st_time);
+        //if ( strstr(m_env_filename, USB_PATH) )
+        //    m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+        return true;
+    } else {
+        sprintf(buf, "CG320 SaveEnvXML() : write %s Fail", m_env_filename);
+        SaveLog(buf, m_st_time);
+        //if ( strstr(m_env_filename, USB_PATH) )
+        //    m_sys_error |= SYS_0002_Save_USB_Fail;
+    }
+
+    // if copy file to storage fail, then copy to tmp
+    if ( strstr(m_env_filename, DEF_PATH) == NULL ) {
+        strcpy(tmp, DEF_PATH);
+        if ( strstr(m_env_filename, USB_PATH) != NULL )
+            offset = strlen(USB_PATH);
+        // save to tmp
+        strcat(tmp, m_env_filename+offset);
+        sprintf(buf, "cp /tmp/tmpenv %s", tmp);
+        ret = system(buf);
+        if ( ret == 0 ) {
+            SaveLog((char *)"CG320 SaveEnvXML() : write to tmp OK", m_st_time);
+            return true;
+        } else {
+            SaveLog((char *)"CG320 SaveEnvXML() : write to tmp Fail", m_st_time);
             return false;
         }
     }

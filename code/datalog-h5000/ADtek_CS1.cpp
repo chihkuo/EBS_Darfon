@@ -33,8 +33,8 @@ extern "C" {
     extern int      MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_bits);
     extern void     MakeReadDataCRC(unsigned char *,int );
     extern void     MClearRX();
-    extern void     MStartTX();
-    //extern unsigned char*   GetCyberPowerRespond(int iSize, int delay);
+    extern void     MStartTX(int fd);
+    extern unsigned char*   GetADtekRespond(int fd, int iSize, int delay);
 
     extern unsigned int     txsize;
     extern unsigned char    waitAddr, waitFCode;
@@ -45,6 +45,13 @@ extern "C" {
 
 ADtek_CS1::ADtek_CS1()
 {
+    m_addr = 0;
+    m_devid = 0;
+    m_busfd = 0;
+    m_env_temp = 0;
+    m_env_point = 0;
+    m_milist_size = 0;
+    m_loopflag = 0;
     m_sys_error = 0;
     m_do_get_TZ = false;
     m_st_time = NULL;
@@ -52,6 +59,10 @@ ADtek_CS1::ADtek_CS1()
 
     m_dl_config = {0};
     m_dl_path = {0};
+
+    memset(m_env_filename, 0x00, 128);
+    memset(m_log_filename, 0x00, 128);
+    memset(m_errlog_filename, 0x00, 128);
 }
 
 ADtek_CS1::~ADtek_CS1()
@@ -59,12 +70,12 @@ ADtek_CS1::~ADtek_CS1()
     //dtor
 }
 
-bool ADtek_CS1::Init(int com, bool open_com, bool first)
+int ADtek_CS1::Init(int com, bool open_com, bool first, int busfd)
 {
     char *port = NULL;
     char szbuf[32] = {0};
     char inverter_parity = 0;
-    bool ret = true;
+    int ret = 0;
 
     printf("#### ADtek CS1 Init Start ####\n");
 
@@ -85,8 +96,14 @@ bool ADtek_CS1::Init(int com, bool open_com, bool first)
             inverter_parity = 'E';
         else
             inverter_parity = 'N';
-        if ( MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits) != 0 )
-            ret = false;
+
+        m_busfd = MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits);
+        if ( m_busfd < 0 )
+            ret = -1;
+        else
+            ret = m_busfd;
+    } else {
+        m_busfd = busfd;
     }
 
     // get time zone
@@ -102,6 +119,65 @@ bool ADtek_CS1::Init(int com, bool open_com, bool first)
     printf("\n##### ADtek CS1 Init End #####\n");
 
     return ret;
+}
+
+void ADtek_CS1::GetEnv(int addr, int devid, time_t data_time, bool first, bool last)
+{
+    struct  stat st;
+
+    //m_current_time = time(NULL);
+    m_current_time = data_time;
+    m_st_time = localtime(&m_current_time);
+    // set path
+    SetPath();
+    SetEnvXML();
+    SetLogXML();
+    SetErrorLogXML();
+    CheckConfig();
+    CleanParameter();
+
+    m_addr = addr;
+    m_devid = devid;
+    m_loopflag = 0;
+
+    if ( stat(m_env_filename, &st) == 0 ) {
+        printf("======== %s exist! ========\n", m_env_filename);
+        return;
+    }
+
+    OpenLog(m_dl_path.m_syslog_path, m_st_time);
+
+    // if need, add here
+    //RunTODOList();
+
+    if ( GetTemp() )
+        ;
+    else
+        m_loopflag++;
+
+    if ( GetPoint() )
+        ;
+    else
+        m_loopflag++;
+
+    WriteEnvXML();
+    SaveEnvXML(first, last);
+
+    SaveLogXML(first, last);
+    SaveErrorLogXML(first, last);
+
+    WriteMIListXML(first, last);
+
+    SaveDeviceList(first, last);
+
+    //CloseLog(); // cancel, move to main loop execute at loop end
+    system("sync");
+
+    // get timezone if before not succss
+    if ( m_do_get_TZ )
+        GetTimezone();
+
+    return;
 }
 
 void ADtek_CS1::GetMAC()
@@ -300,6 +376,29 @@ bool ADtek_CS1::SetPath()
             printf("mkdir %s OK\n", m_dl_path.m_errlog_path);
     }
 
+    // set env path
+    memset(buf, 0, 256);
+    sprintf(buf, "%s/ENV", m_dl_path.m_xml_path);
+    if ( stat(buf, &st) == -1 ) {
+        printf("%s not exist, run mkdir!\n", buf);
+        if ( mkdir(buf, 0755) == -1 )
+            printf("mkdir %s fail!\n", buf);
+        else
+            printf("mkdir %s OK\n", buf);
+    }
+
+    // set env date path
+    memset(buf, 0, 256);
+    sprintf(buf, "%s/ENV/%4d%02d%02d", m_dl_path.m_xml_path, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
+    strcpy(m_dl_path.m_env_path, buf);
+    if ( stat(m_dl_path.m_env_path, &st) == -1 ) {
+        printf("%s not exist, run mkdir!\n", m_dl_path.m_env_path);
+        if ( mkdir(m_dl_path.m_env_path, 0755) == -1 )
+            printf("mkdir %s fail!\n", m_dl_path.m_env_path);
+        else
+            printf("mkdir %s OK\n", m_dl_path.m_env_path);
+    }
+
     // set BMS path
     sprintf(buf, "%s/BMS", m_dl_path.m_root_path);
     if ( stat(buf, &st) == -1 ) {
@@ -332,11 +431,12 @@ bool ADtek_CS1::SetPath()
             printf("mkdir %s OK\n", m_dl_path.m_syslog_path);
     }
 
-    printf("m_xml_path = %s\n", m_dl_path.m_xml_path);
-    printf("m_log_path = %s\n", m_dl_path.m_log_path);
+    printf("m_xml_path    = %s\n", m_dl_path.m_xml_path);
+    printf("m_log_path    = %s\n", m_dl_path.m_log_path);
     printf("m_errlog_path = %s\n", m_dl_path.m_errlog_path);
-    printf("m_bms_path = %s\n", m_dl_path.m_bms_path);
+    printf("m_env_path    = %s\n", m_dl_path.m_env_path);
     printf("m_syslog_path = %s\n", m_dl_path.m_syslog_path);
+    printf("m_bms_path    = %s\n", m_dl_path.m_bms_path);
 
     if ( mk_tmp_dir ) {
         // create /tmp XML dir
@@ -387,6 +487,25 @@ bool ADtek_CS1::SetPath()
                 printf("mkdir %s OK\n", tmpbuf);
         }
 
+        // create /tmp ENV dir
+        sprintf(tmpbuf, "%s/XML/ENV", DEF_PATH);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+        // create /tmp ENV date dir
+        sprintf(tmpbuf, "%s/XML/ENV/%4d%02d%02d", DEF_PATH, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
+        if ( stat(tmpbuf, &st) == -1 ) {
+            printf("%s not exist, run mkdir!\n", tmpbuf);
+            if ( mkdir(tmpbuf, 0755) == -1 )
+                printf("mkdir %s fail!\n", tmpbuf);
+            else
+                printf("mkdir %s OK\n", tmpbuf);
+        }
+
         // create /tmp BMS dir
         sprintf(tmpbuf, "%s/BMS", DEF_PATH);
         if ( stat(tmpbuf, &st) == -1 ) {
@@ -417,6 +536,62 @@ bool ADtek_CS1::SetPath()
         }
     }
     //printf("##### SetPath End #####\n");
+    return true;
+}
+
+void ADtek_CS1::CleanParameter()
+{
+    memset(m_env_buf, 0x00, AD_ENV_BUF_SIZE);
+    m_addr = 0;
+    m_devid = 0;
+    m_env_temp = 0;
+    m_env_point = 0;
+
+    return;
+}
+
+bool ADtek_CS1::CheckConfig()
+{
+    printf("#### CheckConfig start ####\n");
+
+    char buf[32] = {0};
+    FILE *fd = NULL;
+    int tmp = 0;
+
+    fd = popen("uci get dlsetting.@sms[0].sample_time", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+    } else {
+        fgets(buf, 32, fd);
+        pclose(fd);
+
+        sscanf(buf, "%d", &tmp);
+        printf("tmp sample_time = %d\n", tmp);
+
+        if ( m_dl_config.m_sample_time == tmp )
+            ;//printf("same sample_time\n");
+        else
+            m_dl_config.m_sample_time = tmp;
+    }
+
+    fd = popen("uci get dlsetting.@sms[0].delay_time", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+    } else {
+        fgets(buf, 32, fd);
+        pclose(fd);
+
+        sscanf(buf, "%d", &tmp);
+        printf("tmp delay_time = %d\n", tmp);
+
+        if ( m_dl_config.m_delay_time == tmp )
+            ;//printf("same delay\n");
+        else
+            m_dl_config.m_delay_time = tmp;
+    }
+
+    printf("#### CheckConfig end ####\n");
+
     return true;
 }
 
@@ -580,4 +755,599 @@ void ADtek_CS1::GetLocalTime()
     printf("######################################\n");
 
     return;
+}
+
+bool ADtek_CS1::GetTemp()
+{
+    printf("#### GetTemp start ####\n");
+
+    int err = 0;
+    byte *lpdata = NULL;
+
+    unsigned char cmd_buf[]={0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00};
+    cmd_buf[0] = m_devid;
+    MakeReadDataCRC(cmd_buf,8);
+
+    MClearRX();
+    txsize = 8;
+    waitAddr = m_devid;
+    waitFCode = 0x03;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, cmd_buf, 8);
+        MStartTX(m_busfd);
+        usleep(m_dl_config.m_delay_time*100);
+
+        lpdata = GetADtekRespond(m_busfd, 7, m_dl_config.m_delay_time*2);
+        if ( lpdata ) {
+            printf("#### GetTemp OK ####\n");
+            SaveLog((char *)"ADtek GetTemp() : OK", m_st_time);
+            DumpTemp(lpdata+3);
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### GetTemp CRC Error ####\n");
+                SaveLog((char *)"ADtek GetTemp() : CRC Error", m_st_time);
+            }
+            else {
+                printf("#### GetTemp No Response ####\n");
+                SaveLog((char *)"ADtek GetTemp() : No Response", m_st_time);
+            }
+            err++;
+        }
+    }
+
+    return false;
+}
+
+void ADtek_CS1::DumpTemp(unsigned char *buf)
+{
+    m_env_temp = (*(buf) << 8) + *(buf+1);
+
+    printf("##### Dump Temp #####\n");
+    printf("m_env_temp = %04X\n", m_env_temp);
+    printf("#####################\n");
+
+    return;
+}
+
+bool ADtek_CS1::GetPoint()
+{
+    printf("#### GetPoint start ####\n");
+
+    int err = 0;
+    byte *lpdata = NULL;
+
+    unsigned char cmd_buf[]={0x00, 0x03, 0x00, 0x08, 0x00, 0x01, 0x00, 0x00};
+    cmd_buf[0] = m_devid;
+    MakeReadDataCRC(cmd_buf,8);
+
+    MClearRX();
+    txsize = 8;
+    waitAddr = m_devid;
+    waitFCode = 0x03;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, cmd_buf, 8);
+        MStartTX(m_busfd);
+        usleep(m_dl_config.m_delay_time*100);
+
+        lpdata = GetADtekRespond(m_busfd, 7, m_dl_config.m_delay_time*2);
+        if ( lpdata ) {
+            printf("#### GetPoint OK ####\n");
+            SaveLog((char *)"ADtek GetPoint() : OK", m_st_time);
+            DumpPoint(lpdata+3);
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### GetPoint CRC Error ####\n");
+                SaveLog((char *)"ADtek GetPoint() : CRC Error", m_st_time);
+            }
+            else {
+                printf("#### GetPoint No Response ####\n");
+                SaveLog((char *)"ADtek GetPoint() : No Response", m_st_time);
+            }
+            err++;
+        }
+    }
+
+    return false;
+}
+
+void ADtek_CS1::DumpPoint(unsigned char *buf)
+{
+    m_env_point = (*(buf) << 8) + *(buf+1);
+
+    printf("##### Dump Point #####\n");
+    printf("m_env_point = %04X\n", m_env_point);
+    printf("#####################\n");
+
+    return;
+}
+
+void ADtek_CS1::SetEnvXML()
+{
+    sprintf(m_env_filename, "%s/%02d%02d", m_dl_path.m_env_path, m_st_time->tm_hour, m_st_time->tm_min);
+    printf("env path = %s\n", m_env_filename);
+    return;
+}
+
+void ADtek_CS1::SetLogXML()
+{
+    sprintf(m_log_filename, "%s/%02d%02d", m_dl_path.m_log_path, m_st_time->tm_hour, m_st_time->tm_min);
+    printf("log path = %s\n", m_log_filename);
+    return;
+}
+
+bool ADtek_CS1::SaveLogXML(bool first, bool last)
+{
+    FILE *fd = NULL;
+    struct stat filest;
+    char buf[256] = {0};
+    char tmp[256] = {0};
+    int filesize = 0, offset = 0, ret = 0;
+
+    if ( first ) {
+        fd = fopen("/tmp/tmplog", "wb");
+        if ( fd != NULL ) {
+            fwrite("<records>", 1, 9, fd);
+            filesize = 9;
+        }
+    } else {
+        stat("/tmp/tmplog", &filest);
+        filesize = filest.st_size;
+        fd = fopen("/tmp/tmplog", "ab");
+    }
+
+    if ( last ) {
+        fd = fopen("/tmp/tmplog", "ab");
+        strcat(buf, "</records>");
+        while ( (strlen(buf) + filesize) % 3 != 0 ) {
+            buf[strlen(buf)] = 0x20; // add space to end
+        }
+    }
+
+    if ( fd != NULL ) {
+        fwrite(buf, 1, strlen(buf), fd);
+        filesize += strlen(buf);
+        //printf("Log filesize = %d\n", filesize);
+        fclose(fd);
+    } else {
+        SaveLog((char *)"ADtek_CS1 SaveLogXML() : open /tmp/tmplog Fail", m_st_time);
+        printf("open /tmp/tmplog Fail!\n");
+        return false;
+    }
+
+    if ( !last )
+        return true;
+    else {
+        if ( filesize < 42 ) {
+            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            return true;
+        }
+    }
+
+    // copy file to target
+    sprintf(buf, "cp /tmp/tmplog %s", m_log_filename);
+    ret = system(buf);
+    if ( ret == 0 ) {
+        sprintf(buf, "ADtek_CS1 SaveLogXML() : write %s OK", m_log_filename);
+        SaveLog(buf, m_st_time);
+        if ( strstr(m_log_filename, USB_PATH) )
+            m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+        return true;
+    } else {
+        sprintf(buf, "ADtek_CS1 SaveLogXML() : write %s Fail", m_log_filename);
+        SaveLog(buf, m_st_time);
+        if ( strstr(m_log_filename, USB_PATH) )
+            m_sys_error |= SYS_0002_Save_USB_Fail;
+    }
+
+    // if copy file to storage fail, then copy to tmp
+    if ( strstr(m_log_filename, DEF_PATH) == NULL ) {
+        strcpy(tmp, DEF_PATH);
+        if ( strstr(m_log_filename, USB_PATH) != NULL )
+            offset = strlen(USB_PATH);
+        // save to tmp
+        strcat(tmp, m_log_filename+offset);
+        sprintf(buf, "cp /tmp/tmplog %s", tmp);
+        ret = system(buf);
+        if ( ret == 0 ) {
+            SaveLog((char *)"ADtek_CS1 SaveLogXML() : write to tmp OK", m_st_time);
+            return true;
+        } else {
+            SaveLog((char *)"ADtek_CS1 SaveLogXML() : write to tmp Fail", m_st_time);
+            return false;
+        }
+    }
+
+    return false;
+}
+
+void ADtek_CS1::SetErrorLogXML()
+{
+    sprintf(m_errlog_filename, "%s/%02d%02d", m_dl_path.m_errlog_path, m_st_time->tm_hour, m_st_time->tm_min);
+    printf("errlog path = %s\n", m_errlog_filename);
+    return;
+}
+
+bool ADtek_CS1::SaveErrorLogXML(bool first, bool last)
+{
+    FILE *fd = NULL;
+    struct stat filest;
+    char buf[256] = {0};
+    char tmp[256] = {0};
+    int filesize = 0, offset = 0, ret = 0;
+
+    if ( first ) {
+        fd = fopen("/tmp/tmperrlog", "wb");
+        if ( fd != NULL ) {
+            fwrite("<records>", 1, 9, fd);
+            filesize = 9;
+        }
+    } else {
+        stat("/tmp/tmperrlog", &filest);
+        filesize = filest.st_size;
+        fd = fopen("/tmp/tmperrlog", "ab");
+    }
+
+    if ( last ) {
+        strcat(buf, "</records>");
+        while ( (strlen(buf) + filesize) % 3 != 0 ) {
+            buf[strlen(buf)] = 0x20; // add space to end
+        }
+    }
+
+    if ( fd != NULL ) {
+        fwrite(buf, 1, strlen(buf), fd);
+        filesize += strlen(buf);
+        //printf("Errlog filesize = %d\n", filesize);
+        fclose(fd);
+    } else {
+        SaveLog((char *)"ADtek_CS1 SaveErrorLogXML() : open /tmp/tmperrlog Fail", m_st_time);
+        printf("open /tmp/tmperrlog Fail!\n");
+        return false;
+    }
+
+    if ( !last )
+        return true;
+    else {
+        if ( filesize < 42 ) {
+            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            return true;
+        }
+    }
+
+    // copy file to target
+    sprintf(buf, "cp /tmp/tmperrlog %s", m_errlog_filename);
+    ret = system(buf);
+    if ( ret == 0 ) {
+        sprintf(buf, "ADtek_CS1 SaveErrorLogXML() : write %s OK", m_errlog_filename);
+        SaveLog(buf, m_st_time);
+        if ( strstr(m_errlog_filename, USB_PATH) )
+            m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+        return true;
+    } else {
+        sprintf(buf, "ADtek_CS1 SaveErrorLogXML() : write %s Fail", m_errlog_filename);
+        SaveLog(buf, m_st_time);
+        if ( strstr(m_errlog_filename, USB_PATH) )
+            m_sys_error |= SYS_0002_Save_USB_Fail;
+    }
+
+    // if copy file to storage fail, then copy to tmp
+    if ( strstr(m_errlog_filename, DEF_PATH) == NULL ) {
+        strcpy(tmp, DEF_PATH);
+        if ( strstr(m_errlog_filename, USB_PATH) != NULL )
+            offset = strlen(USB_PATH);
+        // save to tmp
+        strcat(tmp, m_errlog_filename+offset);
+        sprintf(buf, "cp /tmp/tmperrlog %s", tmp);
+        ret = system(buf);
+        if ( ret == 0 ) {
+            SaveLog((char *)"ADtek_CS1 SaveErrorLogXML() : write to tmp OK", m_st_time);
+            return true;
+        } else {
+            SaveLog((char *)"ADtek_CS1 SaveErrorLogXML() : write to tmp Fail", m_st_time);
+            return false;
+        }
+    }
+
+    return false;
+}
+
+bool ADtek_CS1::WriteEnvXML()
+{
+    char buf[256] = {0};
+    float value = 0;
+
+    SaveLog((char *)"ADtek_CS1 WriteEnvXML() : run", m_st_time);
+
+    printf("==================== Set Env XML start ====================\n");
+    sprintf(buf, "<record dev_id=\"%d\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"\">", m_devid,
+            1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
+            m_st_time->tm_hour, m_st_time->tm_min);
+    strcat(m_env_buf, buf);
+
+    switch (m_env_point)
+    {
+        case 0:
+            sprintf(buf, "<Temperature>%d</Temperature>", m_env_temp);
+            break;
+        case 1:
+            value = (float)m_env_temp*0.1;
+            sprintf(buf, "<Temperature>%.1f</Temperature>", value);
+            break;
+        case 2:
+            value = (float)m_env_temp*0.01;
+            sprintf(buf, "<Temperature>%.2f</Temperature>", value);
+            break;
+        case 3:
+            value = (float)m_env_temp*0.001;
+            sprintf(buf, "<Temperature>%.3f</Temperature>", value);
+            break;
+        case 4:
+            value = (float)m_env_temp*0.0001;
+            sprintf(buf, "<Temperature>%.4f</Temperature>", value);
+            break;
+        default:
+            printf("Out of range!\n");
+    }
+    strcat(m_env_buf, buf);
+
+    strcat(m_env_buf, "</record>");
+    printf("m_env_buf = \n%s\n", m_env_buf);
+    printf("===================== Set Env XML end =====================\n");
+
+    return true;
+}
+
+bool ADtek_CS1::SaveEnvXML(bool first, bool last)
+{
+    FILE *fd = NULL;
+    struct stat filest;
+    char buf[256] = {0};
+    char tmp[256] = {0};
+    int filesize = 0, offset = 0, ret = 0;
+
+    if ( first ) {
+        fd = fopen("/tmp/tmpenv", "wb");
+        if ( fd != NULL ) {
+            fwrite("<records>", 1, 9, fd);
+            filesize = 9;
+        }
+    } else {
+        stat("/tmp/tmpenv", &filest);
+        filesize = filest.st_size;
+        fd = fopen("/tmp/tmpenv", "ab");
+    }
+
+    if ( last ) {
+        strcat(m_env_buf, "</records>");
+        while ( (strlen(m_env_buf) + filesize) % 3 != 0 ) {
+            m_env_buf[strlen(m_env_buf)] = 0x20; // add space to end
+        }
+    }
+
+    if ( fd != NULL ) {
+        fwrite(m_env_buf, 1, strlen(m_env_buf), fd);
+        filesize += strlen(m_env_buf);
+        //printf("Log filesize = %d\n", filesize);
+        fclose(fd);
+    } else {
+        SaveLog((char *)"ADtek_CS1 SaveEnvXML() : open /tmp/tmpenv Fail", m_st_time);
+        printf("open /tmp/tmpenv Fail!\n");
+        return false;
+    }
+
+    if ( !last )
+        return true;
+    else {
+        if ( filesize < 42 ) {
+            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            return true;
+        }
+    }
+
+    // copy file to target
+    sprintf(buf, "cp /tmp/tmpenv %s", m_env_filename);
+    ret = system(buf);
+    if ( ret == 0 ) {
+        sprintf(buf, "ADtek_CS1 SaveEnvXML() : write %s OK", m_env_filename);
+        SaveLog(buf, m_st_time);
+        //if ( strstr(m_env_filename, USB_PATH) )
+        //    m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+        return true;
+    } else {
+        sprintf(buf, "ADtek_CS1 SaveEnvXML() : write %s Fail", m_env_filename);
+        SaveLog(buf, m_st_time);
+        //if ( strstr(m_env_filename, USB_PATH) )
+        //    m_sys_error |= SYS_0002_Save_USB_Fail;
+    }
+
+    // if copy file to storage fail, then copy to tmp
+    if ( strstr(m_env_filename, DEF_PATH) == NULL ) {
+        strcpy(tmp, DEF_PATH);
+        if ( strstr(m_env_filename, USB_PATH) != NULL )
+            offset = strlen(USB_PATH);
+        // save to tmp
+        strcat(tmp, m_env_filename+offset);
+        sprintf(buf, "cp /tmp/tmpenv %s", tmp);
+        ret = system(buf);
+        if ( ret == 0 ) {
+            SaveLog((char *)"ADtek_CS1 SaveEnvXML() : write to tmp OK", m_st_time);
+            return true;
+        } else {
+            SaveLog((char *)"ADtek_CS1 SaveEnvXML() : write to tmp Fail", m_st_time);
+            return false;
+        }
+    }
+
+    return false;
+}
+
+bool ADtek_CS1::WriteMIListXML(bool first, bool last)
+{
+    char buf[256] = {0};
+    char tmp[256] = {0};
+    int listsize = 0;
+    struct stat filest;
+    FILE *pFile = NULL;
+
+    //GetLocalTime(); // cancel, GetData set time already
+
+    sprintf(buf, "/tmp/tmpMIList");
+
+    if ( first )
+        pFile = fopen(buf, "wb");
+    else
+        pFile = fopen(buf, "ab");
+    if ( pFile == NULL ) {
+        printf("open %s fail\n", buf);
+        sprintf(tmp, "ADtek_CS1 WriteMIListXML() : fopen %s fail", buf);
+        SaveLog(tmp, m_st_time);
+        return false;
+    }
+
+    printf("==================== ADtek_CS1 Set MIList XML start ====================\n");
+    if ( first )
+        fputs("<records>\n", pFile);
+
+    fputs("\t<record>\n", pFile);
+
+    sprintf(buf, "\t\t<port>COM%d</port>\n", m_dl_config.m_inverter_port);
+    //printf("%s", buf);
+    fputs(buf, pFile);
+
+    sprintf(buf, "\t\t<slaveId>%d</slaveId>\n", m_addr);
+    //printf("%s", buf);
+    fputs(buf, pFile);
+
+    sprintf(buf, "\t\t<Manufacturer>ADtek</Manufacturer>\n");
+    //printf("%s", buf);
+    fputs(buf, pFile);
+
+    sprintf(buf, "\t\t<Model>ADtek-CS1-T</Model>\n");
+    //printf("%s", buf);
+    fputs(buf, pFile);
+
+    fputs("\t\t<OtherType>0</OtherType>\n", pFile);
+
+    sprintf(buf, "\t\t<dev_id>%d</dev_id>\n", m_devid);
+    //printf("%s", buf);
+    fputs(buf, pFile);
+
+    fputs("\t</record>\n", pFile);
+
+    if ( last )
+        fputs("</records>", pFile);
+    printf("===================== Set MIList XML end =====================\n");
+
+    fclose(pFile);
+
+    if ( last ) {
+        system("sync");
+        stat("/tmp/tmpMIList", &filest);
+        listsize = filest.st_size;
+        //printf("listsize = %d\n", listsize);
+        if ( m_milist_size != listsize ) {
+            // clean old MIList
+            printf("clean old MIList\n");
+            system("rm /tmp/MIList_*");
+            sprintf(buf, "cp /tmp/tmpMIList /tmp/MIList_%4d%02d%02d_%02d%02d00",
+                    1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
+                    m_st_time->tm_hour, m_st_time->tm_min);
+            printf("run command : \n%s\n", buf);
+            system(buf);
+            m_milist_size = listsize;
+        }
+    }
+
+    SaveLog((char *)"DataLogger WriteMIListXML() : OK", m_st_time);
+
+    return true;
+}
+
+bool ADtek_CS1::SaveDeviceList(bool first, bool last)
+{
+    FILE *pFile;
+    char buf[256] = {0};
+    int state = 0, offset = 0;
+    char *index_tmp = NULL, *index_start = NULL, *index_end = NULL;
+
+    printf("#### ADtek_CS1 SaveDeviceList Start ####\n");
+
+    if ( first )
+        pFile = fopen(DEVICELIST_TMP, "w");
+    else
+        pFile = fopen(DEVICELIST_TMP, "a");
+    if ( pFile == NULL ) {
+        printf("#### SaveDeviceList open file Fail ####\n");
+        SaveLog((char *)"ADtek_CS1 SaveDeviceList() : fopen fail", m_st_time);
+        return false;
+    }
+
+    if ( m_loopflag == 2 )
+        state = 0; // off line
+    else
+        state = 1; // on line
+
+    // addr fixed 3 digit, state fixed 1 digit, sn
+    sprintf(buf, "%03d <SN>Temperature</SN> <STATE>%d</STATE> <DEVICE>ADtek-CS1-T</DEVICE> ", m_addr, state);
+
+    if (state) {
+        // set log data
+        index_tmp = strstr(m_env_buf, "<record dev_id=");
+        if ( index_tmp != NULL ) {
+            if ( index_tmp - m_env_buf > 80)
+                index_start = strstr(index_tmp-80, "<record dev_id=");
+            else
+                index_start = strstr(m_env_buf, "<record dev_id=");
+
+            index_end = strstr(index_start, "</record>");
+            offset = index_end - index_start + 9;
+            strcat(buf, "<ENERGY>");
+            strncat(buf, index_start, offset);
+            strcat(buf, "</ENERGY>");
+
+        } else {
+            printf("index_tmp = NULL!\n");
+            strcat(buf, "Empty");
+        }
+
+        strcat(buf, "Empty");
+        // set error log data
+        /*index_tmp = strstr(m_errlog_buf, m_cp_sn.SN);
+        if ( index_tmp != NULL ) {
+            if ( index_tmp - m_errlog_buf > 80)
+                index_start = strstr(index_tmp-80, "<record dev_id=");
+            else
+                index_start = strstr(m_errlog_buf, "<record dev_id=");
+
+            index_end = strstr(index_start, "</record>");
+            offset = index_end - index_start + 9;
+            strcat(buf, "<ERROR>");
+            strncat(buf, index_start, offset);
+            strcat(buf, "</ERROR>");
+        } else {
+            printf("index_tmp = NULL!\n");
+            strcat(buf, "Empty");
+        }*/
+    } else
+        strcat(buf, "Empty Empty");
+
+    fputs(buf, pFile);
+    fputc('\n', pFile);
+
+    fclose(pFile);
+
+    if ( last ) {
+        sprintf(buf, "cp -f %s %s", DEVICELIST_TMP, DEVICELIST_PATH);
+        system(buf);
+        system("sync");
+    }
+
+    printf("#### SaveDeviceList OK ####\n");
+    SaveLog((char *)"ADtek_CS1 SaveDeviceList() : OK", m_st_time);
+
+    return true;
 }

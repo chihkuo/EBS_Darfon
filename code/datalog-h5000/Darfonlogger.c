@@ -975,11 +975,11 @@ void SendSyncOffLineQuery()
     txsize=8;
     waitFCode = 0x00;
     BuildMessage(0, 0x00, 0x05, g_MODValue);
-    MStartTX();
+    //MStartTX();
     writeLog("SendSyncOffLineQuery ououou!");
 }
 
-int MySyncOffLineQuery(byte addr, byte  MOD, byte buf[], int buf_size)
+int MySyncOffLineQuery(int fd, byte addr, byte  MOD, byte buf[], int buf_size)
 {
     memset(buf, 0x00, buf_size);
     int ret = 0;
@@ -990,7 +990,7 @@ int MySyncOffLineQuery(byte addr, byte  MOD, byte buf[], int buf_size)
     waitAddr = addr;
     waitFCode = 0x00;
     BuildMessage(addr, 0x00, 0x05, MOD);
-    MStartTX();
+    MStartTX(fd);
     writeLog("SendSyncOffLineQuery exit!\n");
     usleep(1000000); //1s
     /*byte *pbuf = GetRespond(13, 200);
@@ -1001,7 +1001,7 @@ int MySyncOffLineQuery(byte addr, byte  MOD, byte buf[], int buf_size)
 	    return 0;
 	}*/
 
-	ret = GetQuery(buf, buf_size);
+	ret = GetQuery(fd, buf, buf_size);
 	return ret;
 }
 
@@ -1036,7 +1036,7 @@ void SendOffLineQuery()
     txsize=8;
     waitFCode = 0x00;
     BuildMessage(0, 0x00, 0x00, 4);
-    MStartTX();
+    //MStartTX();
 }
 
 
@@ -1060,7 +1060,7 @@ void OffLineQuery()
 	}
 }
 
-int MyOffLineQuery(unsigned char addr, unsigned char buf[], int buf_size)
+int MyOffLineQuery(int fd, unsigned char addr, unsigned char buf[], int buf_size)
 {
     memset(buf, 0x00, buf_size);
     int ret = 0;
@@ -1071,7 +1071,7 @@ int MyOffLineQuery(unsigned char addr, unsigned char buf[], int buf_size)
     waitAddr = addr;
     waitFCode = 0x00;
     BuildMessage(addr, 0x00, 0x00, 4);
-    MStartTX();
+    MStartTX(fd);
     printf("Darfonlogger:MyOffLineQuery exit!\n");
     //usleep(1000000);
     usleep(100000);
@@ -1090,7 +1090,7 @@ int MyOffLineQuery(unsigned char addr, unsigned char buf[], int buf_size)
         return -1;
     */
 
-    ret = GetQuery(buf, buf_size);
+    ret = GetQuery(fd, buf, buf_size);
 	return ret;
 }
 
@@ -1102,7 +1102,7 @@ void SendTestAAQuery()
     txsize=1;
     txbuffer[0] = 0xAA;
 
-    MStartTX();
+    //MStartTX();
 }
 
 
@@ -1114,11 +1114,11 @@ void SendRemoveAllRegisterQuery()
     waitFCode = 0xFE;
     BuildMessage(0, 0xFE, 0x02, 0);
     DEBUG2(printf("SendRemoveAllRegisterQuery "));
-    MStartTX();
+    //MStartTX();
     printf("SendRemoveAllRegisterQuery exit");
 }
 
-void RemoveRegisterQuery(byte byAddr)
+void RemoveRegisterQuery(int fd, byte byAddr)
 {
     printf("SendRemoveAllRegisterQuery enter\n");
     MClearRX();
@@ -1126,10 +1126,10 @@ void RemoveRegisterQuery(byte byAddr)
     waitFCode = 0xFE;
     BuildMessage(byAddr, 0xFE, 0x02, 0);
     //DEBUG2(printf("RemoveRegisterQuery "));
-    MStartTX();
+    MStartTX(fd);
     printf("RemoveRegisterQuery exit\n");
 }
-void SendAllocatedAddress(byte UniID[], unsigned int AllocatedAddress)
+void SendAllocatedAddress(int fd, byte UniID[], unsigned int AllocatedAddress)
 {
     byte  buf[1024];
     byte  messageZigbee[19+16];
@@ -1159,7 +1159,7 @@ void SendAllocatedAddress(byte UniID[], unsigned int AllocatedAddress)
     printf("SendAllocatedAddress\n");
 
     //printf(txbuffer);
-    MStartTX();
+    MStartTX(fd);
 }
 
 void SendForceSingleCoilFC5(int SlaveID, int StartAddress,  unsigned int PresetDataHi, unsigned int PresetDataLo)
@@ -1179,7 +1179,7 @@ void SendForceSingleCoilFC5(int SlaveID, int StartAddress,  unsigned int PresetD
     txbuffer[txsize - 2]= (unsigned char) (crc >> 8);
     txbuffer[txsize - 1]= (unsigned char) (crc&0x00ff);
     DEBUG2(printf("SendForceSingleCoilFC5 "));
-    MStartTX();
+    //MStartTX();
 }
 
 void SendWriteMultipleRegisterFc0x10(int SlaveID,int StartAddress,int RegisterQuantity, int values[])
@@ -1198,7 +1198,7 @@ void SendWriteMultipleRegisterFc0x10(int SlaveID,int StartAddress,int RegisterQu
     }
     BuildMessage(SlaveID, 16, StartAddress, RegisterQuantity);
     DEBUG2(printf("SendWriteMultipleRegisterFc0x10 "));
-    MStartTX();
+    //MStartTX();
 }
 
 int SetParameter(int SlaveID, int StartAddress, int RegisterQuantity, unsigned int par[])
@@ -1680,19 +1680,19 @@ void MyWriteAllMIDataToRAM(bool force, bool UpdateAll)
 
     while (1) {
       memcpy(txbuffer, szMIinfo, 8);
-	  MStartTX();
+	  //MStartTX();
 	  usleep(1000000);
-	  lpdata = GetRespond(19, 200);
+	  //lpdata = GetRespond(m_busfd, 19, 200);
 	  if (lpdata) {
 	    DumpMiInfo(lpdata, &g_miInfo);
 	  } else {
 	    break; // error
 	  }
       memcpy(txbuffer, szXX, 8);
-	  MStartTX();
+	  //MStartTX();
 	  usleep(1000000);
 
-	  lpdata = GetRespond(71, 200);
+	  //lpdata = GetRespond(m_busfd, 71, 200);
 	  /*
 	  if (lpdata) {
 	    Dumpdata(lpdata, &g_miInfo);
@@ -1707,7 +1707,7 @@ void MyWriteAllMIDataToRAM(bool force, bool UpdateAll)
 }
 
 
-int MyAssignAddress(unsigned char *ID, unsigned char Addr)
+int MyAssignAddress(int fd, unsigned char *ID, unsigned char Addr)
 {
     byte  *pdata;
     int errorcount=0;
@@ -1718,7 +1718,7 @@ int MyAssignAddress(unsigned char *ID, unsigned char Addr)
         //DEBUG2(printf("%s\n",ID));
 
         //DefaultSlaveID=3;
-        SendAllocatedAddress(ID, Addr);
+        SendAllocatedAddress(fd, ID, Addr);
         //usleep(1000000);
         if ( errorcount == 0 )
             usleep(10000);
@@ -1726,7 +1726,7 @@ int MyAssignAddress(unsigned char *ID, unsigned char Addr)
             usleep(50000);
         else
             usleep(100000);
-        pdata = GetRespond(8, 200);
+        pdata = GetRespond(fd, 8, 200);
         if (pdata) {
             return 1;
         }
@@ -1735,7 +1735,7 @@ int MyAssignAddress(unsigned char *ID, unsigned char Addr)
     return 0;
 }
 
-int MyStartRegisterProcess(byte *psn)
+int MyStartRegisterProcess(int fd, byte *psn)
 {
 	int RegisterLoopCount = 0;
     int DefaultMODValue=20;
@@ -1750,7 +1750,7 @@ int MyStartRegisterProcess(byte *psn)
     while (trytimes <3) {
        //writeLog("MyAssignAddress: enter!\n ");
 //printf(g_dlData.g_plcid);
-       if (MyAssignAddress(psn, 3)==1) {
+       if (MyAssignAddress(fd, psn, 3)==1) {
             break;
        }
        trytimes++;
@@ -2120,9 +2120,9 @@ int SendForceCoil(unsigned char SlaveID, unsigned char StartAddress,  unsigned i
     txbuffer[txsize - 1]= (unsigned char) (crc&0x00ff);
 
     while ( err < 3 ) {
-        MStartTX();
+        //MStartTX();
         usleep(1000000);
-        lpdata = GetRespond(8, 200);
+        //lpdata = GetRespond(m_busfd, 8, 200);
         if (lpdata) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("SendForceCoil CheckCRC OK\n");

@@ -129,7 +129,7 @@ class CyberPower
         CyberPower();
         virtual ~CyberPower();
 
-        bool    Init(int com, bool open_com, bool first);
+        int     Init(int com, bool open_com, bool first, int busfd);
 
         void    Get1PData(int addr, int devid, time_t data_time, bool first, bool last);
         //void    Get3PData(int addr, time_t data_time, bool first, bool last);
@@ -161,12 +161,15 @@ class CyberPower
         void        SetErrorLogXML();
         bool        WriteErrorLogXML();
         bool        SaveErrorLogXML(bool first, bool last);
+        void        SetEnvXML();
+        bool        SaveEnvXML(bool first, bool last);
 
         bool        SaveDeviceList(bool first, bool last, int device);
         bool        WriteMIListXML(bool first, bool last, int device);
 
         int         m_addr;
         int         m_devid;
+        int         m_busfd;
         int         m_milist_size;
         int         m_loopflag;
         int         m_get_error;
@@ -189,6 +192,7 @@ class CyberPower
         char        m_log_filename[128];
         char        m_errlog_buf[CP_LOG_BUF_SIZE];
         char        m_errlog_filename[128];
+        char        m_env_filename[128];
 
     private:
 };

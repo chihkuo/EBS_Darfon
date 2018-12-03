@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#define VERSION         "2.0.3"
+#define VERSION         "2.0.4"
 #define MODEL_LIST_PATH "/usr/home/ModelList"
 #define MODEL_NUM       1020 //255*4
 
@@ -23,6 +23,7 @@ int  AllRegister(time_t time);
 void GetAllData(time_t data_time);
 void Show_State();
 void Show_Time(struct tm *st_time);
+void Set_Sampletime(int num);
 
 typedef struct system_config {
     int sample_time;
@@ -43,6 +44,8 @@ MODEL_LIST MList[MODEL_NUM] = {0};
 
 bool COM_OPENED[4] = {0};
 
+int BUS_FD[4] = {0};
+
 using namespace std;
 
 extern "C" {
@@ -58,7 +61,8 @@ int main(int argc, char* argv[])
     int previous_hour = 24;
     int reregister_hour = 24;
     int allregister_day = 0;
-    time_t sys_current_time = 0;
+    int state = 0;
+    time_t sys_current_time = 0, start_time = 0, end_time = 0, span_time = 0;
     time_t get_data_time = 0;
     struct tm *sys_st_time = NULL;
 
@@ -94,6 +98,7 @@ int main(int argc, char* argv[])
 
     while (1) {
         // get system time
+        span_time = 0;
         sys_current_time = time(NULL);
         sys_st_time = localtime(&sys_current_time);
         if ( sys_st_time->tm_sec % 10 == 0 )
@@ -103,6 +108,8 @@ int main(int argc, char* argv[])
         if ( ( (previous_min != sys_st_time->tm_min) || ((previous_min == sys_st_time->tm_min) && (previous_hour != sys_st_time->tm_hour)) )
             && (sys_st_time->tm_min % SConfig.sample_time == 0) ) {
         //if (1) {
+            start_time = sys_current_time;
+
             printf("==== Run main loop start ====\n");
             previous_min = sys_st_time->tm_min;
             previous_hour = sys_st_time->tm_hour;
@@ -115,6 +122,15 @@ int main(int argc, char* argv[])
             Show_State();
             GetAllData(get_data_time);
             ////////////
+            end_time = time(NULL);
+            span_time = end_time - start_time;
+            if ( state == 0 )
+                state = 1;
+            else if ( state == 1 ) {
+                Set_Sampletime((int)span_time/60+1);
+                state = 2;
+            } else if ( state == 2 )
+                ;
 
             printf("======= main loop end =======\n");
         }
@@ -168,8 +184,11 @@ bool GetModelList()
         return false;
     }
     // clean addr, reload model list addr again
-    for (i = 0; i < MODEL_NUM; i++)
+    for (i = 0; i < MODEL_NUM; i++) {
         MList[i].addr = 0;
+        MList[i].first = false;
+        MList[i].last = false;
+    }
     while ( fgets(buf, 128, pfile) != NULL ) {
         if ( strlen(buf) == 0 )
             break;
@@ -242,7 +261,8 @@ void Init()
                                 initenv((char *)"/usr/home/G320.ini");
                                 if ( pg320 == NULL )
                                     pg320 = new CG320;
-                                if ( pg320->Init(MList[i].devid, MList[i].port, true, MList[i].first) ) {
+                                BUS_FD[MList[i].port-1] = pg320->Init(MList[i].devid, MList[i].port, true, MList[i].first, 0);
+                                if ( BUS_FD[MList[i].port-1] > 0 ) {
                                     COM_OPENED[MList[i].port-1] = true;
                                     MList[i].init = 1;
                                 }
@@ -252,7 +272,7 @@ void Init()
                                     initenv((char *)"/usr/home/G320.ini");
                                     if ( pg320 == NULL )
                                         pg320 = new CG320;
-                                    if ( pg320->Init(MList[i].devid, MList[i].port, false, false) ) {
+                                    if ( pg320->Init(MList[i].devid, MList[i].port, false, false, BUS_FD[MList[i].port-1]) == 0 ) {
                                         MList[i].init = 1;
                                     }
                                 }
@@ -267,7 +287,8 @@ void Init()
                                 initenv((char *)"/usr/home/G320.ini");
                                 if ( pcyberpower == NULL )
                                     pcyberpower = new CyberPower;
-                                if ( pcyberpower->Init(MList[i].port, true, MList[i].first) ) {
+                                BUS_FD[MList[i].port-1] = pcyberpower->Init(MList[i].port, true, MList[i].first, 0);
+                                if ( BUS_FD[MList[i].port-1] > 0 ) {
                                     COM_OPENED[MList[i].port-1] = true;
                                     MList[i].init = 1;
                                 }
@@ -277,7 +298,7 @@ void Init()
                                     initenv((char *)"/usr/home/G320.ini");
                                     if ( pcyberpower == NULL )
                                         pcyberpower = new CyberPower;
-                                    if ( pcyberpower->Init(MList[i].port, false, false) ) {
+                                    if ( pcyberpower->Init(MList[i].port, false, false, BUS_FD[MList[i].port-1]) == 0 ) {
                                         MList[i].init = 1;
                                     }
                                 }
@@ -291,7 +312,8 @@ void Init()
                                 initenv((char *)"/usr/home/G320.ini");
                                 if ( adtekcs1 == NULL )
                                     adtekcs1 = new ADtek_CS1;
-                                if ( adtekcs1->Init(MList[i].port, true, MList[i].first) ) {
+                                BUS_FD[MList[i].port-1] = adtekcs1->Init(MList[i].port, true, MList[i].first, 0);
+                                if ( BUS_FD[MList[i].port-1] > 0 ) {
                                     COM_OPENED[MList[i].port-1] = true;
                                     MList[i].init = 1;
                                 }
@@ -301,7 +323,7 @@ void Init()
                                     initenv((char *)"/usr/home/G320.ini");
                                     if ( adtekcs1 == NULL )
                                         adtekcs1 = new ADtek_CS1;
-                                    if ( adtekcs1->Init(MList[i].port, false, false) ) {
+                                    if ( adtekcs1->Init(MList[i].port, false, false, BUS_FD[MList[i].port-1]) == 0 ) {
                                         MList[i].init = 1;
                                     }
                                 }
@@ -313,6 +335,7 @@ void Init()
                             printf("%d Test init start~\n", MList[i].addr);
                             if ( COM_OPENED[MList[i].port-1] == false ) {
                                 printf("Do open com port %d init\n", MList[i].port);
+                                BUS_FD[MList[i].port-1] = 99;
                                 COM_OPENED[MList[i].port-1] = true;
                                 MList[i].init = 1;
                             } else {
@@ -467,6 +490,11 @@ void GetAllData(time_t data_time)
                     //pcyberpower->Get3PData(MList[i].addr, MList[i].devid, data_time, MList[i].first, MList[i].last);
                     printf("CyberPower Get3PData end.\n");
                     break;
+                case ID_ADtekCS1T:
+                    printf("%d ID_ADtekCS1T GetEnv %d start~\n", MList[i].addr, MList[i].devid);
+                    adtekcs1->GetEnv(MList[i].addr, MList[i].devid, data_time, MList[i].first, MList[i].last);
+                    printf("ADtekCS1T GetEnv end.\n");
+                    break;
                 case ID_Test:
                     // for test
                     printf("%d Test getdata start~\n", MList[i].addr);
@@ -491,6 +519,14 @@ void GetAllData(time_t data_time)
                             fclose(pFile);
                         }
 
+                        pFile = fopen("/tmp/tmpenv", "wb");
+                        if ( pFile != NULL ) {
+                            fwrite("<records>", 1, 9, pFile);
+                            sprintf(buf, "<test env id = %d>", MList[i].addr);
+                            fwrite(buf, 1, strlen(buf), pFile);
+                            fclose(pFile);
+                        }
+
                         pFile = fopen("/tmp/tmpMIList", "wb");
                         if ( pFile != NULL ) {
                             fwrite("<records>\n", 1, 10, pFile);
@@ -509,6 +545,13 @@ void GetAllData(time_t data_time)
                         pFile = fopen("/tmp/tmperrlog", "ab");
                         if ( pFile != NULL ) {
                             sprintf(buf, "<test errlog id = %d>", MList[i].addr);
+                            fwrite(buf, 1, strlen(buf), pFile);
+                            fclose(pFile);
+                        }
+
+                        pFile = fopen("/tmp/tmpenv", "ab");
+                        if ( pFile != NULL ) {
+                            sprintf(buf, "<test env id = %d>", MList[i].addr);
                             fwrite(buf, 1, strlen(buf), pFile);
                             fclose(pFile);
                         }
@@ -566,6 +609,26 @@ void GetAllData(time_t data_time)
                             system(buf);
                         }
 
+                        if ( stat("/tmp/tmpenv", &filest) == 0 )
+                            filesize = filest.st_size;
+                        else
+                            filesize = 0;
+                        pFile = fopen("/tmp/tmpenv", "ab");
+                        if ( pFile != NULL ) {
+                            fwrite("</records>", 1, 10, pFile);
+                            filesize += 10;
+                            while ( filesize%3 != 0 ) {
+                                fwrite(" ", 1, 1, pFile);
+                                filesize++;
+                            }
+                            fclose(pFile);
+                        }
+                        if ( filesize > 50 ) {
+                            sprintf(buf, "cp /tmp/tmpenv /tmp/test/XML/ENV/%04d%02d%02d/%02d%02d",
+                                        1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday, st_time->tm_hour, st_time->tm_min);
+                            system(buf);
+                        }
+
                         if ( stat("/tmp/tmpMIList", &filest) == 0 )
                             filesize = filest.st_size;
                         else
@@ -616,6 +679,9 @@ void Show_State()
             printf("[%03d] Addr = %03d, devid = %d, port = %d, model_index = %d, init = %d, first = %d, lase = %d, model = %s\n",
                 i, MList[i].addr, MList[i].devid, MList[i].port, MList[i].model_index, MList[i].init, MList[i].first, MList[i].last, MList[i].model);
     }
+    for (i = 0; i < 4; i++) {
+        printf("Port %d fd = %d\n", i, BUS_FD[i]);
+    }
     printf("================================================================================================================\n");
 
     return;
@@ -627,6 +693,27 @@ void Show_Time(struct tm *st_time)
     printf("localtime : %4d/%02d/%02d ", 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday);
     printf("day[%d] %02d:%02d:%02d\n", st_time->tm_wday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
     printf("#######################################\n");
+
+    return;
+}
+
+void Set_Sampletime(int num)
+{
+    char buf[256] = {0};
+
+    if ( num <= 0 )
+        return;
+
+    printf("############## Set Sample Time ##############\n");
+    printf("Input num = %d\n", num);
+    if ( SConfig.sample_time < num ) {
+        SConfig.sample_time = num;
+        sprintf(buf, "uci set dlsetting.@sms[0].sample_time='%d'", SConfig.sample_time);
+        system(buf);
+        system("uci commit dlsetting");
+        printf("Set Sample Time = %d\n", SConfig.sample_time);
+    }
+    printf("#############################################\n");
 
     return;
 }

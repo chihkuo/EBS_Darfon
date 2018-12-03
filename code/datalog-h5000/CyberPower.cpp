@@ -33,8 +33,8 @@ extern "C" {
     extern int      MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_bits);
     extern void     MakeReadDataCRC(unsigned char *,int );
     extern void     MClearRX();
-    extern void     MStartTX();
-    extern unsigned char*   GetCyberPowerRespond(int iSize, int delay);
+    extern void     MStartTX(int fd);
+    extern unsigned char*   GetCyberPowerRespond(int fd, int iSize, int delay);
 
     extern unsigned int     txsize;
     extern unsigned char    waitAddr, waitFCode;
@@ -47,6 +47,7 @@ CyberPower::CyberPower()
 {
     m_addr = 0;
     m_devid = 0;
+    m_busfd = 0;
     m_milist_size = 0;
     m_cp_sn = {0};
     m_cp_1ppi = {0};
@@ -67,6 +68,7 @@ CyberPower::CyberPower()
     memset(m_log_filename, 0x00, 128);
     memset(m_errlog_buf, 0x00, CP_LOG_BUF_SIZE);
     memset(m_errlog_filename, 0x00, 128);
+    memset(m_env_filename, 0x00, 128);
 }
 
 CyberPower::~CyberPower()
@@ -74,12 +76,12 @@ CyberPower::~CyberPower()
     //dtor
 }
 
-bool CyberPower::Init(int com, bool open_com, bool first)
+int CyberPower::Init(int com, bool open_com, bool first, int busfd)
 {
     char *port = NULL;
     char szbuf[32] = {0};
     char inverter_parity = 0;
-    bool ret = true;
+    int ret = 0;
 
     printf("#### CyberPower Init Start ####\n");
 
@@ -100,8 +102,14 @@ bool CyberPower::Init(int com, bool open_com, bool first)
             inverter_parity = 'E';
         else
             inverter_parity = 'N';
-        if ( MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits) != 0 )
-            ret = false;
+
+        m_busfd = MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits);
+        if ( m_busfd < 0 )
+            ret = -1;
+        else
+            ret = m_busfd;
+    } else {
+        m_busfd = busfd;
     }
 
     // get time zone
@@ -130,6 +138,7 @@ void CyberPower::Get1PData(int addr, int devid, time_t data_time, bool first, bo
     SetPath();
     SetLogXML();
     SetErrorLogXML();
+    SetEnvXML();
     CheckConfig();
     CleanParameter();
 
@@ -176,6 +185,8 @@ void CyberPower::Get1PData(int addr, int devid, time_t data_time, bool first, bo
             (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)))
         WriteErrorLogXML();
     SaveErrorLogXML(first, last);
+
+    SaveEnvXML(first, last);
 
     WriteMIListXML(first, last, 1);
 
@@ -387,6 +398,29 @@ bool CyberPower::SetPath()
             printf("mkdir %s OK\n", m_dl_path.m_errlog_path);
     }
 
+    // set env path
+    memset(buf, 0, 256);
+    sprintf(buf, "%s/ENV", m_dl_path.m_xml_path);
+    if ( stat(buf, &st) == -1 ) {
+        printf("%s not exist, run mkdir!\n", buf);
+        if ( mkdir(buf, 0755) == -1 )
+            printf("mkdir %s fail!\n", buf);
+        else
+            printf("mkdir %s OK\n", buf);
+    }
+
+    // set env date path
+    memset(buf, 0, 256);
+    sprintf(buf, "%s/ENV/%4d%02d%02d", m_dl_path.m_xml_path, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
+    strcpy(m_dl_path.m_env_path, buf);
+    if ( stat(m_dl_path.m_env_path, &st) == -1 ) {
+        printf("%s not exist, run mkdir!\n", m_dl_path.m_env_path);
+        if ( mkdir(m_dl_path.m_env_path, 0755) == -1 )
+            printf("mkdir %s fail!\n", m_dl_path.m_env_path);
+        else
+            printf("mkdir %s OK\n", m_dl_path.m_env_path);
+    }
+
     // set BMS path
     sprintf(buf, "%s/BMS", m_dl_path.m_root_path);
     if ( stat(buf, &st) == -1 ) {
@@ -422,6 +456,7 @@ bool CyberPower::SetPath()
     printf("m_xml_path = %s\n", m_dl_path.m_xml_path);
     printf("m_log_path = %s\n", m_dl_path.m_log_path);
     printf("m_errlog_path = %s\n", m_dl_path.m_errlog_path);
+    printf("m_env_path    = %s\n", m_dl_path.m_env_path);
     printf("m_bms_path = %s\n", m_dl_path.m_bms_path);
     printf("m_syslog_path = %s\n", m_dl_path.m_syslog_path);
 
@@ -748,10 +783,10 @@ bool CyberPower::GetSN()
 
     while ( err < 3 ) {
         memcpy(txbuffer, cmd_buf, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetCyberPowerRespond(21, m_dl_config.m_delay_time*2);
+        lpdata = GetCyberPowerRespond(m_busfd, 21, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetSN OK ####\n");
             SaveLog((char *)"CyberPower GetSN() : OK", m_st_time);
@@ -810,10 +845,10 @@ bool CyberPower::Get1PPowerInfo()
 
     while ( err < 3 ) {
         memcpy(txbuffer, cmd_buf, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetCyberPowerRespond(109, m_dl_config.m_delay_time*2);
+        lpdata = GetCyberPowerRespond(m_busfd, 109, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### Get1PPowerInfo OK ####\n");
             SaveLog((char *)"CyberPower Get1PPowerInfo() : OK", m_st_time);
@@ -1016,10 +1051,10 @@ bool CyberPower::GetErrorCode()
 
     while ( err < 3 ) {
         memcpy(txbuffer, cmd_buf, 8);
-        MStartTX();
+        MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetCyberPowerRespond(21, m_dl_config.m_delay_time*2);
+        lpdata = GetCyberPowerRespond(m_busfd, 21, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetErrorCode OK ####\n");
             SaveLog((char *)"CyberPower GetErrorCode() : OK", m_st_time);
@@ -1861,6 +1896,97 @@ bool CyberPower::SaveErrorLogXML(bool first, bool last)
             return true;
         } else {
             SaveLog((char *)"CyberPower SaveErrorLogXML() : write to tmp Fail", m_st_time);
+            return false;
+        }
+    }
+
+    return false;
+}
+
+void CyberPower::SetEnvXML()
+{
+    sprintf(m_env_filename, "%s/%02d%02d", m_dl_path.m_env_path, m_st_time->tm_hour, m_st_time->tm_min);
+    printf("env path = %s\n", m_env_filename);
+    return;
+}
+
+bool CyberPower::SaveEnvXML(bool first, bool last)
+{
+    FILE *fd = NULL;
+    struct stat filest;
+    char buf[256] = {0};
+    char tmp[256] = {0};
+    int filesize = 0, offset = 0, ret = 0;
+
+    if ( first ) {
+        fd = fopen("/tmp/tmpenv", "wb");
+        if ( fd != NULL ) {
+            fwrite("<records>", 1, 9, fd);
+            filesize = 9;
+        }
+    } else {
+        stat("/tmp/tmpenv", &filest);
+        filesize = filest.st_size;
+        fd = fopen("/tmp/tmpenv", "ab");
+    }
+
+    if ( last ) {
+        strcat(buf, "</records>");
+        while ( (strlen(buf) + filesize) % 3 != 0 ) {
+            buf[strlen(buf)] = 0x20; // add space to end
+        }
+    }
+
+    if ( fd != NULL ) {
+        fwrite(buf, 1, strlen(buf), fd);
+        filesize += strlen(buf);
+        //printf("Log filesize = %d\n", filesize);
+        fclose(fd);
+    } else {
+        SaveLog((char *)"CyberPower SaveEnvXML() : open /tmp/tmpenv Fail", m_st_time);
+        printf("open /tmp/tmpenv Fail!\n");
+        return false;
+    }
+
+    if ( !last )
+        return true;
+    else {
+        if ( filesize < 42 ) {
+            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            return true;
+        }
+    }
+
+    // copy file to target
+    sprintf(buf, "cp /tmp/tmpenv %s", m_env_filename);
+    ret = system(buf);
+    if ( ret == 0 ) {
+        sprintf(buf, "CyberPower SaveEnvXML() : write %s OK", m_env_filename);
+        SaveLog(buf, m_st_time);
+        //if ( strstr(m_env_filename, USB_PATH) )
+        //    m_sys_error  &= ~SYS_0002_Save_USB_Fail;
+        return true;
+    } else {
+        sprintf(buf, "CyberPower SaveEnvXML() : write %s Fail", m_env_filename);
+        SaveLog(buf, m_st_time);
+        //if ( strstr(m_env_filename, USB_PATH) )
+        //    m_sys_error |= SYS_0002_Save_USB_Fail;
+    }
+
+    // if copy file to storage fail, then copy to tmp
+    if ( strstr(m_env_filename, DEF_PATH) == NULL ) {
+        strcpy(tmp, DEF_PATH);
+        if ( strstr(m_env_filename, USB_PATH) != NULL )
+            offset = strlen(USB_PATH);
+        // save to tmp
+        strcat(tmp, m_env_filename+offset);
+        sprintf(buf, "cp /tmp/tmpenv %s", tmp);
+        ret = system(buf);
+        if ( ret == 0 ) {
+            SaveLog((char *)"CyberPower SaveEnvXML() : write to tmp OK", m_st_time);
+            return true;
+        } else {
+            SaveLog((char *)"CyberPower SaveEnvXML() : write to tmp Fail", m_st_time);
             return false;
         }
     }
