@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.0.3"
+#define VERSION         "2.0.4"
 //#define USB_PATH        "/tmp/usb"
 #define USB_PATH        "/tmp/run/mountd/sda1"
 #define SDCARD_PATH     "/tmp/sdcard"
@@ -581,7 +581,7 @@ int Rcvlog()
     int qrylogdate = 0;
     int cnt = 0;
     struct stat st;
-    int clean = 0;
+    int clean = 0, upok = 0;
     time_t current_time;
     struct tm *st_time;
     int i = 0, j = 0;
@@ -746,6 +746,7 @@ int Rcvlog()
                     sprintf(buf, "DataProgram Rcvlog() : update %s OK", FILENAME);
                     SaveLog(buf, st_time);
                     clean = 0;
+                    upok++;
                 } else {
                     printf("File %s update Fail\n", FILENAME);
                     sprintf(buf, "DataProgram Rcvlog() : update %s Fail", FILENAME);
@@ -768,6 +769,9 @@ int Rcvlog()
             fclose(ptime_fd);
         }
         fclose(pdate_fd);
+
+        if ( upok )
+            break;
     }
 
     printf("======================== Rcvlog end =========================\n");
@@ -886,7 +890,7 @@ int Rcverrorlog()
     int qryerrlogdate = 0;
     int cnt = 0;
     struct stat st;
-    int clean = 0;
+    int clean = 0, upok = 0;
     time_t current_time;
     struct tm *st_time;
     int i = 0, j = 0;
@@ -1050,6 +1054,7 @@ int Rcverrorlog()
                     sprintf(buf, "DataProgram Rcverrorlog() : update %s OK", FILENAME);
                     SaveLog(buf, st_time);
                     clean = 0;
+                    upok++;
                 } else {
                     printf("File %s update Fail\n", FILENAME);
                     sprintf(buf, "DataProgram Rcverrorlog() : update %s Fail", FILENAME);
@@ -1072,6 +1077,9 @@ int Rcverrorlog()
             fclose(ptime_fd);
         }
         fclose(pdate_fd);
+
+        if ( upok )
+            break;
     }
 
     printf("======================= Rcverrorlog end =======================\n");
@@ -1920,6 +1928,7 @@ int UploadRAW(char *date, char *hour)
 
     printf("======================== UploadRAW start ========================\n");
     sprintf(buf, "cd %s/%s; ls %s*> /tmp/RAWtime", g_LOG_PATH, date, hour);
+    printf("buf = %s\n", buf);
     system(buf);
 
     // set curl file
@@ -2658,20 +2667,25 @@ int main(int argc, char* argv[])
             ret = Qrylogdata();
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);
-            if ( ret == 0 )
+            if ( ret == 0 ) {
+                setPath();
                 Rcvlog();
+            }
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);
 
             ret = Qryerrlogdata();
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);
-            if ( ret == 0 )
+            if ( ret == 0 ) {
+                setPath();
                 Rcverrorlog();
+            }
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);
 
             // check raw data update need
+            setPath();
             QryRawDataFile();
             //printf("press enter key to next loop~\n");
             //while ((ch = getchar()) != '\n' && ch != EOF);

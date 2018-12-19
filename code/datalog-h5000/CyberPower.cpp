@@ -1443,67 +1443,69 @@ bool CyberPower::WriteLogXML()
             m_st_time->tm_hour, m_st_time->tm_min, m_cp_sn.SN);
     strcat(m_log_buf, buf);
 
-    sprintf(buf, "<daily_KWH>%05.3f</daily_KWH>", ((float)m_cp_1ppi.Today_KWH)/1000);
-    strcat(m_log_buf, buf);
+    if ( m_loopflag == 0 ) {
+        sprintf(buf, "<daily_KWH>%05.3f</daily_KWH>", ((float)m_cp_1ppi.Today_KWH)/1000);
+        strcat(m_log_buf, buf);
 
-    sprintf(buf, "<total_KWH>%05.3f</total_KWH>", ((float)m_cp_1ppi.System_Life_KWH)/1000);
-    strcat(m_log_buf, buf);
+        sprintf(buf, "<total_KWH>%05.3f</total_KWH>", ((float)m_cp_1ppi.System_Life_KWH)/1000);
+        strcat(m_log_buf, buf);
 
-    sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_cp_1ppi.Input1_Volt)/10);
-    strcat(m_log_buf, buf);
-    sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)m_cp_1ppi.Input1_Volt)/10);
-    strcat(m_log_buf, buf);
+        sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_cp_1ppi.Input1_Volt)/10);
+        strcat(m_log_buf, buf);
+        sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)m_cp_1ppi.Input1_Volt)/10);
+        strcat(m_log_buf, buf);
 
-    sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_cp_1ppi.Input1_Curr)/100);
-    strcat(m_log_buf, buf);
-    sprintf(buf, "<dc_current>%04.2f</dc_current>", ((float)m_cp_1ppi.Input1_Curr)/100);
-    strcat(m_log_buf, buf);
+        sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_cp_1ppi.Input1_Curr)/100);
+        strcat(m_log_buf, buf);
+        sprintf(buf, "<dc_current>%04.2f</dc_current>", ((float)m_cp_1ppi.Input1_Curr)/100);
+        strcat(m_log_buf, buf);
 
-    sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_cp_1ppi.Input1_Watt)/1000);
-    strcat(m_log_buf, buf);
-    sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_cp_1ppi.Input1_Watt)/1000);
-    strcat(m_log_buf, buf);
+        sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_cp_1ppi.Input1_Watt)/1000);
+        strcat(m_log_buf, buf);
+        sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_cp_1ppi.Input1_Watt)/1000);
+        strcat(m_log_buf, buf);
 
-    sprintf(buf, "<acv_AN>%03.1f</acv_AN>", ((float)m_cp_1ppi.AC_Volt)/10);
-    strcat(m_log_buf, buf);
-    sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_cp_1ppi.AC_Volt)/10);
-    strcat(m_log_buf, buf);
+        sprintf(buf, "<acv_AN>%03.1f</acv_AN>", ((float)m_cp_1ppi.AC_Volt)/10);
+        strcat(m_log_buf, buf);
+        sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_cp_1ppi.AC_Volt)/10);
+        strcat(m_log_buf, buf);
 
-    sprintf(buf, "<aci_A>%04.2f</aci_A>", ((float)m_cp_1ppi.AC_Curr)/100);
-    strcat(m_log_buf, buf);
-    sprintf(buf, "<ac_current>%04.2f</ac_current>", ((float)m_cp_1ppi.AC_Curr)/100);
-    strcat(m_log_buf, buf);
+        sprintf(buf, "<aci_A>%04.2f</aci_A>", ((float)m_cp_1ppi.AC_Curr)/100);
+        strcat(m_log_buf, buf);
+        sprintf(buf, "<ac_current>%04.2f</ac_current>", ((float)m_cp_1ppi.AC_Curr)/100);
+        strcat(m_log_buf, buf);
 
-    sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_cp_1ppi.AC_Watt)/1000);
-    strcat(m_log_buf, buf);
-    sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_cp_1ppi.AC_Watt)/1000);
-    strcat(m_log_buf, buf);
+        sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_cp_1ppi.AC_Watt)/1000);
+        strcat(m_log_buf, buf);
+        sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_cp_1ppi.AC_Watt)/1000);
+        strcat(m_log_buf, buf);
 
-    sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_cp_1ppi.AC_Freq)/100);
-    strcat(m_log_buf, buf);
+        sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_cp_1ppi.AC_Freq)/100);
+        strcat(m_log_buf, buf);
 
-    // set error code
-    if ( m_cp_ec.E1_E00_15 )
-        error_tmp = m_cp_ec.E1_E00_15;
-    else if ( m_cp_ec.E2_E16_31 )
-        error_tmp = m_cp_ec.E2_E16_31;
-    else if ( m_cp_ec.E3_W00_15 )
-        error_tmp = m_cp_ec.E3_W00_15;
-    else if ( m_cp_ec.E4_F00_15 )
-        error_tmp = m_cp_ec.E4_F00_15;
-    else if ( m_cp_ec.E5_F16_31 )
-        error_tmp = m_cp_ec.E5_F16_31;
-    else if ( m_cp_ec.E6_F32_47 )
-        error_tmp = m_cp_ec.E6_F32_47;
-    else if ( m_cp_ec.E7_F48_63 )
-        error_tmp = m_cp_ec.E7_F48_63;
-    else if ( m_cp_ec.E8_F64_79 )
-        error_tmp = m_cp_ec.E8_F64_79;
-    else
-        error_tmp = 0;
+        // set error code
+        if ( m_cp_ec.E1_E00_15 )
+            error_tmp = m_cp_ec.E1_E00_15;
+        else if ( m_cp_ec.E2_E16_31 )
+            error_tmp = m_cp_ec.E2_E16_31;
+        else if ( m_cp_ec.E3_W00_15 )
+            error_tmp = m_cp_ec.E3_W00_15;
+        else if ( m_cp_ec.E4_F00_15 )
+            error_tmp = m_cp_ec.E4_F00_15;
+        else if ( m_cp_ec.E5_F16_31 )
+            error_tmp = m_cp_ec.E5_F16_31;
+        else if ( m_cp_ec.E6_F32_47 )
+            error_tmp = m_cp_ec.E6_F32_47;
+        else if ( m_cp_ec.E7_F48_63 )
+            error_tmp = m_cp_ec.E7_F48_63;
+        else if ( m_cp_ec.E8_F64_79 )
+            error_tmp = m_cp_ec.E8_F64_79;
+        else
+            error_tmp = 0;
 
-    sprintf(buf, "<Error_Code>%d</Error_Code>", error_tmp);
-    strcat(m_log_buf, buf);
+        sprintf(buf, "<Error_Code>%d</Error_Code>", error_tmp);
+        strcat(m_log_buf, buf);
+    }
 
     // set status
     if ( error_tmp ) {

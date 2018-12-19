@@ -12,6 +12,7 @@ MLIST=ModelList
 STAT=status.lua
 INDEX=index.lua
 LST=luci_statistics.lua
+RUNDLSW=run_DLSW.sh
 
 cp $UPDATE_DIR/$SYSTEM /usr/lib/lua/luci/controller/admin/
 chmod 755 /usr/lib/lua/luci/controller/admin/$SYSTEM
@@ -35,6 +36,8 @@ cp $UPDATE_DIR/$DLIST /etc/config/
 chmod 644 /etc/config/$DLIST
 cp $UPDATE_DIR/$MLIST /usr/home/
 chmod 644 /usr/home/$MLIST
+cp $UPDATE_DIR/$RUNDLSW /usr/home/
+chmod 755 /usr/home/$RUNDLSW
 
 rm /tmp/luci-indexcache
 rm /tmp/luci-modulecache/*
@@ -44,23 +47,9 @@ SWupdatesh=newSWupdate.sh
 SWupdate=SWupdate.exe
 if [ -f $UPDATE_DIR/$SWupdate ]
 then
-#	cp $UPDATE_DIR/$SWupdatesh /tmp/
-#	chmod 755 /tmp/$SWupdatesh
-#	cp $UPDATE_DIR/$SWupdate /tmp/
-#	chmod 755 /tmp/$SWupdate
-
-killall -9 $SWupdate
-sleep 1
-sync
-
-cp -f $UPDATE_DIR/$SWupdate /usr/home/
-sleep 1
-chmod 755 /usr/home/$SWupdate
-sync
-
-/usr/home/SWupdate.exe &
-
-cd /tmp
-rm -rf $UPDATE_DIR
-
+	cp $UPDATE_DIR/$SWupdatesh /tmp/
+	chmod 755 /tmp/$SWupdatesh
+	cp $UPDATE_DIR/$SWupdate /tmp/
+	chmod 755 /tmp/$SWupdate
 fi
+

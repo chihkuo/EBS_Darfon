@@ -2,6 +2,7 @@
 
 mkdir -p /tmp/test/XML/LOG
 mkdir -p /tmp/test/XML/ERRLOG
+mkdir -p /tmp/test/XML/ENV
 mkdir -p /tmp/test/BMS
 mkdir -p /tmp/test/SYSLOG
 

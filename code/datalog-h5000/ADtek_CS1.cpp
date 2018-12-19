@@ -1068,31 +1068,33 @@ bool ADtek_CS1::WriteEnvXML()
             m_st_time->tm_hour, m_st_time->tm_min);
     strcat(m_env_buf, buf);
 
-    switch (m_env_point)
-    {
-        case 0:
-            sprintf(buf, "<Temperature>%d</Temperature>", m_env_temp);
-            break;
-        case 1:
-            value = (float)m_env_temp*0.1;
-            sprintf(buf, "<Temperature>%.1f</Temperature>", value);
-            break;
-        case 2:
-            value = (float)m_env_temp*0.01;
-            sprintf(buf, "<Temperature>%.2f</Temperature>", value);
-            break;
-        case 3:
-            value = (float)m_env_temp*0.001;
-            sprintf(buf, "<Temperature>%.3f</Temperature>", value);
-            break;
-        case 4:
-            value = (float)m_env_temp*0.0001;
-            sprintf(buf, "<Temperature>%.4f</Temperature>", value);
-            break;
-        default:
-            printf("Out of range!\n");
+    if ( m_loopflag == 0 ) {
+        switch (m_env_point)
+        {
+            case 0:
+                sprintf(buf, "<Temperature>%d</Temperature>", m_env_temp);
+                break;
+            case 1:
+                value = (float)m_env_temp*0.1;
+                sprintf(buf, "<Temperature>%.1f</Temperature>", value);
+                break;
+            case 2:
+                value = (float)m_env_temp*0.01;
+                sprintf(buf, "<Temperature>%.2f</Temperature>", value);
+                break;
+            case 3:
+                value = (float)m_env_temp*0.001;
+                sprintf(buf, "<Temperature>%.3f</Temperature>", value);
+                break;
+            case 4:
+                value = (float)m_env_temp*0.0001;
+                sprintf(buf, "<Temperature>%.4f</Temperature>", value);
+                break;
+            default:
+                printf("Out of range!\n");
+        }
+        strcat(m_env_buf, buf);
     }
-    strcat(m_env_buf, buf);
 
     strcat(m_env_buf, "</record>");
     printf("m_env_buf = \n%s\n", m_env_buf);

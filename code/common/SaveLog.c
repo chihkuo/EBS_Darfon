@@ -68,7 +68,10 @@ int OpenLog(char *path, struct tm *time)
 
 int SaveLog(char *msg, struct tm *time)
 {
-    char buf[256] = {0};
+    char buf[4096] = {0};
+
+    if ( strlen(msg) > 4084 )
+        return 2;
 
     if ( syslog_fd != NULL ) {
         memset(buf, 0x00, 256);
