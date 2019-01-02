@@ -14,7 +14,7 @@
 #define USB_PATH    "/tmp/run/mountd/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.0.3"
+#define VERSION             "2.0.4"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -558,16 +558,29 @@ int DoUpdate(char *file_path)
         system(buf);
         return 11;
     }
-    // run update.sh if exist
-    sprintf(buf, "%s/update.sh", UPDATE_DIR);
-    if ( stat(buf, &st) == 0 ) {
-        sprintf(buf, "chmod 755 %s/update.sh", UPDATE_DIR);
-        system(buf);
+    // run update.sh if exist in usb
+    if ( strstr(g_UPDATE_PATH, USB_PATH) ) {
+        sprintf(buf, "%s/update/update.sh", USB_PATH);
+        if ( stat(buf, &st) == 0 ) {
+            sprintf(buf, "chmod 755 %s/update/update.sh", USB_PATH);
+            system(buf);
+            sprintf(buf, "%s/update/update.sh", USB_PATH);
+            system(buf);
+            printf("run %s/update/update.sh\n", USB_PATH);
+            sprintf(buf, "SWupdate DoUpdate() : run %s/update/update.sh", USB_PATH);
+            SaveLog(buf, st_time);
+        }
+    } else { // in tmp
         sprintf(buf, "%s/update.sh", UPDATE_DIR);
-        system(buf);
-        printf("run %s/update.sh\n", UPDATE_DIR);
-        sprintf(buf, "SWupdate DoUpdate() : run %s/update.sh", UPDATE_DIR);
-        SaveLog(buf, st_time);
+        if ( stat(buf, &st) == 0 ) {
+            sprintf(buf, "chmod 755 %s/update.sh", UPDATE_DIR);
+            system(buf);
+            sprintf(buf, "%s/update.sh", UPDATE_DIR);
+            system(buf);
+            printf("run %s/update.sh\n", UPDATE_DIR);
+            sprintf(buf, "SWupdate DoUpdate() : run %s/update.sh", UPDATE_DIR);
+            SaveLog(buf, st_time);
+        }
     }
     // clean file
     sprintf(buf, "rm -rf %s; sync", UPDATE_DIR);
