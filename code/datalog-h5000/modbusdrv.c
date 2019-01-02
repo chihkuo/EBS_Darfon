@@ -759,7 +759,7 @@ void MStartTX(int fd)
 	printf("write to %d, return %ld\n", fd, i);
 	//getchar();
 
-    MClearTX_Noise(0.3);//mike20160407+
+    MClearTX_Noise(0.03);//mike20160407+
 	receiveState=URS_Address;
 	TRC_TXIDLE=1;
 	TRC_RXERROR=0;
@@ -1277,7 +1277,7 @@ int MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_b
 	//fd = open(GSM_PORT, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (fd == -1)
 	{
-		printf("open %s Failed, errno: %d\n", RS485_PORT, errno);
+		printf("open %s Failed, errno: %d\n", port, errno);
 		//getchar();
 		return -1;
 	}
@@ -1460,6 +1460,8 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
 
 	memset(respond_buff, 0x00, 4096);
 	while (err < 3) {
+
+        usleep(delay);
 //printf("wait recv data need:%d, Recved: %d \n", iSize, len);
 //printf("wait Slave Address : 0x%02X, wait Function Code : 0x%02X \n", waitAddr, waitFCode);
         //getchar();
@@ -1480,7 +1482,7 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
         //DebugPrint(p, i, "receive");
         //len += i;
         len = i;
-        //DebugPrint(respond_buff, len, "recv");
+        DebugPrint(respond_buff, len, "recv");
         have_respond = true;
         //p+=i;
         //usleep(g_delay2*1000);
@@ -1511,7 +1513,22 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                                 return respond_buff+i;
                             }
                             break;
-                        case 0x05: // force coil, not use now
+                        case 0x05: // Enable Priority 3 &  Shutdown System & Entire Calibration Mode
+                            if ( CheckCRC(respond_buff+i, 8) ) {
+                                switch ( respond_buff[i+3] )
+                                {
+                                    case 0x00: // Enable Priority 3
+                                        DebugPrint(respond_buff+i, 8, "Enable Priority 3 recv");
+                                        break;
+                                    case 0x01: // Shutdown System
+                                        DebugPrint(respond_buff+i, 8, "Shutdown System recv");
+                                        break;
+                                    case 0x10: // Reboot System
+                                        DebugPrint(respond_buff+i, 8, "Reboot System recv");
+                                        break;
+                                }
+                                return respond_buff+i;
+                            }
                             break;
                         case 0x10: // write
                             if ( CheckCRC(respond_buff+i, 8) ) {
@@ -1530,6 +1547,13 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                         case 0x31:
                             if ( CheckCRC(respond_buff+i, respond_buff[i+2]) ) {
                                 DebugPrint(respond_buff+i, respond_buff[i+2], "White List SN recv");
+                                return respond_buff+i;
+                            }
+                            break;
+                        case 0x33:
+                            count = respond_buff[i+2];
+                            if ( CheckCRC(respond_buff+i, count+5) ) {
+                                DebugPrint(respond_buff+i, count+5, "0x33 Read recv");
                                 return respond_buff+i;
                             }
                             break;
@@ -1565,6 +1589,38 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                                 }
                             }
                             break;
+                        case 0x45:
+                            if ( respond_buff[i+2] == 0x0E ) {
+                                if ( CheckCRC(respond_buff+i, 14) ) {
+                                    DebugPrint(respond_buff+i, 14, "Reboot Specify recv");
+                                    return respond_buff+i;
+                                }
+                            }
+                            break;
+                        case 0x48:
+                            if ( respond_buff[i+2] == 0x0E ) {
+                                if ( CheckCRC(respond_buff+i, 14) ) {
+                                    DebugPrint(respond_buff+i, 14, "Update FW ver recv");
+                                    return respond_buff+i;
+                                }
+                            }
+                            break;
+                        case 0x49:
+                            if ( respond_buff[i+2] == 0x0E ) {
+                                if ( CheckCRC(respond_buff+i, 14) ) {
+                                    DebugPrint(respond_buff+i, 14, "Update FW data recv");
+                                    return respond_buff+i;
+                                }
+                            }
+                            break;
+                        case 0x4B:
+                            if ( respond_buff[i+2] == 0x0E ) {
+                                if ( CheckCRC(respond_buff+i, 14) ) {
+                                    DebugPrint(respond_buff+i, 14, "LBD Re-register recv");
+                                    return respond_buff+i;
+                                }
+                            }
+                            break;
                         case 0xFF: // allocate
                             if ( respond_buff[i+2] == 0x00 && respond_buff[i+3] == 0x01 && respond_buff[i+4] == 0x01 && respond_buff[i+5] == 0x06 ) {
                                 if ( CheckCRC(respond_buff+i, 8) ) {
@@ -1580,7 +1636,7 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
         else
             err++;
 
-        usleep(delay);
+        //usleep(delay);
 	}
 	//DebugPrint(respond_buff, len, "recv");
 	printf("#### GetRespond() clean buf ####\n");

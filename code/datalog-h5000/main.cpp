@@ -27,6 +27,7 @@ void Set_Sampletime(int num);
 
 typedef struct system_config {
     int sample_time;
+    int upload_time;
 } SYS_CONFIG;
 SYS_CONFIG SConfig = {0};
 
@@ -167,6 +168,17 @@ bool GetConfig()
     pclose(pFile);
     sscanf(buf, "%d", &SConfig.sample_time);
     printf("Sample time (Min.) = %d\n", SConfig.sample_time);
+
+    // get upload_time
+    pFile = popen("uci get dlsetting.@sms[0].upload_time", "r");
+    if ( pFile == NULL ) {
+        printf("popen fail!\n");
+        return false;
+    }
+    fgets(buf, 32, pFile);
+    pclose(pFile);
+    sscanf(buf, "%d", &SConfig.upload_time);
+    printf("Upload time (Min.) = %d\n", SConfig.upload_time);
 
     return true;
 }
@@ -701,17 +713,35 @@ void Set_Sampletime(int num)
 {
     char buf[256] = {0};
 
+    int sampletime[12] = {1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60};
+    int i = 0;
+
     if ( num <= 0 )
         return;
 
     printf("############## Set Sample Time ##############\n");
     printf("Input num = %d\n", num);
     if ( SConfig.sample_time < num ) {
-        SConfig.sample_time = num;
+        // set sample time
+        for (i = 0; i < 12; i++) {
+            if ( sampletime[i] >= num )
+                break;
+        }
+        SConfig.sample_time = sampletime[i];
         sprintf(buf, "uci set dlsetting.@sms[0].sample_time='%d'", SConfig.sample_time);
         system(buf);
         system("uci commit dlsetting");
         printf("Set Sample Time = %d\n", SConfig.sample_time);
+        // set upload time
+        if ( i < 4 )
+            i = 4; // set sampletime[4] = 5 min
+        else if ( i < 11 )
+            i++; // set next bigger time
+        SConfig.upload_time = sampletime[i];
+        sprintf(buf, "uci set dlsetting.@sms[0].upload_time='%d'", SConfig.upload_time);
+        system(buf);
+        system("uci commit dlsetting");
+        printf("Set Upload Time = %d\n", SConfig.upload_time);
     }
     printf("#############################################\n");
 
