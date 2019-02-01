@@ -7,7 +7,7 @@ config sms
 	option sample_time '5'
 	option upload_time '10'
 	option delay_time '500'
-	option cleartx_delay '1000'
+	option cleartx_delay '5000'
 	option shelf_life '30'
 	option update_SW_time '30'
 

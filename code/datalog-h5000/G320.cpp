@@ -3369,7 +3369,7 @@ bool CG320::GetHybridRRSInfo(int index)
     int err = 0;
     byte *lpdata = NULL;
 
-    unsigned char szHBRSinfo[]={0x00, 0x03, 0x00, 0xA0, 0x00, 0x05, 0x00, 0x00};
+    unsigned char szHBRSinfo[]={0x00, 0x03, 0x00, 0xA0, 0x00, 0x06, 0x00, 0x00};
     szHBRSinfo[0]=arySNobj[index].m_Addr;
     MakeReadDataCRC(szHBRSinfo,8);
 
@@ -3383,7 +3383,7 @@ bool CG320::GetHybridRRSInfo(int index)
         MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(m_busfd, 15, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetHybridRRSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", m_st_time);

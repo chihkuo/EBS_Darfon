@@ -21,6 +21,7 @@
 #define UPDATE_LIST         "/tmp/fwulist"
 #define SYSLOG_PATH         "/tmp/test/SYSLOG"
 #define MAX_DATA_SIZE       144
+#define MAX_HYBRID_SIZE     100
 
 // extern part
 extern int  MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_bits);
@@ -56,14 +57,17 @@ int RunReboot(int slaveid);
 int RunRebootSpecify(char *sn);
 int LBDReregister(char *sn);
 int WriteDataV2(int slaveid, unsigned char *fwdata, int datasize);
+int WriteHBData(int slaveid, unsigned char *fwdata, int datasize);
 int WriteDataV3(char *sn, unsigned char *fwdata, int datasize);
 int ReadV3Ver(char *sn, unsigned char *fwver);
 int GetFWData();
+int GetHbFWData();
 int stopProcess();
 int runProcess();
 int GetPort(char *file_path);
 int GetMIList(char *file_path);
 int GetSNList();
+int CheckType(int index, int *ret);
 int DoUpdate(char *file_path);
 int UpdDLFWStatus();
 
@@ -96,6 +100,7 @@ typedef struct mi_list {
     char SN[17];
     int slave_id;
     unsigned char sn_bin[8];
+    int OtherType;
 } MI_LIST;
 MI_LIST milist[255] = {0};
 
@@ -194,13 +199,13 @@ void setPath()
         strcpy(g_SYSLOG_PATH, USB_PATH);
         strcat(g_SYSLOG_PATH, "/SYSLOG");
         strcpy(g_UPDATE_PATH, USB_PATH);
-        strcat(g_UPDATE_PATH, "/update.tar");
+        strcat(g_UPDATE_PATH, "/test.hex");
     }
     else if ( stat(SDCARD_PATH, &st) == 0 ) {
         strcpy(g_SYSLOG_PATH, SDCARD_PATH);
         strcat(g_SYSLOG_PATH, "/SYSLOG");
         strcpy(g_UPDATE_PATH, SDCARD_PATH);
-        strcat(g_UPDATE_PATH, "/update.tar");
+        strcat(g_UPDATE_PATH, "/test.hex");
     }
     else {
         strcpy(g_SYSLOG_PATH, SYSLOG_PATH);
@@ -965,6 +970,228 @@ int WriteDataV2(int slaveid, unsigned char *fwdata, int datasize)
         return 1;
 }
 
+int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
+{
+    printf("\n#### WriteHBData start ####\n");
+
+    //int i = 0, err = 0, index = 0, numofdata = MAX_HYBRID_SIZE/2, writesize = MAX_HYBRID_SIZE, address = 0, cnt = 0, end = 0;
+    int i = 0, err = 0, index = 0, numofdata = 0, writesize = 0, address = 0, cnt = 0, end = 0, ret = 0, retry = 0;
+    unsigned char addrh = 0, addrl = 0, tmpstr[256] = {0}; // tmpstr for test, can delete
+    unsigned char *lpdata = NULL;
+    char buf[256] = {0};
+    time_t      current_time = 0;
+    struct tm   *st_time = NULL;
+
+    current_time = time(NULL);
+    st_time = localtime(&current_time);
+
+    unsigned char cmd[MAX_HYBRID_SIZE+9]={0};
+    // set first write command
+    // set slave id
+    cmd[0] = (unsigned char)slaveid;
+    // set function code
+    cmd[1] = 0x10;
+    // set addr
+    cmd[2] = 0xFF;
+    cmd[3] = 0xFF;
+    // set no. of data
+    cmd[4] = 0x00;
+    cmd[5] = 0x04;
+    // set byte count
+    cmd[6] = 0x08;
+    // set data (file header 2 + check sum 2 + byte count 4)
+    cmd[7] = fwdata[0];
+    cmd[8] = fwdata[1];
+    cmd[9] = fwdata[2];
+    cmd[10] = fwdata[3];
+    cmd[11] = fwdata[4];
+    cmd[12] = fwdata[5];
+    cmd[13] = fwdata[6];
+    cmd[14] = fwdata[7];
+    MakeReadDataCRC(cmd,17);
+
+    MClearRX();
+    txsize = 17;
+    waitAddr = cmd[0];
+    waitFCode = cmd[1];
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, cmd, 17);
+        MStartTX(gcomportfd);
+        //usleep(10000); // 0.01s
+
+        if ( err == 0 )
+            lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
+        else if ( err == 1 )
+            lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
+        else
+            lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
+        if ( 1/*lpdata*/ ) {
+            printf("#### WriteHBData Header OK ####\n");
+            SaveLog((char *)"FWupdate WriteHBData() : Send file header OK", st_time);
+            ret = 0;
+            break;
+        } else {
+            if ( have_respond ) {
+                printf("#### WriteHBData Send file header CRC Error ####\n");
+                SaveLog((char *)"FWupdate WriteHBData() : Send file header CRC Error", st_time);
+                ret = 1;
+            }
+            else {
+                printf("#### WriteHBData Send file header No Response ####\n");
+                SaveLog((char *)"FWupdate WriteHBData() : Send file header No Response", st_time);
+                ret = -1;
+            }
+            err++;
+        }
+    }
+    if ( ret ) {
+        return ret;
+    }
+
+    // set write data part
+    index = 8;
+    address = 0x4004;
+    writesize = MAX_HYBRID_SIZE;
+    numofdata = writesize/2;
+
+    while ( index < datasize ) {
+        // check data size
+        if ( (index + writesize) > datasize ) {
+            writesize = datasize - index;
+            numofdata = writesize/2;
+        }
+
+        // set addr
+        addrh = (unsigned char)((address>>8) & 0xFF);
+        addrl = (unsigned char)(address & 0xFF);
+        cmd[2] = addrh;
+        cmd[3] = addrl;
+        // set number of data, max 0x32 (dec.50), so hi always 0
+        cmd[4] = 0;
+        cmd[5] = (unsigned char)numofdata;
+        // set byte count, max 0x64 (dec.100)
+        cmd[6] = (unsigned char)writesize;
+
+        // set data to buf
+        for (i = 0; i < writesize; i++) {
+            cmd[7+i] = fwdata[index+i];
+        }
+
+        // set crc
+        MakeReadDataCRC(cmd, writesize+9);
+
+        MClearRX();
+        txsize = writesize+9;
+        waitAddr = cmd[0];
+        waitFCode = cmd[1];
+
+        while ( err < 3 ) {
+            memcpy(txbuffer, cmd, txsize);
+            MStartTX(gcomportfd);
+            //usleep(10000); // 0.01s
+
+            if ( err == 0 )
+                lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
+            else if ( err == 1 )
+                lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
+            else
+                lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
+
+            if ( 1/*lpdata*/ ) {
+                lpdata = cmd;
+                if ( (lpdata[2] == addrh) && (lpdata[3] == addrl) && (lpdata[4] == 00) && (lpdata[5] == numofdata) ) {
+                    cnt++;
+                    printf("#### WriteHBData data count %d, index 0x%X, size %d OK ####\n", cnt, index, writesize);
+                    sprintf(buf, "FWupdate WriteHBData() : write count %d, index 0x%X, size %d OK", cnt, index, writesize);
+                    SaveLog(buf, st_time);
+
+                    index+=writesize;
+                    address+=numofdata;
+                    // check address overflow
+                    if ( address > 0x10000 ) {
+                        // set function code
+                        cmd[1] = 0x11;
+                        // reset address at overflow point
+                        address -= 0x10000;
+                        printf("set function code 0x%X, address 0x%04X\n", cmd[1], address);
+                    }
+
+                    retry = 0;
+
+                    break;
+                } else if ( (lpdata[4] == 0xFF) && (lpdata[5] == 0xFE) ) {
+                    // response byte count error
+                    printf("response byte count error\n");
+                    SaveLog((char *)"FWupdate WriteHBData() : Response Byte Count error", st_time);
+                    return 2;
+                } else if ( (lpdata[4] == 0xFF) && (lpdata[5] == 0xFF) ) {
+                    // response check sum error
+                    printf("response check sum error\n");
+                    SaveLog((char *)"FWupdate WriteHBData() : Response Check Sum error", st_time);
+                    return 3;
+                } else {
+                    printf("Response check error!\n");
+                    SaveLog((char *)"FWupdate WriteHBData() : Response check error", st_time);
+                    // re-address
+                    address = (lpdata[2]<<8) + lpdata[3];
+                    numofdata = lpdata[5];
+                    writesize = numofdata*2;
+                    index+=writesize;
+                    printf("Re-address 0x%04X, numofdata 0x%02X, index %d\n", address, numofdata, index);
+
+                    if ( retry == 0 ) {
+                        retry = 1;
+                        break;
+                    } else {
+                        SaveLog((char *)"FWupdate WriteHBData() : Response check retry error", st_time);
+                        return 4;
+                    }
+                }
+            } else {
+                err++;
+                printf("#### WriteHBData GetRespond Error %d ####\n", err);
+                if ( err == 3 ) {
+                    if ( have_respond ) {
+                        printf("#### WriteHBData CRC Error ####\n");
+                        SaveLog((char *)"FWupdate WriteHBData() : CRC Error", st_time);
+                    } else {
+                        printf("#### WriteHBData No Response ####\n");
+                        SaveLog((char *)"FWupdate WriteHBData() : No Response", st_time);
+                    }
+
+                    // check data size
+                    if ( numofdata > 0x08 ) {
+                        numofdata-=0x08;
+                        writesize = numofdata*2;
+                        if ( numofdata < 0x08 ) {
+                            numofdata = 0x08;
+                            writesize = numofdata*2;
+                        }
+                        printf("set numofdata = 0x%X, writesize = %d\n", numofdata, writesize);
+                        err = 0;
+                        break;
+                    } else {
+                        printf("numofdata = 0x%X, too small so end this loop\n", numofdata);
+                        end = 1;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ( end )
+            break;
+    }
+
+    printf("\n#### WriteHBData end ####\n");
+
+    if ( index == datasize )
+        return 0;
+    else
+        return 5;
+}
+
 int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
 {
 
@@ -1385,6 +1612,7 @@ int GetFWData()
         }
         printf("===================== FW update end =====================\n");
     }
+    free(ucbuffer);
 
     // save log immediately
     CloseLog();
@@ -1392,9 +1620,340 @@ int GetFWData()
     OpenLog(g_SYSLOG_PATH, st_time);
 
     printf("######### GetFWData() end #########\n");
-    getchar();
+    //getchar();
 
     return 0;
+}
+
+int GetHbFWData()
+{
+    unsigned char *ucbuffer = NULL;
+    int i = 0, byte_count = 0, addr = 0, recoed_type = 0, tmp = 0, next_addr = 0, size = 0, index = 0, retval = -1, count = 0, index_tmp = 0;
+    unsigned char hi_addr_hi = 0, hi_addr_lo = 0, lo_addr_hi = 0, lo_addr_lo = 0;
+    unsigned short checksum = 0;
+    char read_buf[256] = {0}, strtmp[1024] = {0};
+    char *cptr = NULL;
+    FILE *pfile_fd = NULL;
+
+    time_t      current_time = 0;
+    struct tm   *st_time = NULL;
+
+    current_time = time(NULL);
+    st_time = localtime(&current_time);
+
+    printf("######### run GetHbFWData() #########\n");
+
+    pfile_fd = fopen("/tmp/test.hex", "r");
+    if ( pfile_fd == NULL ) {
+        printf("#### Open /tmp/test.hex Fail ####\n");
+        SaveLog((char *)"FWupdate GetHbFWData() : Open /tmp/test.hex Fail", st_time);
+        return 1;
+    }
+
+    // count hex buffer size
+    while ( fgets(read_buf, 256, pfile_fd) != NULL ) {
+        // debug print
+        //printf("read_buf = [%s]\n", read_buf);
+        // check start byte ':'
+        cptr = strchr(read_buf, ':');
+        if ( cptr ) {
+            // get byte count, addr, type
+            sscanf(cptr, ":%02x%04x%02x", &byte_count, &addr, &recoed_type);
+            //printf("get byte_count = 0x%02X, addr = 0x%04X, recoed_type = 0x%02X\n", byte_count, addr, recoed_type);
+            // check record type
+            if ( recoed_type == 4 ) {
+                // new addr
+                if ( size == 0 )
+                    size = 8; // File header 2 + File Checksum 2 + Data Byte Count 4
+
+                size += 10; // File Section Header 2 + Section Address 4 + Section Data Byte Count 4
+
+                next_addr = 0;
+            } else if ( recoed_type == 1 ) {
+                size += 2; // File End
+            } else if ( recoed_type == 0 ) {
+                if ( next_addr ) {
+                    if ( next_addr == addr ) {
+                        size += byte_count;
+                    } else {
+                        size += 10; // New Section Header 2 + Section Address 4 + Section Data Byte Count 4
+                        size += byte_count;
+                    }
+                } else
+                    size += byte_count;
+
+                next_addr = byte_count/2 + addr;
+                //printf("next_addr = 0x%04X\n", next_addr);
+            }
+            // debug print
+            //printf("size = %d\n", size);
+        } else {
+            printf("[:] not found\n");
+            getchar();
+        }
+    }
+    printf("size = %d\n", size);
+    // jump to beginning of file
+    fseek(pfile_fd, 0, SEEK_SET);
+
+    if ( size == 0 ) {
+        fclose(pfile_fd);
+        printf("size = 0\n");
+        SaveLog((char *)"FWupdate GetHbFWData() : size = 0", st_time);
+        return 2;
+    }
+
+    // create fw data buffer
+    ucbuffer = calloc(size, sizeof(unsigned char));
+    if ( ucbuffer == NULL ) {
+        printf("#### calloc %d Fail ####\n", size);
+        SaveLog((char *)"FWupdate GetHbFWData() : calloc Fail", st_time);
+        fclose(pfile_fd);
+        return 3;
+    }
+    printf("calloc size %d OK\n", size);
+
+    // set fw data
+    while ( fgets(read_buf, 256, pfile_fd) != NULL ) {
+        // debug print
+        //printf("read_buf = [%s]\n", read_buf);
+        // check start byte ':'
+        cptr = strchr(read_buf, ':');
+        if ( cptr ) {
+            // get byte count, addr, type
+            sscanf(cptr, ":%02x%04x%02x", &byte_count, &addr, &recoed_type);
+            //printf("get byte_count = 0x%02X, addr = 0x%04X, recoed_type = 0x%02X\n", byte_count, addr, recoed_type);
+            lo_addr_hi = (unsigned char)(addr >> 8);
+            lo_addr_lo = (unsigned char)(addr & 0xFF);
+            // check record type
+            if ( recoed_type == 4 ) {
+                // save hi addr
+                cptr += 9;
+                sscanf(cptr, "%04x", &tmp);
+                hi_addr_hi = (unsigned char)(tmp >> 8);
+                hi_addr_lo = (unsigned char)(tmp & 0xFF);
+                //printf("hi_addr_hi = 0x%02X, hi_addr_lo = 0x%02X\n", hi_addr_hi, hi_addr_lo);
+                // get next line
+                fgets(read_buf, 256, pfile_fd);
+                // debug print
+                //printf("read_buf = [%s]\n", read_buf);
+                cptr = strchr(read_buf, ':');
+                if ( cptr ) {
+                    // get byte count, addr, type
+                    sscanf(cptr, ":%02x%04x%02x", &byte_count, &addr, &recoed_type);
+                    //printf("get next byte_count = 0x%02X, addr = 0x%04X, recoed_type = 0x%02X\n", byte_count, addr, recoed_type);
+                    lo_addr_hi = (unsigned char)(addr >> 8);
+                    lo_addr_lo = (unsigned char)(addr & 0xFF);
+
+                    // set data
+                    // first section, set file header
+                    if ( index == 0 ) {
+                        // (0,1)File header + (2,3)File Checksum + (4,5,6,7)Byte Count + (8,9)First Section Header + (10,11,12,13)Section Address
+                        if ( hi_addr_hi == 0x00 && hi_addr_lo == 0x3E && lo_addr_hi == 0x80 && lo_addr_lo == 0x00 ) {
+                            // set chip 1
+                            ucbuffer[0] = 0xDA;
+                            ucbuffer[1] = 0x01;
+                        } else {
+                            // set chip 2
+                            ucbuffer[0] = 0xDA;
+                            ucbuffer[1] = 0x02;
+                        }
+                        // skip 2,3 check sum, final set it
+                        tmp = size - 8;
+                        ucbuffer[4] = (unsigned char)((tmp >> 24) & 0xFF);
+                        ucbuffer[5] = (unsigned char)((tmp >> 16) & 0xFF);
+                        ucbuffer[6] = (unsigned char)((tmp >> 8) & 0xFF);
+                        ucbuffer[7] = (unsigned char)(tmp & 0xFF);
+                        ucbuffer[8] = 0xDA;
+                        ucbuffer[9] = 0xF6;
+                        ucbuffer[10] = hi_addr_hi;
+                        ucbuffer[11] = hi_addr_lo;
+                        ucbuffer[12] = lo_addr_hi;
+                        ucbuffer[13] = lo_addr_lo;
+                        // skip 14,15,16,17 byte count, next section set it
+                        index_tmp = 14;
+                        index += 18;
+                    } else {
+                        // set previous section byte count
+                        ucbuffer[index_tmp] = (unsigned char)((count >> 24) & 0xFF);
+                        ucbuffer[index_tmp+1] = (unsigned char)((count >> 16) & 0xFF);
+                        ucbuffer[index_tmp+2] = (unsigned char)((count >> 8) & 0xFF);
+                        ucbuffer[index_tmp+3] = (unsigned char)(count & 0xFF);
+                        // not first, only set (0,1)New Section Header + (2,3,4,5)Section Address
+                        ucbuffer[index]   = 0xDA;
+                        ucbuffer[index+1] = 0xF6;
+                        ucbuffer[index+2] = hi_addr_hi;
+                        ucbuffer[index+3] = hi_addr_lo;
+                        ucbuffer[index+4] = lo_addr_hi;
+                        ucbuffer[index+5] = lo_addr_lo;
+                        // skip 6,7,8,9 byte count, next section set it
+                        index_tmp = index+6;
+                        index += 10;
+                    }
+
+                    // set fw data
+                    cptr += 9;
+                    for (i = 0; i < byte_count; i++) {
+                        sscanf(cptr, "%02x", &tmp);
+                        ucbuffer[index+i] = (unsigned char)tmp;
+                        cptr += 2;
+                    }
+                    count = byte_count;
+                    index += byte_count;
+                    next_addr = byte_count/2 + addr;
+                    //printf("next_addr = 0x%04X\n", next_addr);
+                }
+            } else if ( recoed_type == 1 ) {
+                // set previous section byte count
+                ucbuffer[index_tmp] = (unsigned char)((count >> 24) & 0xFF);
+                ucbuffer[index_tmp+1] = (unsigned char)((count >> 16) & 0xFF);
+                ucbuffer[index_tmp+2] = (unsigned char)((count >> 8) & 0xFF);
+                ucbuffer[index_tmp+3] = (unsigned char)(count & 0xFF);
+                // File End
+                ucbuffer[index]   = 0xDA;
+                ucbuffer[index+1] = 0xF7;
+                index += 2;
+                //break;
+            } else if ( recoed_type == 0 ) {
+                if ( next_addr ) {
+                    if ( next_addr == addr ) {
+                        // set fw data
+                        cptr += 9;
+                        for (i = 0; i < byte_count; i++) {
+                            sscanf(cptr, "%02x", &tmp);
+                            ucbuffer[index+i] = (unsigned char)tmp;
+                            cptr += 2;
+                        }
+                        count += byte_count;
+                        index += byte_count;
+                    } else {
+                        // set previous section byte count
+                        ucbuffer[index_tmp] = (unsigned char)((count >> 24) & 0xFF);
+                        ucbuffer[index_tmp+1] = (unsigned char)((count >> 16) & 0xFF);
+                        ucbuffer[index_tmp+2] = (unsigned char)((count >> 8) & 0xFF);
+                        ucbuffer[index_tmp+3] = (unsigned char)(count & 0xFF);
+                        // New Section Header + Section Address
+                        ucbuffer[index] = 0xDA;
+                        ucbuffer[index+1] = 0xF6;
+                        ucbuffer[index+2] = hi_addr_hi;
+                        ucbuffer[index+3] = hi_addr_lo;
+                        ucbuffer[index+4] = lo_addr_hi;
+                        ucbuffer[index+5] = lo_addr_lo;
+                        // skip 6,7,8,9 byte count, next section set it
+                        index_tmp = index+6;
+                        index += 10;
+                        count = byte_count;
+
+                        // set fw data
+                        cptr += 9;
+                        for (i = 0; i < byte_count; i++) {
+                            sscanf(cptr, "%02x", &tmp);
+                            ucbuffer[index+i] = (unsigned char)tmp;
+                            cptr += 2;
+                        }
+                        index += byte_count;
+                    }
+                } else
+                    printf("next_addr = 0!\n");
+
+                next_addr = byte_count/2 + addr;
+                //printf("next_addr = 0x%04X\n", next_addr);
+            }
+        }
+    }
+    printf("index = %d\n", index);
+    fclose(pfile_fd);
+
+    if ( index == 0 ) {
+        free(ucbuffer);
+        printf("index = 0\n");
+        SaveLog((char *)"FWupdate GetHbFWData() : index = 0", st_time);
+        return 4;
+    }
+
+    // set check sum
+    //printf("count check sum start:\n");
+    for (i = 8; i < index; i++) {
+        checksum += ucbuffer[i];
+    }
+    //printf("\ncount check sum end\n");
+    checksum = ~checksum;
+    checksum += 1;
+    //printf("checksum = 0x%04X\n", checksum);
+    ucbuffer[2] = (unsigned char)((checksum>>8) & 0x00FF);
+    ucbuffer[3] = (unsigned char)(checksum & 0x00FF);
+    printf("checksum = 0x%02X 0x%02X\n", ucbuffer[2], ucbuffer[3]);
+
+    // debug print fw data
+    //printf("======================== fw data =========================\n");
+    //for (i = 0; i < index; i++) {
+    //    if ( (ucbuffer[i] == 0xDA) && ((ucbuffer[i+1] == 0xF6) || (ucbuffer[i+1] == 0xF7)) )
+    //        printf("\n");
+    //    printf("%02X ", ucbuffer[i]);
+    //}
+    //printf("\n==========================================================\n");
+
+    // save fw data to log
+    count = 0;
+    for (i = 0; i < index; i++) {
+        // part tital
+        if ( i%MAX_DATA_SIZE == 0 ) {
+            count++;
+            sprintf(strtmp, "FWupdate GetHbFWData() : Data count %d", count);
+            SaveLog(strtmp, st_time);
+            sprintf(strtmp, "FWupdate GetHbFWData() : Data =");
+        }
+        // value
+        sprintf(read_buf, " %02X", ucbuffer[i]);
+        strcat(strtmp, read_buf);
+        // line end
+        if ( i%MAX_DATA_SIZE == MAX_DATA_SIZE-1) {
+            SaveLog(strtmp, st_time);
+        } else if ( i == index-1 ) {
+            SaveLog(strtmp, st_time);
+        }
+    }
+    // save log immediately
+    CloseLog();
+    system("sync");
+    OpenLog(g_SYSLOG_PATH, st_time);
+
+    // register part
+    // remove register
+    if ( gcomportfd > 0 ) {
+        RemoveRegisterQuery(gcomportfd, 0);
+        CleanRespond();
+        usleep(500000);
+        RemoveRegisterQuery(gcomportfd, 0);
+        CleanRespond();
+        usleep(500000);
+        RemoveRegisterQuery(gcomportfd, 0);
+        CleanRespond();
+        usleep(500000);
+    }
+    // register
+    retval = RunRegister(snlist[0].SN);
+    if ( retval ) {
+        // fail
+        printf("RunRegister fail retval = %d\n", retval);
+        free(ucbuffer);
+        return 5;
+    }
+    // register OK, get slave id gV2id
+    printf("RunRegister return OK, get gV2id = %d\n", gV2id);
+
+    // send file header & check sum & byte count
+    retval = WriteHBData(gV2id, ucbuffer, index);
+
+    free(ucbuffer);
+
+    printf("######### GetHbFWData() end #########\n");
+    getchar();
+
+    if ( !retval ) // ok
+        return 0;
+    else    // fail
+        return 6;
 }
 
 int stopProcess()
@@ -1467,7 +2026,7 @@ int GetMIList(char *file_path)
     FILE *pfile_fd = NULL;
     char buf[512] = {0}, tmpsn[17] = {0};
     char *cptr = NULL;
-    int tmpid = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0, tmp6 = 0, tmp7 = 0, tmp8 = 0;
+    int tmpid = 0, tmptype = -1, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0, tmp6 = 0, tmp7 = 0, tmp8 = 0;
 
     time_t      current_time;
     struct tm   *st_time = NULL;
@@ -1481,6 +2040,7 @@ int GetMIList(char *file_path)
         memset(milist[tmpid].SN, 0x00, 17);
         milist[tmpid].slave_id = 0;
         memset(milist[tmpid].sn_bin, 0x00, 8);
+        milist[tmpid].OtherType = -1;
     }
 
     printf("######### run GetMIList() #########\n");
@@ -1513,6 +2073,16 @@ int GetMIList(char *file_path)
         cptr = strstr(buf, "DARFON");
         if ( cptr ) {
             printf("get model DARFON\n");
+            // get OtherType
+            fgets(buf, 512, pfile_fd);
+            fgets(buf, 512, pfile_fd);
+            cptr = strstr(buf, "<OtherType>");
+            if ( cptr ) {
+                sscanf(cptr, "<OtherType>%d</OtherType>", &tmptype);
+                printf("tmptype = %d\n", tmptype);
+            }
+
+            // skip B part
             if ( gmicount > 0 ) {
                 // check milist data (G640), skip the same sn & id (ex. G640 A & B part)
                 if ( tmpid == milist[gmicount-1].slave_id ) {
@@ -1522,6 +2092,7 @@ int GetMIList(char *file_path)
             }
             strcpy(milist[gmicount].SN, tmpsn);
             milist[gmicount].slave_id = tmpid;
+            milist[gmicount].OtherType = tmptype;
             sscanf(milist[gmicount].SN, "%02X%02X%02X%02X%02X%02X%02X%02X",
                 &tmp1, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7, &tmp8);
             milist[gmicount].sn_bin[0] = (unsigned char)tmp1;
@@ -1532,7 +2103,7 @@ int GetMIList(char *file_path)
             milist[gmicount].sn_bin[5] = (unsigned char)tmp6;
             milist[gmicount].sn_bin[6] = (unsigned char)tmp7;
             milist[gmicount].sn_bin[7] = (unsigned char)tmp8;
-            printf("set mi list %d : sn = %s, id = %d\n", gmicount, milist[gmicount].SN, milist[gmicount].slave_id);
+            printf("set mi list %d : sn = %s, id = %d, type = %d\n", gmicount, milist[gmicount].SN, milist[gmicount].slave_id, milist[gmicount].OtherType);
             printf("ucsn = 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n",
                 milist[gmicount].sn_bin[0], milist[gmicount].sn_bin[1], milist[gmicount].sn_bin[2], milist[gmicount].sn_bin[3],
                 milist[gmicount].sn_bin[4], milist[gmicount].sn_bin[5], milist[gmicount].sn_bin[6], milist[gmicount].sn_bin[7]);
@@ -1545,7 +2116,7 @@ int GetMIList(char *file_path)
     printf("===========================================\n");
     printf("mi list count = %d\n", gmicount);
     for (tmpid = 0; tmpid < gmicount; tmpid++) {
-        printf("List %03d : sn = %s, id = %d\n", tmpid, milist[tmpid].SN, milist[tmpid].slave_id);
+        printf("List %03d : sn = %s, id = %d, type = %d\n", tmpid, milist[tmpid].SN, milist[tmpid].slave_id, milist[tmpid].OtherType);
     }
     printf("===========================================\n");
 
@@ -1607,12 +2178,42 @@ int GetSNList()
     return 0;
 }
 
+int CheckType(int index, int *ret)
+{
+    int i = 0;
+    char buf[512] = {0};
+
+    time_t      current_time;
+    struct tm   *st_time = NULL;
+    current_time = time(NULL);
+    st_time = localtime(&current_time);
+    SaveLog((char *)"FWupdate CheckType() : start", st_time);
+
+    printf("######### run CheckType() #########\n");
+    // check sn in milist
+    for (i = 0; i < gmicount; i++) {
+        // match sn
+        if ( strncmp(snlist[index].SN, milist[i].SN, 16) == 0 ) {
+            sprintf(buf, "FWupdate CheckType() : match index %d", i);
+            SaveLog(buf, st_time);
+            *ret = i;
+            printf("match index %d\n", *ret);
+            printf("######### CheckType() end #########\n");
+            return milist[i].OtherType;
+        }
+    }
+
+    printf("######### CheckType() end #########\n");
+    *ret = -1;
+    return -1;
+}
+
 int DoUpdate(char *file_path)
 {
     FILE *pfile_fd = NULL;
     char buf[512] = {0}, strtmp[512] = {0};
     char FILENAME[64] = {0};
-    int comport = 0;
+    int comport = 0, ret = 0, index = -1;
 
     time_t      current_time;
     struct tm   *st_time = NULL;
@@ -1667,31 +2268,41 @@ int DoUpdate(char *file_path)
         SaveLog(strtmp, st_time);
     }
 
-    // check version
-    if ( gcomportfd > 0 ) {
-        if ( CheckVer() ) {
-            // fail
-            printf("Use V2.0 protocol\n");
+    // if only 1 device, check type (Hybrid?)
+    if ( gsncount == 1 )
+        ret = CheckType(0, &index);
+    // check run Hybrid or MI
+    if ( ret == 2 ) {
+        // Hybrid
+        printf("Check Hybrid, list index = %d\n", index);
+        GetHbFWData();
+    } else if ( ret == 0 ) {
+        // MI
+        // check version
+        if ( gcomportfd > 0 ) {
+            if ( CheckVer() ) {
+                // fail
+                printf("Use V2.0 protocol\n");
 
-            RemoveRegisterQuery(gcomportfd, 0);
-            CleanRespond();
-            usleep(500000);
-            RemoveRegisterQuery(gcomportfd, 0);
-            CleanRespond();
-            usleep(500000);
-            RemoveRegisterQuery(gcomportfd, 0);
-            CleanRespond();
-            usleep(500000);
-        } else {
-            // success
-            printf("Use V3.0 protocol\n");
+                RemoveRegisterQuery(gcomportfd, 0);
+                CleanRespond();
+                usleep(500000);
+                RemoveRegisterQuery(gcomportfd, 0);
+                CleanRespond();
+                usleep(500000);
+                RemoveRegisterQuery(gcomportfd, 0);
+                CleanRespond();
+                usleep(500000);
+            } else {
+                // success
+                printf("Use V3.0 protocol\n");
+            }
         }
+        printf("gprotocolver = %d\n", gprotocolver);
 
+        if ( gprotocolver )
+            GetFWData();
     }
-    printf("gprotocolver = %d\n", gprotocolver);
-
-    if ( gprotocolver )
-        GetFWData();
 
     printf("##################################\n");
 

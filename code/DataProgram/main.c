@@ -47,6 +47,7 @@ char g_ROOT_PATH[64] = {0};
 char g_XML_PATH[64] = {0};
 char g_LOG_PATH[64] = {0};
 char g_ERRLOG_PATH[64] = {0};
+char g_ENV_PATH[64] = {0};
 char g_BMS_PATH[64] = {0};
 char g_SYSLOG_PATH[64] = {0};
 int data_interval = 0; // min
@@ -223,6 +224,9 @@ void setPath()
 
     // set errlog path
     sprintf(g_ERRLOG_PATH, "%s/ERRLOG", g_XML_PATH);
+
+    // set env path
+    sprintf(g_ENV_PATH, "%s/ENV", g_XML_PATH);
 
     // set bms path
     sprintf(g_BMS_PATH, "%s/BMS", g_ROOT_PATH);
@@ -1927,8 +1931,17 @@ int UploadRAW(char *date, char *hour)
     st_time = localtime(&current_time);
 
     printf("======================== UploadRAW start ========================\n");
-    sprintf(buf, "cd %s/%s; ls %s*> /tmp/RAWtime", g_LOG_PATH, date, hour);
-    printf("buf = %s\n", buf);
+    // log data
+    sprintf(buf, "cd %s/%s; ls %s*> /tmp/RAWtimeLOG", g_LOG_PATH, date, hour);
+    printf("logbuf = %s\n", buf);
+    system(buf);
+    // errlog data
+    sprintf(buf, "cd %s/%s; ls %s*> /tmp/RAWtimeERR", g_ERRLOG_PATH, date, hour);
+    printf("errbuf = %s\n", buf);
+    system(buf);
+    // env data
+    sprintf(buf, "cd %s/%s; ls %s*> /tmp/RAWtimeENV", g_ENV_PATH, date, hour);
+    printf("envbuf = %s\n", buf);
     system(buf);
 
     // set curl file
@@ -1952,10 +1965,11 @@ int UploadRAW(char *date, char *hour)
     fputs(buf, file_fd);
     sprintf(buf, "\t\t\t<DataFile>");
     fputs(buf, file_fd);
-    // write base64 raw data
-    rawtime_fd = fopen("/tmp/RAWtime", "rb");
+
+    // write base64 raw log data
+    rawtime_fd = fopen("/tmp/RAWtimeLOG", "rb");
     if ( rawtime_fd == NULL ) {
-        printf("#### Open /tmp/RAWtime Fail ####\n");
+        printf("#### Open /tmp/RAWtimeLOG Fail ####\n");
     } else {
         // get file time
         memset(buf, 0, 512);
@@ -1972,12 +1986,55 @@ int UploadRAW(char *date, char *hour)
         }
         fclose(rawtime_fd);
     }
+    // write base64 raw err data
+    rawtime_fd = fopen("/tmp/RAWtimeERR", "rb");
+    if ( rawtime_fd == NULL ) {
+        printf("#### Open /tmp/RAWtimeERR Fail ####\n");
+    } else {
+        // get file time
+        memset(buf, 0, 512);
+        while ( fgets(buf, 64, rawtime_fd) != NULL ) {
+            if ( strlen(buf) == 0 )
+                break;
+            // set '\n' to 0
+            buf[strlen(buf)-1] = 0;
+            // set filename
+            sprintf(FILENAME, "%s/%s/%s", g_ERRLOG_PATH, date, buf);
+            printf("FILENAME = %s\n", FILENAME);
+            // run base64 encode
+            base64_encode(FILENAME, file_fd);
+        }
+        fclose(rawtime_fd);
+    }
+    // write base64 raw env data
+    rawtime_fd = fopen("/tmp/RAWtimeENV", "rb");
+    if ( rawtime_fd == NULL ) {
+        printf("#### Open /tmp/RAWtimeENV Fail ####\n");
+    } else {
+        // get file time
+        memset(buf, 0, 512);
+        while ( fgets(buf, 64, rawtime_fd) != NULL ) {
+            if ( strlen(buf) == 0 )
+                break;
+            // set '\n' to 0
+            buf[strlen(buf)-1] = 0;
+            // set filename
+            sprintf(FILENAME, "%s/%s/%s", g_ENV_PATH, date, buf);
+            printf("FILENAME = %s\n", FILENAME);
+            // run base64 encode
+            base64_encode(FILENAME, file_fd);
+        }
+        fclose(rawtime_fd);
+    }
+
     sprintf(buf, "</DataFile>\n");
     fputs(buf, file_fd);
     sprintf(buf, "\t\t</UploadRawDataFile>\n");
     fputs(buf, file_fd);
     fputs(SOAP_TAIL, file_fd);
     fclose(file_fd);
+
+    printf("RAW set OK\n");
 
     // run curl soap to web server
     sprintf(buf, "%s > /tmp/UploadRAW", g_CURL_CMD);
