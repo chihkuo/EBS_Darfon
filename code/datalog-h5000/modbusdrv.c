@@ -793,7 +793,7 @@ void MClearRX()
 void MClearTX_Noise(float waittime_s)
 {
 
-	DEBUG2(printf("MClearTX_Noise\n"));
+	//DEBUG2(printf("MClearTX_Noise\n"));
     unsigned long i=0;
     unsigned long totalus=waittime_s*1000000;
     unsigned long gap=10000;//10ms 0.01s
@@ -1531,6 +1531,7 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                             }
                             break;
                         case 0x10: // write
+                        case 0x11: // for fw update
                             if ( CheckCRC(respond_buff+i, 8) ) {
                                 DebugPrint(respond_buff+i, 8, "Write recv");
                                 return respond_buff+i;

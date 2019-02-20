@@ -676,9 +676,13 @@ void CG320::GetData(time_t data_time, bool first, bool last)
         }
         if( arySNobj[i].m_Err < 3 ) {
             if ( arySNobj[i].m_Device == -1 ) { // unknown device, first time to do
-                if ( GetDevice(i) )
+                if ( GetDevice(i) ) {
                     dosave = true;
-                else
+                    if ( arySNobj[i].m_Device < 0x0A ) // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
+                        GetMiIDInfo(i);
+                    else
+                        ;
+                } else
                     arySNobj[i].m_Err++;
             } else if ( arySNobj[i].m_Device < 0x0A ) { // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
             // MI part
@@ -2510,7 +2514,7 @@ bool CG320::GetMiIDInfo(int index)
     int err = 0;
     byte *lpdata = NULL;
 
-    unsigned char szMIIDinfo[]={0x00, 0x03, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00};
+    unsigned char szMIIDinfo[]={0x00, 0x03, 0x00, 0x01, 0x00, 0x0A, 0x00, 0x00};
     szMIIDinfo[0]=arySNobj[index].m_Addr;
     MakeReadDataCRC(szMIIDinfo,8);
 
@@ -2524,11 +2528,11 @@ bool CG320::GetMiIDInfo(int index)
         MStartTX(m_busfd);
         usleep(m_dl_config.m_delay_time*100);
 
-        lpdata = GetRespond(m_busfd, 21, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 25, m_dl_config.m_delay_time*2);
         if ( lpdata ) {
             printf("#### GetMiIDInfo OK ####\n");
             SaveLog((char *)"DataLogger GetMiIDInfo() : OK", m_st_time);
-            DumpMiIDInfo(lpdata+3);
+            DumpMiIDInfo(index, lpdata+3);
             return true;
         } else {
             if ( have_respond == true ) {
@@ -2546,7 +2550,7 @@ bool CG320::GetMiIDInfo(int index)
     return false;
 }
 
-void CG320::DumpMiIDInfo(unsigned char *buf)
+void CG320::DumpMiIDInfo(int index, unsigned char *buf)
 {
     m_mi_id_info.Customer = (*(buf) << 8) + *(buf+1);
     m_mi_id_info.Model = (*(buf+2) << 8) + *(buf+3);
@@ -2556,8 +2560,9 @@ void CG320::DumpMiIDInfo(unsigned char *buf)
     m_mi_id_info.Month = (*(buf+10) << 8) + *(buf+11);
     m_mi_id_info.Date = (*(buf+12) << 8) + *(buf+13);
     m_mi_id_info.Device = (*(buf+14) << 8) + *(buf+15);
+    m_mi_id_info.FWVER = (*(buf+18) << 8) + *(buf+19);
 
-/*    printf("#### Dump MI ID Info ####\n");
+    printf("#### Dump MI ID Info ####\n");
     printf("Customer = %d\n", m_mi_id_info.Customer);
     printf("Model    = %d ==> MI-OnGrid ", m_mi_id_info.Model);
     switch (m_mi_id_info.Model)
@@ -2591,7 +2596,10 @@ void CG320::DumpMiIDInfo(unsigned char *buf)
         printf("MI\n");
     else
         printf("Hybrid\n");
-    printf("##########################\n");*/
+    arySNobj[index].m_FWver = m_mi_id_info.FWVER;
+    printf("FW VER   = 0x%04X ==> %04d\n", arySNobj[index].m_FWver, arySNobj[index].m_FWver);
+
+    printf("##########################\n");
 }
 
 bool CG320::GetMiPowerInfo(int index)

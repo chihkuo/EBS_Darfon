@@ -17,7 +17,7 @@
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
-#define UPDATE_FILE         "/tmp/test.xml"
+#define UPDATE_FILE         "/tmp/test.file"
 #define UPDATE_LIST         "/tmp/fwulist"
 #define SYSLOG_PATH         "/tmp/test/SYSLOG"
 #define MAX_DATA_SIZE       144
@@ -823,7 +823,7 @@ int LBDReregister(char *sn)
     while ( err < 3 ) {
         memcpy(txbuffer, cmd, 15);
         MStartTX(gcomportfd);
-        //usleep(10000); // 0.01s
+        usleep(1000000); // 1s
 
         if ( err == 0 )
             lpdata = GetRespond(gcomportfd, 14, 100000); // 0.1s
@@ -1026,11 +1026,23 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
             lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
         else
             lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
-        if ( 1/*lpdata*/ ) {
-            printf("#### WriteHBData Header OK ####\n");
-            SaveLog((char *)"FWupdate WriteHBData() : Send file header OK", st_time);
-            ret = 0;
-            break;
+        if ( lpdata ) {
+            if ( (lpdata[4] == 0xFF) && (lpdata[5] == 0xF0) ) {
+                // response the same FW data
+                printf("the same FW data\n");
+                SaveLog((char *)"FWupdate WriteHBData() : The same FW data", st_time);
+                ret = 4;
+                break;
+            } else if ( (lpdata[4] == 0x00) && (lpdata[5] == 0x04) ) {
+                printf("#### WriteHBData Header OK ####\n");
+                SaveLog((char *)"FWupdate WriteHBData() : Send file header OK", st_time);
+                ret = 0;
+                break;
+            } else {
+                printf("#### Unknow No. of data 0x%02x%02x ####\n", lpdata[4], lpdata[5]);
+                ret = 7;
+                break;
+            }
         } else {
             if ( have_respond ) {
                 printf("#### WriteHBData Send file header CRC Error ####\n");
@@ -1098,8 +1110,8 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
             else
                 lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
 
-            if ( 1/*lpdata*/ ) {
-                lpdata = cmd;
+            if ( lpdata ) {
+                //lpdata = cmd; // for test
                 if ( (lpdata[2] == addrh) && (lpdata[3] == addrl) && (lpdata[4] == 00) && (lpdata[5] == numofdata) ) {
                     cnt++;
                     printf("#### WriteHBData data count %d, index 0x%X, size %d OK ####\n", cnt, index, writesize);
@@ -1109,7 +1121,7 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
                     index+=writesize;
                     address+=numofdata;
                     // check address overflow
-                    if ( address > 0x10000 ) {
+                    if ( address >= 0x10000 ) {
                         // set function code
                         cmd[1] = 0x11;
                         // reset address at overflow point
@@ -1130,6 +1142,11 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
                     printf("response check sum error\n");
                     SaveLog((char *)"FWupdate WriteHBData() : Response Check Sum error", st_time);
                     return 3;
+                } else if ( (lpdata[4] == 0xFF) && (lpdata[5] == 0xF0) ) {
+                    // response the same FW data
+                    printf("the same FW data\n");
+                    SaveLog((char *)"FWupdate WriteHBData() : The same FW data", st_time);
+                    return 4;
                 } else {
                     printf("Response check error!\n");
                     SaveLog((char *)"FWupdate WriteHBData() : Response check error", st_time);
@@ -1145,7 +1162,7 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
                         break;
                     } else {
                         SaveLog((char *)"FWupdate WriteHBData() : Response check retry error", st_time);
-                        return 4;
+                        return 5;
                     }
                 }
             } else {
@@ -1189,7 +1206,7 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
     if ( index == datasize )
         return 0;
     else
-        return 5;
+        return 6;
 }
 
 int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
@@ -1275,7 +1292,8 @@ int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
                 SaveLog(buf, st_time);
 
                 index+=writesize;
-                address+=numofdata;
+                //address+=numofdata;
+                address+=writesize;
 
                 break;
             } else {
@@ -1379,9 +1397,11 @@ int ReadV3Ver(char *sn, unsigned char *fwver)
             ver2 = fwver[0]*1000 + fwver[1]*100 + fwver[2]*10 + fwver[3];
             printf("ver1 = %d, ver2 = %d\n", ver1, ver2);
             if ( ver1 == ver2 ) {
+                printf("FW ver match\n");
                 SaveLog((char *)"FWupdate ReadV3Ver() : fw ver match", st_time);
                 return 0;
             } else {
+                printf("FW ver not match\n");
                 SaveLog((char *)"FWupdate ReadV3Ver() : fw ver not match", st_time);
                 return 2;
             }
@@ -1421,7 +1441,7 @@ int GetFWData()
 
     printf("######### run GetFWData() #########\n");
 
-    pfile_fd = fopen("/tmp/test.xml", "r");
+    pfile_fd = fopen("/tmp/test.file", "r");
     if ( pfile_fd == NULL ) {
         printf("#### Open /tmp/test.xml Fail ####\n");
         SaveLog((char *)"FWupdate GetFWData() : Open /tmp/test.xml Fail", st_time);
@@ -1574,6 +1594,15 @@ int GetFWData()
             } else if ( gprotocolver == 3 ) { // protocol V3.0 part
                 // re register
                 LBDReregister(snlist[count].SN);
+                // check fw ver
+                retver = ReadV3Ver(snlist[count].SN, ucfwver);
+                if ( !retver ) {
+                    printf("The same fw version, skip index = %d update action\n", count);
+                    sprintf(strtmp, "FWupdate GetFWData() : The same fw version, skip index = %d, SN = %s update action", count, snlist[count].SN);
+                    SaveLog(strtmp, st_time);
+
+                    continue;
+                }
                 // write fw ver by protocol V3.0
                 retver = WriteVerV3(snlist[count].SN, ucfwver);
             }
@@ -1600,8 +1629,8 @@ int GetFWData()
                 }
                 if ( !retdata ) {
                     printf("sn[%d] write fw data OK\n", count);
-                    if ( gprotocolver == 3 )
-                        ReadV3Ver(snlist[count].SN, ucfwver);
+                    //if ( gprotocolver == 3 )
+                    //    ReadV3Ver(snlist[count].SN, ucfwver);
                 } else
                     printf("sn[%d] write fw data Fail\n", count);
             } else {
@@ -1620,7 +1649,6 @@ int GetFWData()
     OpenLog(g_SYSLOG_PATH, st_time);
 
     printf("######### GetFWData() end #########\n");
-    //getchar();
 
     return 0;
 }
@@ -1643,7 +1671,7 @@ int GetHbFWData()
 
     printf("######### run GetHbFWData() #########\n");
 
-    pfile_fd = fopen("/tmp/test.hex", "r");
+    pfile_fd = fopen("/tmp/test.file", "r");
     if ( pfile_fd == NULL ) {
         printf("#### Open /tmp/test.hex Fail ####\n");
         SaveLog((char *)"FWupdate GetHbFWData() : Open /tmp/test.hex Fail", st_time);
@@ -1948,7 +1976,6 @@ int GetHbFWData()
     free(ucbuffer);
 
     printf("######### GetHbFWData() end #########\n");
-    getchar();
 
     if ( !retval ) // ok
         return 0;

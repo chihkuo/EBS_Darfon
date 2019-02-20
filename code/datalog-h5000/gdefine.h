@@ -7,6 +7,7 @@ typedef struct stSNOBJ {
     int     m_Device;           // 0x00 ~ 0x09, 0x0A ~ 0xFF
     int     m_Err;              // consecutive error times, >= 3 to run ReRegiser function
     int     m_state;            // 1 : online, 0 : offline
+    int     m_FWver;            // xxxx
 } SNOBJ;
 
 typedef struct stGlobal {
@@ -60,6 +61,7 @@ typedef struct stMi_ID_Info {
     int Month;
     int Date;
     int Device;
+    int FWVER;
 } MI_ID_INFO;
 
 // MI Power Information

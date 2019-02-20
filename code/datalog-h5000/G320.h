@@ -100,7 +100,7 @@ protected:
     bool    ReRegister(int index);
 
     bool    GetMiIDInfo(int index);
-    void    DumpMiIDInfo(unsigned char *buf);
+    void    DumpMiIDInfo(int index, unsigned char *buf);
     bool    GetMiPowerInfo(int index);
     void    DumpMiPowerInfo(unsigned char *buf);
 
