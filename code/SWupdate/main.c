@@ -14,7 +14,7 @@
 #define USB_PATH    "/tmp/run/mountd/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.0.4"
+#define VERSION             "2.0.5"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -529,9 +529,9 @@ int DoUpdate(char *file_path)
     printf("dp_ori_ver = %d\n", dp_ori_ver);
 
     // compare original file & update file version
-    if ( (dl_upd_ver <= dl_ori_ver) && (dp_upd_ver <= dp_ori_ver) ) {
-        printf("update file version <= original file version\n");
-        SaveLog("SWupdate DoUpdate() : update file version <= original file version", st_time);
+    if ( (dl_upd_ver == dl_ori_ver) && (dp_upd_ver == dp_ori_ver) ) {
+        printf("update file version = original file version\n");
+        SaveLog("SWupdate DoUpdate() : update file version = original file version", st_time);
         return 9;
     }
 
