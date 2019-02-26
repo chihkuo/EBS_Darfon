@@ -24,6 +24,8 @@
 //#define KEY             "O10936IZHJTQ"
 #define TIME_SERVER_URL "https://www.worldtimeserver.com/handlers/GetData.ashx?action=GCTData"
 
+#define PLC2_DELAY      1500000
+
 extern "C"
 {
     #include "../common/SaveLog.h"
@@ -67,6 +69,7 @@ CG320::CG320()
     m_last_search_time = 0;
     m_last_savelog_time = 0;
     m_current_time = 0;
+    m_plcver = 0;
     m_mi_id_info = {0};
     m_mi_power_info = {0};
     m_hb_id_data = {0};
@@ -99,6 +102,7 @@ CG320::CG320()
         arySNobj[i].m_Device = -2;
         arySNobj[i].m_Err = 0;
         arySNobj[i].m_state = 0;
+        arySNobj[i].m_FWver = 0;
         //printf("i=%u, addr=%d\n",i,arySNobj[i].m_Addr );
     }
 
@@ -143,6 +147,7 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
         arySNobj[i].m_Device = -2;
         arySNobj[i].m_Err = 0;
         arySNobj[i].m_state = 0;
+        arySNobj[i].m_FWver = 0;
         //printf("i=%u, addr=%d\n",i,arySNobj[i].m_Addr );
     }
 
@@ -184,11 +189,18 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
     SetPath();
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
 
-    // get white list
+    // check plc version
+    if ( GetWhiteListCount() )
+        m_plcver = 3;
+    else
+        m_plcver = 2;
+    printf("m_plcver = %d\n", m_plcver);
+
+    // get white list & register
     if ( LoadWhiteList() ) {
         WhiteListRegister();
     } else {
-        GetWhiteListCount();
+        //GetWhiteListCount();
         if ( m_wl_count > 0 )
             if ( GetWhiteListSN() ) {
                 SavePLCWhiteList();
@@ -273,6 +285,7 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
 int CG320::DoReRegister(time_t time)
 {
     int i = 0, ret = 0;
+    bool result = false;
 
     printf("==== ReRegister part start ====\n");
 
@@ -280,20 +293,29 @@ int CG320::DoReRegister(time_t time)
     m_last_register_time = m_current_time;
     m_st_time = localtime(&m_current_time);
     SetPath();
-    CheckConfig();
+    //CheckConfig();
+    //GetDLConfig();
 
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
     for ( i = 0; i < m_snCount; i++) {
         if ( !arySNobj[i].m_state ) {
-            if ( ReRegister(i) ) {
+            if ( (arySNobj[i].m_Device > -1) && (arySNobj[i].m_Device < 0x0A) && (m_plcver == 3) ) // MI PLC V3.0
+                result = ReRegisterV3(i);
+            else
+                result = ReRegister(i); // MI PLC V2.0 & Htbrid
+            if ( result ) {
                 ret++;
                 if ( !GetDevice(i) )
                     arySNobj[i].m_Err++;
                 else {
                     // ReRegiser OK, GetDevice OK, know MI or Hybrid
                     WriteMIListXML();
-                    if ( arySNobj[i].m_Device >= 0x0A )
+                    if ( arySNobj[i].m_Device >= 0x0A ) // Hybrid
                         SetHybridRTCData(i);
+                    else if ( m_plcver == 3 )
+                        GetMiIDInfoV3(i); // MI PLC V3.0
+                    else
+                        GetMiIDInfo(i); // MI PLC V2.0
                 }
             }
         }
@@ -316,7 +338,8 @@ int CG320::DoAllRegister(time_t time)
     m_last_search_time = m_current_time;
     m_st_time = localtime(&m_current_time);
     SetPath();
-    CheckConfig();
+    //CheckConfig();
+    //GetDLConfig();
 
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
 
@@ -559,7 +582,8 @@ void CG320::Start()
         }
 
         // if interval changed
-        CheckConfig();
+        //CheckConfig();
+        GetDLConfig();
 
         // ReRegister part
         if ( register_interval >= 600 ) {
@@ -648,7 +672,8 @@ void CG320::GetData(time_t data_time, bool first, bool last)
     SetLogXML();
     SetErrorLogXML();
     SetEnvXML();
-    CheckConfig();
+    //CheckConfig();
+    GetDLConfig();
 
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
 
@@ -678,22 +703,42 @@ void CG320::GetData(time_t data_time, bool first, bool last)
             if ( arySNobj[i].m_Device == -1 ) { // unknown device, first time to do
                 if ( GetDevice(i) ) {
                     dosave = true;
-                    if ( arySNobj[i].m_Device < 0x0A ) // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
-                        GetMiIDInfo(i);
-                    else
+                    if ( arySNobj[i].m_Device < 0x0A ) { // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
+                        if ( m_plcver == 3 )
+                            GetMiIDInfoV3(i);
+                        else
+                            GetMiIDInfo(i);
+                    } else
                         ;
                 } else
                     arySNobj[i].m_Err++;
             } else if ( arySNobj[i].m_Device < 0x0A ) { // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
             // MI part
                 CleanParameter();
+                // if fwver not get for MI
+                if ( arySNobj[i].m_FWver == 0 ) {
+                    if ( m_plcver == 3 )
+                        GetMiIDInfoV3(i);
+                    else
+                        GetMiIDInfo(i);
+                }
 
-                if ( GetMiPowerInfo(i) )
-                    arySNobj[i].m_Err = 0;
-                else {
-                    if ( m_loopflag == 0 )
-                        arySNobj[i].m_Err++;
-                    m_loopflag++;
+                if ( m_plcver == 3 ) {
+                    if ( GetMiPowerInfoV3(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
+                } else {
+                    if ( GetMiPowerInfo(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
                 }
 
                 WriteLogXML(i);
@@ -903,16 +948,26 @@ bool CG320::GetDLConfig()
     pclose(pFile);
     sscanf(buf, "%d", &m_dl_config.m_sample_time);
     printf("Sample time (Min.) = %d\n", m_dl_config.m_sample_time);
-    // get delay_time
-    pFile = popen("uci get dlsetting.@sms[0].delay_time", "r");
+    // get MI mi_delay_time
+    pFile = popen("uci get dlsetting.@sms[0].delay_time_1", "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
     }
     fgets(buf, 32, pFile);
     pclose(pFile);
-    sscanf(buf, "%d", &m_dl_config.m_delay_time);
-    printf("Delay time (us.) = %d\n", m_dl_config.m_delay_time);
+    sscanf(buf, "%d", &m_dl_config.m_delay_time_1);
+    printf("MI delay time (us.) = %d\n", m_dl_config.m_delay_time_1);
+    // get Hybrid hb_delay_time
+    pFile = popen("uci get dlsetting.@sms[0].delay_time_2", "r");
+    if ( pFile == NULL ) {
+        printf("popen fail!\n");
+        return false;
+    }
+    fgets(buf, 32, pFile);
+    pclose(pFile);
+    sscanf(buf, "%d", &m_dl_config.m_delay_time_2);
+    printf("Hybrid delay time (us.) = %d\n", m_dl_config.m_delay_time_2);
 
     // cancel, set it in init()
     // get serial port
@@ -1246,7 +1301,7 @@ bool CG320::CheckConfig()
             m_dl_config.m_sample_time = tmp;
     }
 
-    fd = popen("uci get dlsetting.@sms[0].delay_time", "r");
+    fd = popen("uci get dlsetting.@sms[0].delay_time_1", "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
     } else {
@@ -1256,10 +1311,26 @@ bool CG320::CheckConfig()
         sscanf(buf, "%d", &tmp);
         //printf("tmp delay_time = %d\n", tmp);
 
-        if ( m_dl_config.m_delay_time == tmp )
+        if ( m_dl_config.m_delay_time_1 == tmp )
             ;//printf("same delay\n");
         else
-            m_dl_config.m_delay_time = tmp;
+            m_dl_config.m_delay_time_1 = tmp;
+    }
+
+    fd = popen("uci get dlsetting.@sms[0].delay_time_2", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+    } else {
+        fgets(buf, 32, fd);
+        pclose(fd);
+
+        sscanf(buf, "%d", &tmp);
+        //printf("tmp delay_time = %d\n", tmp);
+
+        if ( m_dl_config.m_delay_time_2 == tmp )
+            ;//printf("same delay\n");
+        else
+            m_dl_config.m_delay_time_2 = tmp;
     }
 
     //printf("#### CheckConfig end ####\n");
@@ -1405,6 +1476,7 @@ bool CG320::RunWhiteListChanged()
                         memset(arySNobj[i].m_Sn, 0x00, 17);
                         arySNobj[i].m_Device = -2;
                         arySNobj[i].m_Err = 0;
+                        arySNobj[i].m_FWver = 0;
                         // delete SN to PLC box
                         sscanf(sn, "%02X%02X%02X%02X%02X%02X%02X%02X", &num[0], &num[1], &num[2], &num[3], &num[4], &num[5], &num[6], &num[7]);
                         SaveLog((char *)"DataLogger RunWhiteListChanged() : run DeleteWhiteList()", m_st_time);
@@ -1445,6 +1517,7 @@ bool CG320::RunWhiteListChanged()
                 arySNobj[i].m_Device = -2;
                 arySNobj[i].m_Err = 0;
                 arySNobj[i].m_state = 0;
+                arySNobj[i].m_FWver = 0;
                 save = true;
 
                 sscanf(sn, "%02X%02X%02X%02X%02X%02X%02X%02X", &num[0], &num[1], &num[2], &num[3], &num[4], &num[5], &num[6], &num[7]);
@@ -2247,6 +2320,7 @@ int CG320::WhiteListRegister()
             arySNobj[m_snCount].m_Device = -1;
             arySNobj[m_snCount].m_Err = 0;
             arySNobj[m_snCount].m_state = 1;
+            arySNobj[m_snCount].m_FWver = 0;
             //m_snCount++;
             ok++;
         }
@@ -2395,6 +2469,7 @@ int CG320::AllocateProcess(unsigned char *query, int len)
                     arySNobj[index].m_Device = -1;
                     arySNobj[index].m_Err = 0;
                     arySNobj[index].m_state = 1;
+                    arySNobj[index].m_FWver = 0;
                     if ( index == m_snCount ) {
                         m_snCount++;
                     }
@@ -2413,7 +2488,7 @@ int CG320::AllocateProcess(unsigned char *query, int len)
 bool CG320::ReRegister(int index)
 {
     // send remove the slave address, send MySyncOffLineQuery, send MyAssignAddress
-    unsigned int tmp[9] = {0};
+    unsigned int tmp[8] = {0};
     unsigned char buffer[9] = {0};
     //int MOD = 20, ret = 0, i;
     int i = 0;
@@ -2430,7 +2505,7 @@ bool CG320::ReRegister(int index)
     for (i = 0; i < 8; i++) {
         sscanf(arySNobj[index].m_Sn+2*i, "%02X", &tmp[i]);
         buffer[i] = (unsigned char)tmp[i];
-        printf("buffer[%d] = %02X\n", i, buffer[i]);
+        //printf("buffer[%d] = %02X\n", i, buffer[i]);
     }
 
     if ( MyAssignAddress(m_busfd, buffer, arySNobj[index].m_Addr) )
@@ -2449,6 +2524,75 @@ bool CG320::ReRegister(int index)
         printf("#### ReRegiser(%d) fail! ####\n", arySNobj[index].m_Addr);
         sprintf(buf, "DataLogger ReRegiser() : addr %d fail", arySNobj[index].m_Addr);
         SaveLog(buf, m_st_time);
+    }
+
+    return false;
+}
+
+bool CG320::ReRegisterV3(int index)
+{
+    // send remove the slave address, send MySyncOffLineQuery, send MyAssignAddress
+    unsigned int tmp[8] = {0};
+    int i = 0, err = 0;
+    char buf[256] = {0};
+    byte *lpdata = NULL;
+
+    printf("#### ReRegisterV3 start ####\n");
+    sprintf(buf, "DataLogger ReRegisterV3() : addr %d run", arySNobj[index].m_Addr);
+    SaveLog(buf, m_st_time);
+    printf("#### ReRegiser start ####\n");
+    printf("#### Remove %d Query ####\n", arySNobj[index].m_Addr);
+    RemoveRegisterQuery(m_busfd, arySNobj[index].m_Addr);
+    usleep(500000);
+
+    printf("ReRegiser SN = %s\n", arySNobj[index].m_Sn);
+    for (i = 0; i < 8; i++) {
+        sscanf(arySNobj[index].m_Sn+2*i, "%02X", &tmp[i]);
+        //printf("buffer[%d] = %02X\n", i, tmp[i]);
+    }
+
+    unsigned char szRegV3[]={0x01, 0x4B, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00};
+    // set model & SN
+    szRegV3[3] = (unsigned char)tmp[3];
+    szRegV3[4] = (unsigned char)tmp[4];
+    szRegV3[5] = (unsigned char)tmp[5];
+    szRegV3[6] = (unsigned char)tmp[6];
+    szRegV3[7] = (unsigned char)tmp[7];
+    MakeReadDataCRC(szRegV3,15);
+
+    MClearRX();
+    txsize=15;
+    waitAddr = 0x01;
+    waitFCode = 0x4B;
+
+    while ( err < 2 ) {
+        memcpy(txbuffer, szRegV3, 15);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_1);
+
+        lpdata = GetRespond(m_busfd, 14, m_dl_config.m_delay_time_1);
+        if ( lpdata ) {
+            printf("=================================\n");
+            printf("#### ReRegisterV3(%d) OK! ####\n", arySNobj[index].m_Addr);
+            printf("=================================\n");
+            sprintf(buf, "DataLogger ReRegisterV3() : addr %d OK", arySNobj[index].m_Addr);
+            SaveLog(buf, m_st_time);
+
+            arySNobj[index].m_Err = 0;
+            arySNobj[index].m_state = 1;
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### ReRegisterV3 CRC Error ####\n");
+                SaveLog((char *)"DataLogger ReRegisterV3() : CRC Error", m_st_time);
+            }
+            else {
+                printf("#### ReRegisterV3 No Response ####\n");
+                SaveLog((char *)"DataLogger ReRegisterV3() : No Response", m_st_time);
+            }
+            szRegV3[1] = 0x4D;
+            err++;
+        }
     }
 
     return false;
@@ -2474,9 +2618,9 @@ bool CG320::GetDevice(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szDevice, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        //usleep(m_dl_config.m_delay_time_1);
 
-        lpdata = GetRespond(m_busfd, 7, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 7, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetDevice OK ####\n");
             arySNobj[index].m_Device = (*(lpdata+3) << 8) + *(lpdata+4);;
@@ -2526,9 +2670,10 @@ bool CG320::GetMiIDInfo(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szMIIDinfo, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        //usleep(m_dl_config.m_delay_time_1);
 
-        lpdata = GetRespond(m_busfd, 25, m_dl_config.m_delay_time*2);
+        //lpdata = GetRespond(m_busfd, 25, m_dl_config.m_delay_time_1);
+        lpdata = GetRespond(m_busfd, 25, PLC2_DELAY);
         if ( lpdata ) {
             printf("#### GetMiIDInfo OK ####\n");
             SaveLog((char *)"DataLogger GetMiIDInfo() : OK", m_st_time);
@@ -2543,6 +2688,56 @@ bool CG320::GetMiIDInfo(int index)
                 printf("#### GetMiIDInfo No Response ####\n");
                 SaveLog((char *)"DataLogger GetMiIDInfo() : No Response", m_st_time);
             }
+            err++;
+        }
+    }
+
+    return false;
+}
+
+bool CG320::GetMiIDInfoV3(int index)
+{
+    printf("#### GetMiIDInfoV3 start ####\n");
+
+    int err = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
+    byte *lpdata = NULL;
+
+    unsigned char szMIIDinfoV3[]={0x01, 0x33, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0A, 0x00, 0x00};
+    sscanf(arySNobj[index].m_Sn+6, "%02X%02X%02X%02X%02X", &tmp1, &tmp2, &tmp3, &tmp4, &tmp5);
+    // set model & SN
+    szMIIDinfoV3[3] = (unsigned char)tmp1;
+    szMIIDinfoV3[4] = (unsigned char)tmp2;
+    szMIIDinfoV3[5] = (unsigned char)tmp3;
+    szMIIDinfoV3[6] = (unsigned char)tmp4;
+    szMIIDinfoV3[7] = (unsigned char)tmp5;
+    MakeReadDataCRC(szMIIDinfoV3,14);
+
+    MClearRX();
+    txsize=14;
+    waitAddr = 0x01;
+    waitFCode = 0x33;
+
+    while ( err < 2 ) {
+        memcpy(txbuffer, szMIIDinfoV3, 14);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_1);
+
+        lpdata = GetRespond(m_busfd, 31, m_dl_config.m_delay_time_1);
+        if ( lpdata ) {
+            printf("#### GetMiIDInfoV3 OK ####\n");
+            SaveLog((char *)"DataLogger GetMiIDInfoV3() : OK", m_st_time);
+            DumpMiIDInfo(index, lpdata+9);
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### GetMiIDInfoV3 CRC Error ####\n");
+                SaveLog((char *)"DataLogger GetMiIDInfoV3() : CRC Error", m_st_time);
+            }
+            else {
+                printf("#### GetMiIDInfoV3 No Response ####\n");
+                SaveLog((char *)"DataLogger GetMiIDInfoV3() : No Response", m_st_time);
+            }
+            szMIIDinfoV3[1] = 0x36;
             err++;
         }
     }
@@ -2621,9 +2816,10 @@ bool CG320::GetMiPowerInfo(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szMIPowerinfo, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        //usleep(m_dl_config.m_delay_time_1);
 
-        lpdata = GetRespond(m_busfd, 71, m_dl_config.m_delay_time*2);
+        //lpdata = GetRespond(m_busfd, 71, m_dl_config.m_delay_time_1);
+        lpdata = GetRespond(m_busfd, 71, PLC2_DELAY);
         if ( lpdata ) {
             printf("#### GetMiPowerInfo OK ####\n");
             SaveLog((char *)"DataLogger GetMiPowerInfo() : OK", m_st_time);
@@ -2638,6 +2834,56 @@ bool CG320::GetMiPowerInfo(int index)
                 printf("#### GetMiPowerInfo No Response ####\n");
                 SaveLog((char *)"DataLogger GetMiPowerInfo() : No Response", m_st_time);
             }
+            err++;
+        }
+    }
+
+    return false;
+}
+
+bool CG320::GetMiPowerInfoV3(int index)
+{
+    printf("#### GetMiPowerInfoV3 start ####\n");
+
+    int err = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
+    byte *lpdata = NULL;
+
+    unsigned char szMIPowerinfoV3[]={0x01, 0x33, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x21, 0x00, 0x00};
+    sscanf(arySNobj[index].m_Sn+6, "%02X%02X%02X%02X%02X", &tmp1, &tmp2, &tmp3, &tmp4, &tmp5);
+    // set model & SN
+    szMIPowerinfoV3[3] = (unsigned char)tmp1;
+    szMIPowerinfoV3[4] = (unsigned char)tmp2;
+    szMIPowerinfoV3[5] = (unsigned char)tmp3;
+    szMIPowerinfoV3[6] = (unsigned char)tmp4;
+    szMIPowerinfoV3[7] = (unsigned char)tmp5;
+    MakeReadDataCRC(szMIPowerinfoV3,14);
+
+    MClearRX();
+    txsize=14;
+    waitAddr = 0x01;
+    waitFCode = 0x33;
+
+    while ( err < 2 ) {
+        memcpy(txbuffer, szMIPowerinfoV3, 14);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_1);
+
+        lpdata = GetRespond(m_busfd, 77, m_dl_config.m_delay_time_1);
+        if ( lpdata ) {
+            printf("#### GetMiPowerInfoV3 OK ####\n");
+            SaveLog((char *)"DataLogger GetMiPowerInfoV3() : OK", m_st_time);
+            DumpMiPowerInfo(lpdata+9);
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### GetMiPowerInfoV3 CRC Error ####\n");
+                SaveLog((char *)"DataLogger GetMiPowerInfoV3() : CRC Error", m_st_time);
+            }
+            else {
+                printf("#### GetMiPowerInfoV3 No Response ####\n");
+                SaveLog((char *)"DataLogger GetMiPowerInfoV3() : No Response", m_st_time);
+            }
+            szMIPowerinfoV3[1] = 0x36;
             err++;
         }
     }
@@ -2676,7 +2922,7 @@ void CG320::DumpMiPowerInfo(unsigned char *buf)
     m_mi_power_info.Ch2_Ipv = (*(buf+62) << 8) + *(buf+63);
     m_mi_power_info.Ch2_Ppv = (*(buf+64) << 8) + *(buf+65);
 
-/*    printf("#### Dump MI Power Info ####\n");
+    printf("#### Dump MI Power Info ####\n");
     printf("Temperature = %03.1f\n", ((float)m_mi_power_info.Temperature)/10);
     printf("Date        = %d\n", m_mi_power_info.Date);
     printf("Hour        = %d\n", m_mi_power_info.Hour);
@@ -2708,7 +2954,7 @@ void CG320::DumpMiPowerInfo(unsigned char *buf)
     printf("Ch2_Vpv     = %03.1f V\n", ((float)m_mi_power_info.Ch2_Vpv)*0.1);
     printf("Ch2_Ipv     = %04.2f A\n", ((float)m_mi_power_info.Ch2_Ipv)*0.01);
     printf("Ch2_Ppv     = %03.1f W\n", ((float)m_mi_power_info.Ch2_Ppv)*0.1);
-    printf("############################\n");*/
+    printf("############################\n");
 }
 
 bool CG320::GetHybridIDData(int index)
@@ -2730,9 +2976,9 @@ bool CG320::GetHybridIDData(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szHBIDdata, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 33, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 33, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridIDData OK ####\n");
             SaveLog((char *)"DataLogger GetHybridIDData() : OK", m_st_time);
@@ -2887,9 +3133,9 @@ bool CG320::SetHybridIDData(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szIDData, 39);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*1000);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridIDData OK ####\n");
@@ -2977,9 +3223,9 @@ bool CG320::GetHybridRTCData(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szHBRTCdata, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRTCData OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRTCData() : OK", m_st_time);
@@ -3101,9 +3347,9 @@ bool CG320::SetHybridRTCData(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szRTCData, 41);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*1000);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRTCData OK ####\n");
@@ -3147,9 +3393,9 @@ bool CG320::GetHybridRSInfo(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szHBRSinfo, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 35, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 35, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRSInfo() : OK", m_st_time);
@@ -3343,9 +3589,9 @@ bool CG320::SetHybridRSInfo(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szRSInfo, 41);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*1000);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRSInfo OK ####\n");
@@ -3389,9 +3635,9 @@ bool CG320::GetHybridRRSInfo(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szHBRSinfo, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRRSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", m_st_time);
@@ -3517,9 +3763,9 @@ bool CG320::SetHybridRRSInfo(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szRRSInfo, 41);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*1000);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRRSInfo OK ####\n");
@@ -3563,9 +3809,9 @@ bool CG320::GetHybridRTInfo(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szHBRTinfo, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 99, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 99, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRTInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRTInfo() : OK", m_st_time);
@@ -3975,9 +4221,9 @@ bool CG320::GetHybridBMSInfo(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szHBBMSinfo, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        //usleep(m_dl_config.m_delay_time_2);
 
-        lpdata = GetRespond(m_busfd, 27, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 27, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridBMSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridBMSInfo() : OK", m_st_time);
@@ -4049,6 +4295,7 @@ bool CG320::SetHybridBMSModule(int index)
     return ret;
 }
 
+// not use now
 bool CG320::GetHybridPanasonicModule(int index)
 {
     printf("#### GetHybridPanasonicModule start ####\n");
@@ -4068,14 +4315,14 @@ bool CG320::GetHybridPanasonicModule(int index)
     while ( err < 3 ) {
         memcpy(txbuffer, szHBPANAMOD, 8);
         MStartTX(m_busfd);
-        if ( err == 0 )
-            usleep(m_dl_config.m_delay_time*100);
+        /*if ( err == 0 )
+            usleep(m_dl_config.m_delay_time_2);
         else if ( err == 1 )
-            usleep(m_dl_config.m_delay_time*500);
+            usleep(m_dl_config.m_delay_time_2*5);
         else
-            usleep(m_dl_config.m_delay_time*1000);
+            usleep(m_dl_config.m_delay_time_2*10);*/
 
-        lpdata = GetRespond(m_busfd, 99, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 99, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridPanasonicModule OK ####\n");
             //SaveLog("DataLogger GetHybridPanasonicModule() : OK", m_st_time);
@@ -4172,14 +4419,14 @@ bool CG320::GetHybridBMSModule(int index, int module)
     while ( err < 3 ) {
         memcpy(txbuffer, szHBBMSmodule, 8);
         MStartTX(m_busfd);
-        if ( err == 0 )
-            usleep(m_dl_config.m_delay_time*100);
+        /*if ( err == 0 )
+            usleep(m_dl_config.m_delay_time_2);
         else if ( err == 1 )
-            usleep(m_dl_config.m_delay_time*500);
+            usleep(m_dl_config.m_delay_time_2*5);
         else
-            usleep(m_dl_config.m_delay_time*1000);
+            usleep(m_dl_config.m_delay_time_2*10);*/
 
-        lpdata = GetRespond(m_busfd, 61, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 61, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridBMSModule first half OK ####\n");
             //sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, first half OK", arySNobj[index].m_Addr, module+1);
@@ -4222,14 +4469,14 @@ bool CG320::GetHybridBMSModule(int index, int module)
     while ( err < 3 ) {
         memcpy(txbuffer, szHBBMSmodule, 8);
         MStartTX(m_busfd);
-        if ( err == 0 )
-            usleep(m_dl_config.m_delay_time*100);
+        /*if ( err == 0 )
+            usleep(m_dl_config.m_delay_time_2);
         else if ( err == 1 )
-            usleep(m_dl_config.m_delay_time*500);
+            usleep(m_dl_config.m_delay_time_2*5);
         else
-            usleep(m_dl_config.m_delay_time*1000);
+            usleep(m_dl_config.m_delay_time_2*10);*/
 
-        lpdata = GetRespond(m_busfd, 61, m_dl_config.m_delay_time*2);
+        lpdata = GetRespond(m_busfd, 61, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridBMSModule last half OK ####\n");
             //sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, last half OK", arySNobj[index].m_Addr, module+1);

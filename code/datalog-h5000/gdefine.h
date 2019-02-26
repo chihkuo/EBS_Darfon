@@ -324,7 +324,8 @@ typedef struct stDL_Config {
     char    m_sms_server[128];
     int     m_sms_port;
     int     m_sample_time;
-    int     m_delay_time; // us, 1000000 us = 1 s
+    int     m_delay_time_1; // us, 1000000 us = 1 s
+    int     m_delay_time_2;
     int     m_inverter_port;
     int     m_inverter_baud;
     int     m_inverter_data_bits;

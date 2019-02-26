@@ -14,7 +14,7 @@
 #define USB_PATH    "/tmp/run/mountd/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.0.5"
+#define VERSION             "2.1.0"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -559,7 +559,7 @@ int DoUpdate(char *file_path)
         return 11;
     }
     // run update.sh if exist in usb
-    if ( strstr(g_UPDATE_PATH, USB_PATH) ) {
+    if ( 0/*strstr(g_UPDATE_PATH, USB_PATH)*/ ) {
         sprintf(buf, "%s/update/update.sh", USB_PATH);
         if ( stat(buf, &st) == 0 ) {
             sprintf(buf, "chmod 755 %s/update/update.sh", USB_PATH);
@@ -572,6 +572,7 @@ int DoUpdate(char *file_path)
         }
     } else { // in tmp
         sprintf(buf, "%s/update.sh", UPDATE_DIR);
+        printf("cmd = %s\n", buf);
         if ( stat(buf, &st) == 0 ) {
             sprintf(buf, "chmod 755 %s/update.sh", UPDATE_DIR);
             system(buf);

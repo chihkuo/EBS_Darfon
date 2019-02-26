@@ -759,7 +759,7 @@ void MStartTX(int fd)
 	printf("write to %d, return %ld\n", fd, i);
 	//getchar();
 
-    MClearTX_Noise(0.03);//mike20160407+
+    MClearTX_Noise(0.01);//0.3 mike20160407+ // 0.01 chih 20190220
 	receiveState=URS_Address;
 	TRC_TXIDLE=1;
 	TRC_RXERROR=0;
@@ -797,14 +797,14 @@ void MClearTX_Noise(float waittime_s)
     unsigned long i=0;
     unsigned long totalus=waittime_s*1000000;
     unsigned long gap=10000;//10ms 0.01s
-    while( i<=(totalus/gap))
+    while( i<(totalus/gap)) // <= to <
     {
 
         receiveState=URS_Idle;
         TRC_RECEIVED=0;
         TRC_TXIDLE=1;
         TRC_RXERROR=0;
-        usleep(g_global.g_delay3*100);//ex 1000*100 = 0.1s
+        usleep(g_global.g_delay3);//ex 1000000 = 1s
         i++;
     }
 
@@ -1451,17 +1451,18 @@ int MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_b
 unsigned char *GetRespond(int fd, int iSize, int delay)
 {
     //unsigned char buff[512];
-	int i = 0, err = 0, count = 0;
-	int len=0;
+	int i = 0, total_delat = 0, count = 0, delay_time = 200000; // us
+	int len = 0, all_len = 0;
 	int  iRet=1;
 	unsigned char *pbuf, *p;
 	//pbuf = (unsigned char *)malloc(iSize+1);
 	//p = pbuf;
 
 	memset(respond_buff, 0x00, 4096);
-	while (err < 3) {
+    pbuf = respond_buff;
+	while (total_delat < delay) {
 
-        usleep(delay);
+
 //printf("wait recv data need:%d, Recved: %d \n", iSize, len);
 //printf("wait Slave Address : 0x%02X, wait Function Code : 0x%02X \n", waitAddr, waitFCode);
         //getchar();
@@ -1470,19 +1471,22 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
         //i=read(fdModbus, buff, 511);
         //i=read(fdModbus, respond_buff, iSize);
         //i=read(fdModbus, respond_buff, 4096); // get all data(if 0x00 start command), clean return data
-        i=read(fd, respond_buff, 4096); // get all data(if 0x00 start command), clean return data
+        i=read(fd, pbuf, 4096); // get all data(if 0x00 start command), clean return data
         if (i==-1) {
-            printf("read error code=%d (%s) \n",errno, strerror(errno));
+            //printf("read error code=%d (%s) \n",errno, strerror(errno));
             have_respond = false;
-            return NULL;
-            break;
+            usleep(delay_time);
+            total_delat += delay_time;
+            continue;
         }
         //printf("read %d / %d bytes \n",i, iSize-len);
         printf("read %d / %d bytes \n",i, 4096);
+        DebugPrint(pbuf, i, "recv");
         //DebugPrint(p, i, "receive");
         //len += i;
         len = i;
-        DebugPrint(respond_buff, len, "recv");
+        all_len += len;
+        printf("all_len = %d\n", all_len);
         have_respond = true;
         //p+=i;
         //usleep(g_delay2*1000);
@@ -1493,8 +1497,9 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
         }
         count++;*/
 
-        if ( len >= iSize ) {
-            for (i = 0; i < len-6; i++) {
+        if ( all_len >= iSize ) {
+            DebugPrint(respond_buff, all_len, "Buffer");
+            for (i = 0; i < all_len-6; i++) {
                 if ( respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode ) {
                     switch ( respond_buff[i+1] )
                     {
@@ -1552,9 +1557,8 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                             }
                             break;
                         case 0x33:
-                            count = respond_buff[i+2];
-                            if ( CheckCRC(respond_buff+i, count+5) ) {
-                                DebugPrint(respond_buff+i, count+5, "0x33 Read recv");
+                            if ( CheckCRC(respond_buff+i, respond_buff[i+2]) ) {
+                                DebugPrint(respond_buff+i, respond_buff[i+2], "0x33 Read recv");
                                 return respond_buff+i;
                             }
                             break;
@@ -1634,19 +1638,25 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                 }
             }
         }
-        else
-            err++;
 
-        //usleep(delay);
+        usleep(delay_time);
+        total_delat += delay_time;
+        pbuf += len;
+        continue;
 	}
 	//DebugPrint(respond_buff, len, "recv");
-	printf("#### GetRespond() clean buf ####\n");
-	while ( i != -1 ) {
-        //i=read(fdModbus, respond_buff, 4096);
-        i=read(fd, respond_buff, 4096);
-        DebugPrint(respond_buff, i, "Clean");
-	}
-    printf("#### GetRespond() clean OK ####\n");
+
+	if ( all_len > 0 ) {
+        i = 0;
+        while ( i != -1 ) {
+            //i=read(fdModbus, respond_buff, 4096);
+            i=read(fd, respond_buff, 4096);
+            if ( i!= -1 )
+                DebugPrint(respond_buff, i, "Clean");
+        }
+    } else
+        // no response
+        printf("NO response!!\n");
 
 	return NULL;
 }

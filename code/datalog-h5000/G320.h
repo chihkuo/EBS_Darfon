@@ -61,8 +61,10 @@ public:
 	virtual ~CG320();
 
 	int     Init(int addr, int com, bool open_com, bool first, int busfd);
+	bool    GetDLConfig();
 	int     DoReRegister(time_t time);
 	int     DoAllRegister(time_t time);
+    bool    SaveDeviceList(bool first, bool last);
 	void    Start();
 	void    GetData(time_t data_time, bool first, bool last);
 	void    Pause();
@@ -71,7 +73,6 @@ public:
 
 protected:
     void    GetMAC();
-    bool    GetDLConfig();
     bool    SetPath();
 
     void    CleanParameter();
@@ -91,17 +92,19 @@ protected:
     bool    LoadWhiteList();
     bool    SavePLCWhiteList();
     bool    SaveWhiteList();
-    bool    SaveDeviceList(bool first, bool last);
 
     int     WhiteListRegister();
     int     StartRegisterProcess();
     int     AllocateProcess(unsigned char *query, int len);
     bool    GetDevice(int index);
     bool    ReRegister(int index);
+    bool    ReRegisterV3(int index);
 
     bool    GetMiIDInfo(int index);
+    bool    GetMiIDInfoV3(int index);
     void    DumpMiIDInfo(int index, unsigned char *buf);
     bool    GetMiPowerInfo(int index);
+    bool    GetMiPowerInfoV3(int index);
     void    DumpMiPowerInfo(unsigned char *buf);
 
     bool    GetHybridIDData(int index);
@@ -175,6 +178,7 @@ protected:
     time_t  m_last_search_time;
     time_t  m_last_savelog_time;
     time_t  m_current_time;
+    int     m_plcver;
 
     MI_ID_INFO      m_mi_id_info;
     MI_POWER_INFO   m_mi_power_info;

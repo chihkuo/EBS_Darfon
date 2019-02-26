@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#define VERSION         "2.0.5"
+#define VERSION         "2.1.0"
 #define MODEL_LIST_PATH "/usr/home/ModelList"
 #define MODEL_NUM       1020 //255*4
 
@@ -20,6 +20,7 @@ bool GetModelList();
 void Init();
 int  ReRegister(time_t time);
 int  AllRegister(time_t time);
+void SaveList();
 void GetAllData(time_t data_time);
 void Show_State();
 void Show_Time(struct tm *st_time);
@@ -60,8 +61,8 @@ int main(int argc, char* argv[])
 {
     int previous_min = 60;
     int previous_hour = 24;
-    int reregister_hour = 24;
-    int allregister_day = 0;
+    //int reregister_hour = 24;
+    //int allregister_day = 0;
     int state = 0;
     time_t sys_current_time = 0, start_time = 0, end_time = 0, span_time = 0;
     time_t get_data_time = 0;
@@ -89,8 +90,8 @@ int main(int argc, char* argv[])
 
     sys_current_time = time(NULL);
     sys_st_time = localtime(&sys_current_time);
-    reregister_hour = sys_st_time->tm_hour;
-    allregister_day = sys_st_time->tm_mday;
+    //reregister_hour = sys_st_time->tm_hour;
+    //allregister_day = sys_st_time->tm_mday;
 
     memset(&SConfig, 0, sizeof(SConfig));
     GetConfig();
@@ -122,6 +123,12 @@ int main(int argc, char* argv[])
             Init();
             Show_State();
             GetAllData(get_data_time);
+            // reregister
+            if ( state != 0 ) {
+                ReRegister(sys_current_time);
+                AllRegister(sys_current_time);
+                SaveList();
+            }
             ////////////
             end_time = time(NULL);
             span_time = end_time - start_time;
@@ -136,15 +143,15 @@ int main(int argc, char* argv[])
             printf("======= main loop end =======\n");
         }
 
-        if ( reregister_hour != sys_st_time->tm_hour ) {
-            reregister_hour = sys_st_time->tm_hour;
-            ReRegister(sys_current_time);
-        }
+        //if ( reregister_hour != sys_st_time->tm_hour ) {
+        //    reregister_hour = sys_st_time->tm_hour;
+        //    ReRegister(sys_current_time);
+        //}
 
-        if ( allregister_day != sys_st_time->tm_mday ) {
-            allregister_day = sys_st_time->tm_mday;
-            AllRegister(sys_current_time);
-        }
+        //if ( allregister_day != sys_st_time->tm_mday ) {
+        //    allregister_day = sys_st_time->tm_mday;
+        //    AllRegister(sys_current_time);
+        //}
 
         usleep(1000000);
         //printf("press any key to continue!!\n");
@@ -460,6 +467,47 @@ int AllRegister(time_t time)
     printf("======= main AllRegister end =======\n");
 
     return cnt;
+}
+
+void SaveList()
+{
+    int i = 0, ret = 0;
+
+    printf("==== Run main SaveList start ====\n");
+
+    for (i = 0; i < MODEL_NUM; i++) {
+        if ( (MList[i].addr > 0) && (MList[i].init == true) ) {
+            switch (MList[i].model_index)
+            {
+                case ID_Unknown:
+                    printf("%d Unknown model!\n", MList[i].addr);
+                    printf("Nothing to do~\n");
+                    break;
+                case ID_Darfon:
+                    printf("%d Darfon SaveList start~\n", MList[i].addr);
+                    ret = pg320->SaveDeviceList(MList[i].first, MList[i].last);
+                    if ( ret )
+                        printf("SaveDeviceList %d device\n", ret);
+                    printf("Darfon SaveDeviceList end.\n");
+                    break;
+                case ID_CyberPower1P:
+                case ID_CyberPower3P:
+                    printf("%d CyberPower SaveList start~\n", MList[i].addr);
+                    printf("Nothing to do~\n");
+                    break;
+                case ID_Test:
+                    printf("%d Test SaveList start~\n", MList[i].addr);
+                    printf("Test SaveList end.\n");
+                    break;
+                default:
+                    printf("%d Other SaveList\n", MList[i].addr);
+            }
+        }
+    }
+
+    printf("======= main SaveList end =======\n");
+
+    return;
 }
 
 void GetAllData(time_t data_time)

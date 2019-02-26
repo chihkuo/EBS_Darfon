@@ -992,7 +992,7 @@ int MySyncOffLineQuery(int fd, byte addr, byte  MOD, byte buf[], int buf_size)
     BuildMessage(addr, 0x00, 0x05, MOD);
     MStartTX(fd);
     writeLog("SendSyncOffLineQuery exit!\n");
-    usleep(1000000); //1s
+    usleep(2000000); //2s
     /*byte *pbuf = GetRespond(13, 200);
 	if (pbuf) {
 	    memcpy(buf, pbuf, 13);
@@ -1074,7 +1074,7 @@ int MyOffLineQuery(int fd, unsigned char addr, unsigned char buf[], int buf_size
     MStartTX(fd);
     printf("Darfonlogger:MyOffLineQuery exit!\n");
     //usleep(1000000);
-    usleep(100000);
+    usleep(200000);
     printf("Darfonlogger:MyOffLineQuery GetRespond...\n");
     /*byte *lpbuf = GetRespond(13, 200);
 	if(lpbuf)
@@ -1120,7 +1120,7 @@ void SendRemoveAllRegisterQuery()
 
 void RemoveRegisterQuery(int fd, byte byAddr)
 {
-    printf("SendRemoveAllRegisterQuery enter\n");
+    printf("SendRemoveRegisterQuery enter\n");
     MClearRX();
     txsize=8;
     waitFCode = 0xFE;
@@ -1721,12 +1721,12 @@ int MyAssignAddress(int fd, unsigned char *ID, unsigned char Addr)
         SendAllocatedAddress(fd, ID, Addr);
         //usleep(1000000);
         if ( errorcount == 0 )
-            usleep(10000);
+            usleep(100000); // 0.1s
         else if ( errorcount == 1 )
-            usleep(50000);
+            usleep(500000); // 0.5s
         else
-            usleep(100000);
-        pdata = GetRespond(fd, 8, 200);
+            usleep(1000000); // 1s
+        pdata = GetRespond(fd, 8, 1000000);
         if (pdata) {
             return 1;
         }
@@ -2029,7 +2029,7 @@ int initenv(char * ini_name)
         sscanf(buf, "%d", &g_global.g_delay3);
     }
     if ( g_global.g_delay3 <= 0 )
-        g_global.g_delay3 = 10;
+        g_global.g_delay3 = 100;
     printf("g_delay3: %d \n", g_global.g_delay3);
 
     s = iniparser_getstring(ini, "darfon:plcid", "0x00,0x05,0x00,0x01,0x00,0x00,0x00,0xFF");

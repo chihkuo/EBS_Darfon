@@ -27,7 +27,8 @@ for i = 1,#update_SW_value do
 	update_SW_time:value(update_SW_value[i])
 end
 
-local delay_time = sms:option(Value, "delay_time", translate("Delay time (us. 1000000us = 1s)"))
+local delay_time_1 = sms:option(Value, "delay_time_1", translate("Delay time 1 (us. 1000000us = 1s)"))
+local delay_time_2 = sms:option(Value, "delay_time_2", translate("Delay time 2 (us. 1000000us = 1s)"))
 local cleartx_delay = sms:option(Value, "cleartx_delay", translate("Clear TX delay time (us. 1000000us = 1s)"))
 local shelf_life = sms:option(Value, "shelf_life", translate("Data shelf life (Day.)"))
 

@@ -259,15 +259,15 @@ bool CyberPower::GetDLConfig()
     sscanf(buf, "%d", &m_dl_config.m_sample_time);
     printf("Sample time (Min.) = %d\n", m_dl_config.m_sample_time);
     // get delay_time
-    pFile = popen("uci get dlsetting.@sms[0].delay_time", "r");
+    pFile = popen("uci get dlsetting.@sms[0].delay_time_1", "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
     }
     fgets(buf, 32, pFile);
     pclose(pFile);
-    sscanf(buf, "%d", &m_dl_config.m_delay_time);
-    printf("Delay time (us.) = %d\n", m_dl_config.m_delay_time);
+    sscanf(buf, "%d", &m_dl_config.m_delay_time_1);
+    printf("Delay time (us.) = %d\n", m_dl_config.m_delay_time_1);
 
     // get baud
     sprintf(cmd, "uci get dlsetting.@comport[0].com%d_baud", m_dl_config.m_inverter_port);
@@ -592,10 +592,10 @@ bool CyberPower::CheckConfig()
         sscanf(buf, "%d", &tmp);
         printf("tmp delay_time = %d\n", tmp);
 
-        if ( m_dl_config.m_delay_time == tmp )
+        if ( m_dl_config.m_delay_time_1 == tmp )
             ;//printf("same delay\n");
         else
-            m_dl_config.m_delay_time = tmp;
+            m_dl_config.m_delay_time_1 = tmp;
     }
 
     printf("#### CheckConfig end ####\n");
@@ -784,9 +784,9 @@ bool CyberPower::GetSN()
     while ( err < 3 ) {
         memcpy(txbuffer, cmd_buf, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        usleep(m_dl_config.m_delay_time_1);
 
-        lpdata = GetCyberPowerRespond(m_busfd, 21, m_dl_config.m_delay_time*2);
+        lpdata = GetCyberPowerRespond(m_busfd, 21, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetSN OK ####\n");
             SaveLog((char *)"CyberPower GetSN() : OK", m_st_time);
@@ -846,9 +846,9 @@ bool CyberPower::Get1PPowerInfo()
     while ( err < 3 ) {
         memcpy(txbuffer, cmd_buf, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        usleep(m_dl_config.m_delay_time_1);
 
-        lpdata = GetCyberPowerRespond(m_busfd, 109, m_dl_config.m_delay_time*2);
+        lpdata = GetCyberPowerRespond(m_busfd, 109, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### Get1PPowerInfo OK ####\n");
             SaveLog((char *)"CyberPower Get1PPowerInfo() : OK", m_st_time);
@@ -1052,9 +1052,9 @@ bool CyberPower::GetErrorCode()
     while ( err < 3 ) {
         memcpy(txbuffer, cmd_buf, 8);
         MStartTX(m_busfd);
-        usleep(m_dl_config.m_delay_time*100);
+        usleep(m_dl_config.m_delay_time_1);
 
-        lpdata = GetCyberPowerRespond(m_busfd, 21, m_dl_config.m_delay_time*2);
+        lpdata = GetCyberPowerRespond(m_busfd, 21, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetErrorCode OK ####\n");
             SaveLog((char *)"CyberPower GetErrorCode() : OK", m_st_time);
