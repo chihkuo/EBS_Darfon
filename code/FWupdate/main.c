@@ -82,7 +82,8 @@ char MAC[18] = {0};
 char UPDATE_SERVER[128] = {0};
 int update_port = 0;
 int update_SW_time = 0;
-int delay_time = 0;
+int delay_time_1 = 0;
+int delay_time_2 = 0;
 char g_CURL_CMD[256] = {0};
 char g_SYSLOG_PATH[64] = {0};
 char g_UPDATE_PATH[64] = {0};
@@ -167,16 +168,27 @@ void getConfig()
     sscanf(buf, "%d", &update_SW_time);
     printf("Update SW time = %d\n", update_SW_time);
 
-    // get delay_time
-    fd = popen("uci get dlsetting.@sms[0].delay_time", "r");
+    // get delay_time_1
+    fd = popen("uci get dlsetting.@sms[0].delay_time_1", "r");
     if ( fd == NULL ) {
         printf("popen fail!\n");
         return;
     }
     fgets(buf, 32, fd);
     pclose(fd);
-    sscanf(buf, "%d", &delay_time);
-    printf("Delay time (us.) = %d\n", delay_time);
+    sscanf(buf, "%d", &delay_time_1);
+    printf("Delay time 1 (us.) = %d\n", delay_time_1);
+
+    // get delay_time_2
+    fd = popen("uci get dlsetting.@sms[0].delay_time_2", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+        return;
+    }
+    fgets(buf, 32, fd);
+    pclose(fd);
+    sscanf(buf, "%d", &delay_time_2);
+    printf("Delay time 2 (us.) = %d\n", delay_time_2);
 
     return;
 }
@@ -335,12 +347,7 @@ int CheckVer()
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 15, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 15, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 15, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 15, delay_time_1); // from uci config
         if ( lpdata ) {
             printf("#### CheckVer OK ####\n");
             SaveLog((char *)"FWupdate 0x30 CheckVer() : OK", st_time);
@@ -401,12 +408,7 @@ int WriteVerV2(int slaveid, unsigned char *fwver)
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 8, delay_time_2); // from uci config
         if ( lpdata ) {
             printf("#### WriteVerV2 OK ####\n");
             SaveLog((char *)"FWupdate WriteVerV2() : OK", st_time);
@@ -465,12 +467,7 @@ int WriteVerV3(char *sn, unsigned char *fwver)
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 14, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 14, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 14, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 14, delay_time_1); // from uci config
         if ( lpdata ) {
             printf("#### WriteVerV3 OK ####\n");
             SaveLog((char *)"FWupdate WriteVerV3() : OK", st_time);
@@ -549,12 +546,7 @@ int RunRegister(char *sn)
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 8, delay_time_2); // from uci config
         if ( lpdata ) {
             printf("#### RunRegister OK ####\n");
             gV2id = milist[index].slave_id;
@@ -611,12 +603,7 @@ int RunEnableP3(int slaveid)
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 8, delay_time_2); // from uci config
         if ( lpdata ) {
             printf("#### RunEnableP3 OK ####\n");
             SaveLog((char *)"FWupdate RunEnableP3() : OK", st_time);
@@ -667,12 +654,7 @@ int RunShutdown(int slaveid)
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 8, delay_time_2); // from uci config
         if ( lpdata ) {
             printf("#### RunShutdown OK ####\n");
             SaveLog((char *)"FWupdate RunShutdown() : OK", st_time);
@@ -718,7 +700,7 @@ int RunReboot(int slaveid)
 
     memcpy(txbuffer, cmd, 8);
     MStartTX(gcomportfd);
-    usleep(100000); // 0.1s
+    usleep(1000000); // 1s
 
     SaveLog((char *)"FWupdate RunReboot() : Send", st_time);
 
@@ -762,12 +744,7 @@ int RunRebootSpecify(char *sn)
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 14, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 14, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 14, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 14, delay_time_1); // from uci config
         if ( lpdata ) {
             printf("#### RunRebootSpecify OK ####\n");
             SaveLog((char *)"FWupdate RunRebootSpecify() : OK", st_time);
@@ -820,17 +797,12 @@ int LBDReregister(char *sn)
     waitAddr  = cmd[0];
     waitFCode = cmd[1];
 
-    while ( err < 3 ) {
+    while ( err < 2 ) {
         memcpy(txbuffer, cmd, 15);
         MStartTX(gcomportfd);
         usleep(1000000); // 1s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 14, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 14, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 14, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 14, delay_time_1); // from uci config
         if ( lpdata ) {
             printf("#### LBDReregister OK ####\n");
             SaveLog((char *)"FWupdate LBDReregister() : OK", st_time);
@@ -846,6 +818,8 @@ int LBDReregister(char *sn)
                 SaveLog((char *)"FWupdate LBDReregister() : No Response", st_time);
                 ret = -1;
             }
+            cmd[1] = 0x4D;
+            MakeReadDataCRC(cmd,15);
             err++;
         }
     }
@@ -910,13 +884,7 @@ int WriteDataV2(int slaveid, unsigned char *fwdata, int datasize)
             MStartTX(gcomportfd);
             //usleep(10000); // 0.01s
 
-            if ( err == 0 )
-                lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
-            else if ( err == 1 )
-                lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
-            else
-                lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
-
+            lpdata = GetRespond(gcomportfd, 8, delay_time_2); // from uci config
             if ( lpdata ) {
                 cnt++;
                 printf("#### WriteDataV2 data count %d, index 0x%X, size %d OK ####\n", cnt, index, writesize);
@@ -1020,12 +988,7 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 8, delay_time_2); // uci setting
         if ( lpdata ) {
             if ( (lpdata[4] == 0xFF) && (lpdata[5] == 0xF0) ) {
                 // response the same FW data
@@ -1103,13 +1066,7 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
             MStartTX(gcomportfd);
             //usleep(10000); // 0.01s
 
-            if ( err == 0 )
-                lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
-            else if ( err == 1 )
-                lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
-            else
-                lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
-
+            lpdata = GetRespond(gcomportfd, 8, delay_time_2); // uci setting
             if ( lpdata ) {
                 //lpdata = cmd; // for test
                 if ( (lpdata[2] == addrh) && (lpdata[3] == addrl) && (lpdata[4] == 00) && (lpdata[5] == numofdata) ) {
@@ -1273,18 +1230,12 @@ int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
         waitAddr = cmd[0];
         waitFCode = cmd[1];
 
-        while ( err < 3 ) {
+        while ( err < 1 ) {
             memcpy(txbuffer, cmd, txsize);
             MStartTX(gcomportfd);
             //usleep(10000); // 0.01s
 
-            if ( err == 0 )
-                lpdata = GetRespond(gcomportfd, 8, 100000); // 0.1s
-            else if ( err == 1 )
-                lpdata = GetRespond(gcomportfd, 8, 500000); // 0.5s
-            else
-                lpdata = GetRespond(gcomportfd, 8, 1000000); // 1s
-
+            lpdata = GetRespond(gcomportfd, 8, delay_time_1); // from uci config
             if ( lpdata ) {
                 cnt++;
                 printf("#### WriteDataV3 data count %d, index 0x%X, size %d OK ####\n", cnt, index, writesize);
@@ -1299,7 +1250,7 @@ int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
             } else {
                 err++;
                 printf("#### WriteDataV3 GetRespond Error %d ####\n", err);
-                if ( err == 3 ) {
+                if ( err == 1 ) {
                     if ( have_respond ) {
                         printf("#### WriteDataV3 CRC Error ####\n");
                         SaveLog((char *)"FWupdate WriteDataV3() : CRC Error", st_time);
@@ -1380,12 +1331,7 @@ int ReadV3Ver(char *sn, unsigned char *fwver)
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
-        if ( err == 0 )
-            lpdata = GetRespond(gcomportfd, 13, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(gcomportfd, 13, 500000); // 0.5s
-        else
-            lpdata = GetRespond(gcomportfd, 13, 1000000); // 1s
+        lpdata = GetRespond(gcomportfd, 13, delay_time_1); // from uci config
         if ( lpdata ) {
             printf("#### ReadV3Ver OK ####\n");
             SaveLog((char *)"FWupdate ReadV3Ver() : OK", st_time);
@@ -1441,7 +1387,7 @@ int GetFWData()
 
     printf("######### run GetFWData() #########\n");
 
-    pfile_fd = fopen("/tmp/test.file", "r");
+    pfile_fd = fopen(UPDATE_FILE, "r");
     if ( pfile_fd == NULL ) {
         printf("#### Open /tmp/test.xml Fail ####\n");
         SaveLog((char *)"FWupdate GetFWData() : Open /tmp/test.xml Fail", st_time);
@@ -1671,7 +1617,7 @@ int GetHbFWData()
 
     printf("######### run GetHbFWData() #########\n");
 
-    pfile_fd = fopen("/tmp/test.file", "r");
+    pfile_fd = fopen(UPDATE_FILE, "r");
     if ( pfile_fd == NULL ) {
         printf("#### Open /tmp/test.hex Fail ####\n");
         SaveLog((char *)"FWupdate GetHbFWData() : Open /tmp/test.hex Fail", st_time);
@@ -2340,9 +2286,9 @@ int UpdDLFWStatus()
 {
     printf("run UpdDLFWStatus()\n");
 
-    char buf[128] = {0};
-    sprintf(buf, "rm %s", UPDATE_FILE);
-    system(buf);
+    //char buf[128] = {0};
+    //sprintf(buf, "rm %s", UPDATE_FILE);
+    //system(buf);
 
     //runProcess();
 

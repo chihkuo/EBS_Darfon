@@ -4,10 +4,11 @@
 typedef struct stSNOBJ {
     unsigned char    m_Addr;    // 1 ~ 253
     char    m_Sn[17];           // SN 16 bytes + end 0x00
-    int     m_Device;           // 0x00 ~ 0x09, 0x0A ~ 0xFF
+    int     m_Device;           // 0x00 ~ 0x09 MI, 0x0A ~ 0xFF Hybrid
     int     m_Err;              // consecutive error times, >= 3 to run ReRegiser function
     int     m_state;            // 1 : online, 0 : offline
     int     m_FWver;            // xxxx
+    time_t  m_ok_time;          // last getdata ok time
 } SNOBJ;
 
 typedef struct stGlobal {

@@ -80,28 +80,31 @@ protected:
     bool    RunTODOList();
     bool    RunWhiteListChanged();
 
-    bool    GetWhiteListCount();
-    void    DumpWhiteListCount(unsigned char *buf);
+    int     GetWhiteListCount();
+    bool    DumpWhiteListCount(unsigned char *buf);
     bool    GetWhiteListSN();
     bool    DumpWhiteListSN();
     bool    ClearWhiteList();
     bool    WriteWhiteList(int num, unsigned char *listbuf);
     bool    AddWhiteList(int num, unsigned char *listbuf);
     bool    DeleteWhiteList(int num, unsigned char *listbuf);
+    bool    GetPLCStatus(int index); // busy return true
 
     bool    LoadWhiteList();
+    bool    LoadWhiteListV3();
     bool    SavePLCWhiteList();
     bool    SaveWhiteList();
 
     int     WhiteListRegister();
     int     StartRegisterProcess();
     int     AllocateProcess(unsigned char *query, int len);
-    bool    GetDevice(int index);
+    bool    GetDevice(int index); // only 2.0 use, 3.0 use GetMiIDInfoV3 to get device num
     bool    ReRegister(int index);
     bool    ReRegisterV3(int index);
+    int     WhiteListV3Init();
 
     bool    GetMiIDInfo(int index);
-    bool    GetMiIDInfoV3(int index);
+    bool    GetMiIDInfoV3(int index); // 3.0 get device num too
     void    DumpMiIDInfo(int index, unsigned char *buf);
     bool    GetMiPowerInfo(int index);
     bool    GetMiPowerInfoV3(int index);

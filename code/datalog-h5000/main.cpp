@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#define VERSION         "2.1.0"
+#define VERSION         "2.2.0"
 #define MODEL_LIST_PATH "/usr/home/ModelList"
 #define MODEL_NUM       1020 //255*4
 
@@ -766,12 +766,14 @@ void Set_Sampletime(int num)
 
     if ( num <= 0 )
         return;
+    if ( num > 20 )
+        num = 20;
 
     printf("############## Set Sample Time ##############\n");
     printf("Input num = %d\n", num);
     if ( SConfig.sample_time < num ) {
         // set sample time
-        for (i = 0; i < 12; i++) {
+        for (i = 0; i < 10; i++) {
             if ( sampletime[i] >= num )
                 break;
         }
@@ -783,8 +785,8 @@ void Set_Sampletime(int num)
         // set upload time
         if ( i < 4 )
             i = 4; // set sampletime[4] = 5 min
-        else if ( i < 11 )
-            i++; // set next bigger time
+        //else if ( i < 11 )
+        //    i++; // set next bigger time
         SConfig.upload_time = sampletime[i];
         sprintf(buf, "uci set dlsetting.@sms[0].upload_time='%d'", SConfig.upload_time);
         system(buf);

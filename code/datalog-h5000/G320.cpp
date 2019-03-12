@@ -16,6 +16,7 @@
 #define SDCARD_PATH     "/tmp/sdcard"
 
 #define WHITE_LIST_PATH "/usr/home/White-List.txt"
+#define WHITE_LIST_V3_PATH "/usr/home/White-List_V3.txt"
 #define TODOLIST_PATH   "/tmp/TODOList"
 #define WL_CHANGED_PATH "/tmp/WL_Changed"
 
@@ -24,7 +25,8 @@
 //#define KEY             "O10936IZHJTQ"
 #define TIME_SERVER_URL "https://www.worldtimeserver.com/handlers/GetData.ashx?action=GCTData"
 
-#define PLC2_DELAY      1500000
+#define OFFLINE_SECOND_MI 1200
+#define OFFLINE_SECOND_HB 240
 
 extern "C"
 {
@@ -103,6 +105,7 @@ CG320::CG320()
         arySNobj[i].m_Err = 0;
         arySNobj[i].m_state = 0;
         arySNobj[i].m_FWver = 0;
+        arySNobj[i].m_ok_time = 0;
         //printf("i=%u, addr=%d\n",i,arySNobj[i].m_Addr );
     }
 
@@ -134,7 +137,7 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
     char *port = NULL;
     char szbuf[32] = {0};
     char inverter_parity = 0;
-    int ret = 0;
+    int ret = 0, result = 0;
 
     printf("#### G320 Init Start ####\n");
     // set addr
@@ -148,6 +151,7 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
         arySNobj[i].m_Err = 0;
         arySNobj[i].m_state = 0;
         arySNobj[i].m_FWver = 0;
+        arySNobj[i].m_ok_time = 0;
         //printf("i=%u, addr=%d\n",i,arySNobj[i].m_Addr );
     }
 
@@ -189,33 +193,39 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
     SetPath();
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
 
+    m_wl_count = 0;
+    m_wl_checksum = 0;
     // check plc version
-    if ( GetWhiteListCount() )
+    result = GetWhiteListCount();
+    if ( result >= 0 )
         m_plcver = 3;
     else
         m_plcver = 2;
+    //m_plcver = 2; // for test
     printf("m_plcver = %d\n", m_plcver);
 
     // get white list & register
-    if ( LoadWhiteList() ) {
-        WhiteListRegister();
-    } else {
-        //GetWhiteListCount();
-        if ( m_wl_count > 0 )
-            if ( GetWhiteListSN() ) {
-                SavePLCWhiteList();
-                WhiteListRegister();
-            }
+    if ( m_plcver == 3 ) { // 3.0
+        if ( GetWhiteListSN() ) {
+            WhiteListV3Init();
+            LoadWhiteListV3(); // get m_ok_time
+            WriteMIListXML();
+        }
+    } else if ( m_plcver == 2 ) { // 2.0
+        // load DL white list, if exit run register
+        if ( LoadWhiteList() ) {
+            WhiteListRegister();
+        }
+
+        idc = StartRegisterProcess();
+        if ( idc ) {
+            printf("StartRegisterProcess success find %d new invert\n", idc);
+            sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", idc);
+            SaveLog(buf, m_st_time);
+            SaveWhiteList();
+        }
     }
 
-    GetLocalTime();
-    idc = StartRegisterProcess();
-    if ( idc ) {
-        printf("StartRegisterProcess success find %d new invert\n", idc);
-        sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", idc);
-        SaveLog(buf, m_st_time);
-        SaveWhiteList();
-    }
     CloseLog();
 
     printf("################ m_snCount = %d #################\n", m_snCount);
@@ -299,21 +309,17 @@ int CG320::DoReRegister(time_t time)
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
     for ( i = 0; i < m_snCount; i++) {
         if ( !arySNobj[i].m_state ) {
-            if ( (arySNobj[i].m_Device > -1) && (arySNobj[i].m_Device < 0x0A) && (m_plcver == 3) ) // MI PLC V3.0
+            if ( m_plcver == 3 ) // MI PLC V3.0
                 result = ReRegisterV3(i);
             else
                 result = ReRegister(i); // MI PLC V2.0 & Htbrid
             if ( result ) {
                 ret++;
-                if ( !GetDevice(i) )
-                    arySNobj[i].m_Err++;
+                if ( m_plcver == 3 )
+                    GetMiIDInfoV3(i); // MI PLC V3.0
                 else {
-                    // ReRegiser OK, GetDevice OK, know MI or Hybrid
-                    WriteMIListXML();
                     if ( arySNobj[i].m_Device >= 0x0A ) // Hybrid
                         SetHybridRTCData(i);
-                    else if ( m_plcver == 3 )
-                        GetMiIDInfoV3(i); // MI PLC V3.0
                     else
                         GetMiIDInfo(i); // MI PLC V2.0
                 }
@@ -343,16 +349,33 @@ int CG320::DoAllRegister(time_t time)
 
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
 
-    ret = StartRegisterProcess();
-    if ( ret ) {
-        printf("Add %d new device to list\n", ret);
-        sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", ret);
-        SaveLog(buf, m_st_time);
-        for (i = 1; i <= ret; i++)
-            GetDevice(m_snCount-i);
-        SaveWhiteList();
-        WriteMIListXML();
+    // get white list & register
+    if ( m_plcver == 3 ) { // 3.0
+        ret = GetWhiteListCount();
+        if ( ret > 0 ) {
+            if ( m_snCount != m_wl_count ) {
+                if ( GetWhiteListSN() ) {
+                    WhiteListV3Init();
+                    LoadWhiteListV3();
+                    WriteMIListXML();
+                }
+            }
+        }
+    } else if ( m_plcver == 2 ) { // 2.0
+        ret = StartRegisterProcess();
+        if ( ret ) {
+            printf("Add %d new device to list\n", ret);
+            sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", ret);
+            SaveLog(buf, m_st_time);
+            for (i = 0; i < m_snCount; i++) {
+                if ( arySNobj[i].m_Device == -1 )
+                    GetDevice(i);
+            }
+            SaveWhiteList();
+            WriteMIListXML();
+        }
     }
+
     CloseLog();
 
     printf("===== AllRegister part end =====\n");
@@ -380,7 +403,7 @@ void CG320::Start()
         printf("StartRegisterProcess success find %d new invert\n", idc);
         sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", idc);
         SaveLog(buf, m_st_time);
-        SaveWhiteList();
+        //SaveWhiteList();
     }
     printf("================================\n");
     printf("StartRegisterProcess() End!\n");
@@ -539,7 +562,7 @@ void CG320::Start()
                 m_loopstate = 1;
                 if ( m_snCount > 0 ) { // MI or Hybrid checked : save white list
                     SaveLog((char *)"DataLogger Start() : run WriteMIListXML()", m_st_time);
-                    WriteMIListXML();
+                    //WriteMIListXML();
                 }
             }
             else if ( m_loopstate == 1 ) {
@@ -547,7 +570,7 @@ void CG320::Start()
                 // find new device
                 if ( m_wl_count < m_snCount ) {
                     SaveLog((char *)"DataLogger Start() : run SaveWhiteList()", m_st_time);
-                    SaveWhiteList();
+                    //SaveWhiteList();
                 }
             } else { // m_loopstate > 2 to do other thing, undefined
                 if ( m_snCount > 0 )
@@ -597,7 +620,7 @@ void CG320::Start()
                             arySNobj[i].m_Err++;
                         else {
                             // ReRegiser OK, GetDevice OK, know MI or Hybrid
-                            WriteMIListXML();
+                            //WriteMIListXML();
                             if ( arySNobj[i].m_Device >= 0x0A )
                                 SetHybridRTCData(i);
                         }
@@ -622,8 +645,8 @@ void CG320::Start()
                 SaveLog(buf, m_st_time);
                 for (i = 1; i <= idc; i++)
                     GetDevice(m_snCount-i);
-                SaveWhiteList();
-                WriteMIListXML();
+                //SaveWhiteList();
+                //WriteMIListXML();
             }
             printf("===== Search part end =====\n");
         }
@@ -659,7 +682,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
 {
     int     i = 0;
     struct  stat st;
-    bool    dosave = true;
+    bool    dosave = true, isbusy = false;
 
     m_first = first;
     m_last = last;
@@ -687,8 +710,192 @@ void CG320::GetData(time_t data_time, bool first, bool last)
         memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
     }
 
+    if ( m_plcver == 3 ) {
+        // 3.0 part
+        for (i = 0; i < m_snCount; i++) {
+            // power data exit
+            if ( m_loopstate != 0 ) {
+                if ( stat(m_log_filename, &st) == 0 ) {
+                    printf("======== %s exist! ========\n", m_log_filename);
+                    break;
+                }
+            }
+            printf("#### i = %d ####\n", i);
+            if( arySNobj[i].m_Err < 3 ) {
+                // clean
+                CleanParameter();
+
+                // check PLC status
+                do {
+                    isbusy = GetPLCStatus(i);
+                    if ( isbusy ) { // busy
+                        printf("sleep 60 sec.\n");
+                        usleep(60000000); // 60s
+                    } else { // idle
+                        printf("sleep 1 sec.\n");
+                        usleep(1000000); // 1s
+                    }
+                } while ( isbusy );
+
+                // check fwver if not get
+                if ( arySNobj[i].m_FWver == 0 )
+                    GetMiIDInfoV3(i);
+
+                // get power data
+                if ( GetMiPowerInfoV3(i) )
+                    arySNobj[i].m_Err = 0;
+                else {
+                    if ( m_loopflag == 0 )
+                        arySNobj[i].m_Err++;
+                    m_loopflag++;
+                }
+
+                WriteLogXML(i);
+                if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                    (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                    WriteErrorLogXML(i);
+                }
+                dosave = true;
+
+            } else {
+                printf("Addr %d SN %s Error 3 times, call ReRegisterV3() later\n", arySNobj[i].m_Addr, arySNobj[i].m_Sn);
+                // set state to offline
+                arySNobj[i].m_state = 0; // offline
+                //ReRegiserV3(i);
+            }
+            printf("Debug : index %d, m_Err = %d, m_loopflag = %d\n", i, arySNobj[i].m_Err, m_loopflag);
+            m_loopflag = 0;
+        }
+    } else if ( m_plcver == 2 ) {
+        // 2.0 part, MI or Hybrid possible
+        for (i = 0; i < m_snCount; i++) {
+            // power data exit
+            if ( m_loopstate != 0 ) {
+                if ( stat(m_log_filename, &st) == 0 ) {
+                    printf("======== %s exist! ========\n", m_log_filename);
+                    break;
+                }
+            }
+            printf("#### i = %d ####\n", i);
+            // check state
+            if ( !arySNobj[i].m_state ) {   // offline
+                continue;                   // read part skip
+            }
+            if( arySNobj[i].m_Err < 3 ) {
+                if ( arySNobj[i].m_Device == -1 ) { // unknown device, first time to do
+                    if ( GetDevice(i) ) {
+                        dosave = true;
+                        if ( arySNobj[i].m_Device < 0x0A ) // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
+                            GetMiIDInfo(i); // MI get fwver
+                    } else
+                        arySNobj[i].m_Err++;
+                } else if ( arySNobj[i].m_Device < 0x0A ) { // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
+                // MI part
+                    // clean
+                    CleanParameter();
+
+                    // check fwver if not get
+                    if ( arySNobj[i].m_FWver == 0 )
+                        GetMiIDInfo(i);
+
+                    // get power data
+                    if ( GetMiPowerInfo(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
+
+                    WriteLogXML(i);
+                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                        (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                        WriteErrorLogXML(i);
+                    }
+                    dosave = true;
+
+                } else {
+                // Hybrid part
+                    // clean
+                    CleanParameter();
+
+                    // first set rtc time
+                    if ( m_loopstate == 1 )
+                        SetHybridRTCData(i);
+
+                    // get power data
+                    if ( GetHybridIDData(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
+
+                    if ( GetHybridRTCData(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
+
+                    if ( GetHybridRSInfo(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
+
+                    if ( GetHybridRRSInfo(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
+
+                    if ( GetHybridRTInfo(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
+
+                    SetBMSPath(i);
+                    if ( GetHybridBMSInfo(i) ) {
+                        arySNobj[i].m_Err = 0;
+                        SetHybridBMSModule(i);
+                        SaveBMS();
+                    } else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
+
+                    WriteLogXML(i);
+                    if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ||
+                        (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                        WriteErrorLogXML(i);
+                    }
+                    dosave = true;
+                }
+            } else {
+                printf("Addr %d SN %s Error 3 times, call ReRegister() later\n", arySNobj[i].m_Addr, arySNobj[i].m_Sn);
+                // set state to offline
+                arySNobj[i].m_state = 0; // offline
+                //ReRegiser(i);
+            }
+            printf("Debug : index %d, m_Err = %d, m_loopflag = %d\n", i, arySNobj[i].m_Err, m_loopflag);
+            m_loopflag = 0;
+        }
+
+    }
+
     // read data loop
-    for (i=0; i<m_snCount; i++) {
+/*    for (i=0; i<m_snCount; i++) {
         if ( m_loopstate != 0 ) {
             if ( stat(m_log_filename, &st) == 0 ) {
                 printf("======== %s exist! ========\n", m_log_filename);
@@ -723,31 +930,32 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                         GetMiIDInfo(i);
                 }
 
-                if ( m_plcver == 3 ) {
-                    if ( GetMiPowerInfoV3(i) )
-                        arySNobj[i].m_Err = 0;
-                    else {
-                        if ( m_loopflag == 0 )
-                            arySNobj[i].m_Err++;
-                        m_loopflag++;
+                if ( m_loopstate != 0 ) {
+                    if ( m_plcver == 3 ) {
+                        if ( GetMiPowerInfoV3(i) )
+                            arySNobj[i].m_Err = 0;
+                        else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                        }
+                    } else {
+                        if ( GetMiPowerInfo(i) )
+                            arySNobj[i].m_Err = 0;
+                        else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                        }
                     }
-                } else {
-                    if ( GetMiPowerInfo(i) )
-                        arySNobj[i].m_Err = 0;
-                    else {
-                        if ( m_loopflag == 0 )
-                            arySNobj[i].m_Err++;
-                        m_loopflag++;
+
+                    WriteLogXML(i);
+                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                        (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                        WriteErrorLogXML(i);
                     }
+                    dosave = true;
                 }
-
-                WriteLogXML(i);
-                if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
-                    (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
-                    WriteErrorLogXML(i);
-                }
-                dosave = true;
-
             } else {
             // Hybrid part
                 CleanParameter();
@@ -824,21 +1032,31 @@ void CG320::GetData(time_t data_time, bool first, bool last)
         printf("Debug : index %d, m_Err = %d, m_loopflag = %d\n", i, arySNobj[i].m_Err, m_loopflag);
         m_loopflag = 0;
     }
-
-    if ( (m_loopstate != 0) /*&& (m_snCount > 0)*/ ) {
+*/
+    if ( m_plcver == 3 ) {
         if ( stat(m_log_filename, &st) != 0 ) {
             SaveLogXML(first, last);
             SaveErrorLogXML(first, last);
             SaveEnvXML(first, last);
             dosave = true;
         }
-    } else { // m_loopstate == 0
-        memset(m_log_buf, 0x00, LOG_BUF_SIZE);
-        memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
-        SaveLogXML(first, last);
-        SaveErrorLogXML(first, last);
-        SaveEnvXML(first, last);
+    } else if ( m_plcver == 2 ){
+        if ( (m_loopstate != 0) /*&& (m_snCount > 0)*/ ) {
+            if ( stat(m_log_filename, &st) != 0 ) {
+                SaveLogXML(first, last);
+                SaveErrorLogXML(first, last);
+                SaveEnvXML(first, last);
+                dosave = true;
+            }
+        } else { // m_loopstate == 0
+            memset(m_log_buf, 0x00, LOG_BUF_SIZE);
+            memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
+            SaveLogXML(first, last);
+            SaveErrorLogXML(first, last);
+            SaveEnvXML(first, last);
+        }
     }
+
 
     if ( m_loopstate == 0 ) { // init : device get OK
         m_loopstate = 1;
@@ -849,10 +1067,10 @@ void CG320::GetData(time_t data_time, bool first, bool last)
     } else if ( m_loopstate == 1 ) {
         m_loopstate = 2;
         // find new device
-        if ( m_wl_count < m_snCount ) {
-            SaveLog((char *)"DataLogger Start() : run SaveWhiteList()", m_st_time);
-            SaveWhiteList();
-        }
+        //if ( m_wl_count < m_snCount ) {
+        //    SaveLog((char *)"DataLogger Start() : run SaveWhiteList()", m_st_time);
+        //    SaveWhiteList();
+        //}
     } else { // m_loopstate > 2 to do other thing, undefined
         if ( m_snCount > 0 )
             ;
@@ -861,6 +1079,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
     if ( m_snCount > 0 ) {
         SaveLog((char *)"DataLogger Start() : run WriteMIListXML()", m_st_time);
         WriteMIListXML();
+        SaveWhiteList();
     }
 
     if ( dosave ) {
@@ -1477,6 +1696,7 @@ bool CG320::RunWhiteListChanged()
                         arySNobj[i].m_Device = -2;
                         arySNobj[i].m_Err = 0;
                         arySNobj[i].m_FWver = 0;
+                        arySNobj[i].m_ok_time = 0;
                         // delete SN to PLC box
                         sscanf(sn, "%02X%02X%02X%02X%02X%02X%02X%02X", &num[0], &num[1], &num[2], &num[3], &num[4], &num[5], &num[6], &num[7]);
                         SaveLog((char *)"DataLogger RunWhiteListChanged() : run DeleteWhiteList()", m_st_time);
@@ -1518,6 +1738,7 @@ bool CG320::RunWhiteListChanged()
                 arySNobj[i].m_Err = 0;
                 arySNobj[i].m_state = 0;
                 arySNobj[i].m_FWver = 0;
+                arySNobj[i].m_ok_time = 0;
                 save = true;
 
                 sscanf(sn, "%02X%02X%02X%02X%02X%02X%02X%02X", &num[0], &num[1], &num[2], &num[3], &num[4], &num[5], &num[6], &num[7]);
@@ -1541,6 +1762,7 @@ bool CG320::RunWhiteListChanged()
                     printf("#### MyAssignAddress(%d) OK! ####\n", arySNobj[i].m_Addr);
                     arySNobj[i].m_Device = -1;
                     arySNobj[i].m_state = 1;
+                    arySNobj[i].m_ok_time = time(NULL);
                     GetDevice(i);
                 }
                 else
@@ -1565,12 +1787,12 @@ bool CG320::RunWhiteListChanged()
     return true;
 }
 
-bool CG320::GetWhiteListCount()
+int CG320::GetWhiteListCount()
 {
     printf("\n#### GetWhiteListCount start ####\n");
 
-    m_wl_count = 0;
-    m_wl_checksum = 0;
+    //m_wl_count = 0;
+    //m_wl_checksum = 0;
 
     int err = 0;
     byte *lpdata = NULL;
@@ -1589,17 +1811,20 @@ bool CG320::GetWhiteListCount()
         usleep(100000); // 0.1s
 
         if ( err == 0 )
-            lpdata = GetRespond(m_busfd, 15, 100000); // 0.1s
+            lpdata = GetRespond(m_busfd, 15, 200000); // 0.2s
         else if ( err == 1 )
             lpdata = GetRespond(m_busfd, 15, 500000); // 0.5s
         else
-            lpdata = GetRespond(m_busfd, 15, 1000000); // 1s
+            lpdata = GetRespond(m_busfd, 15, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetWhiteListCount OK ####\n");
             SaveLog((char *)"DataLogger GetWhiteListCount() : OK", m_st_time);
+            SaveLog((char *)"DataLogger Get PLC version 3.0", m_st_time);
             // get 0x01 0x30 0x0F 0x00 0x00 0x00 0x00 0x00 0x04 countH countL csH csL crcH crcL, so buff+9 is countH
-            DumpWhiteListCount(lpdata+9);
-            return true;
+            if ( DumpWhiteListCount(lpdata+9) )
+                return m_wl_count;
+            else
+                return 0;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetWhiteListCount CRC Error ####\n");
@@ -1613,18 +1838,40 @@ bool CG320::GetWhiteListCount()
         }
     }
 
-    return false;
+    return -1;
 }
 
-void CG320::DumpWhiteListCount(unsigned char *buf)
+bool CG320::DumpWhiteListCount(unsigned char *buf)
 {
-    m_wl_count = (*(buf) << 8) + *(buf+1);
-    m_wl_checksum = (*(buf+2) << 8) + *(buf+3);
+    int tmp_count = 0;
+    int tmp_checksum = 0;
+
+    tmp_count = (*(buf) << 8) + *(buf+1);
+    tmp_checksum = (*(buf+2) << 8) + *(buf+3);
 
     printf("#### Dump White List count ####\n");
-    printf("m_wl_count    = %d\n", m_wl_count);
-    printf("m_wl_checksum = 0x%04X\n", m_wl_checksum);
+    printf("tmp_count    = %d\n", tmp_count);
+    printf("tmp_checksum = 0x%04X\n", tmp_checksum);
     printf("###############################\n");
+
+    if ( tmp_count == 0 )
+        return false;
+
+    if ( m_wl_count == 0 ) { // initial
+        m_wl_count = tmp_count;
+        m_wl_checksum = tmp_checksum;
+        printf("set m_wl_count = %d\n", m_wl_count);
+        printf("set m_wl_checksum = %04X\n", m_wl_checksum);
+        return true;
+    } else if ( m_wl_count != tmp_count ) { // count change
+        m_wl_count = tmp_count;
+        m_wl_checksum = tmp_checksum;
+        printf("set m_wl_count = %d\n", m_wl_count);
+        printf("set m_wl_checksum = %04X\n", m_wl_checksum);
+        return true;
+    }
+
+    return false;
 }
 
 bool CG320::GetWhiteListSN()
@@ -1662,14 +1909,9 @@ bool CG320::GetWhiteListSN()
         while ( err < 3 ) {
             memcpy(txbuffer, szWLSN, 14);
             MStartTX(m_busfd);
-            usleep(1000000); // 1s
+            //usleep(1000000); // 1s
 
-            if ( err == 0 )
-                lpdata = GetRespond(m_busfd, 11 + 8*num_of_data, 100000); // 0.1s
-            else if ( err == 1 )
-                lpdata = GetRespond(m_busfd, 11 + 8*num_of_data, 500000); // 0.5s
-            else
-                lpdata = GetRespond(m_busfd, 11 + 8*num_of_data, 1000000); // 1s
+            lpdata = GetRespond(m_busfd, 11 + 8*num_of_data, m_dl_config.m_delay_time_1);
             if ( lpdata ) {
                 printf("#### GetWhiteListSN index %d, data %d OK ####\n", i, num_of_data);
                 printf("copy %d data to white list buf\n", 8*num_of_data);
@@ -1983,7 +2225,7 @@ bool CG320::LoadWhiteList()
 
     for (num = 0; num < m_wl_count; num++) {
         fgets(buf, 256, pFile);
-        sscanf(buf, "%02X%02X%02X%02X%02X%02X%02X%02X", &tmp1, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7, &tmp8);
+        sscanf(buf, "%02X%02X%02X%02X%02X%02X%02X%02X %08X %010ld", &tmp1, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7, &tmp8, &arySNobj[num].m_Device, &arySNobj[num].m_ok_time);
         m_white_list_buf[0 + num*8] = (unsigned char)tmp1;
         m_white_list_buf[1 + num*8] = (unsigned char)tmp2;
         m_white_list_buf[2 + num*8] = (unsigned char)tmp3;
@@ -2004,6 +2246,63 @@ bool CG320::LoadWhiteList()
         SaveLog((char *)"DataLogger LoadWhiteList() : Check Sum Error", m_st_time);
         return false;
     }
+}
+
+bool CG320::LoadWhiteListV3()
+{
+    printf("\n#### LoadWhiteListV3 start ####\n");
+
+    FILE *pFile;
+    char buf[256] = {0}, sntmp[17] = {0};
+    int num = 0, devtmp = 0, i = 0;
+    time_t oktmp = 0;
+
+    m_wl_count = 0;
+    m_wl_checksum = 0;
+    m_wl_maxid = 0;
+
+    pFile = fopen(WHITE_LIST_V3_PATH, "r");
+    if ( pFile == NULL ) {
+        printf("#### LoadWhiteListV3 open file Fail ####\n");
+        SaveLog((char *)"DataLogger LoadWhiteListV3() : fopen white list fail", m_st_time);
+        return false;
+    }
+
+    fgets(buf, 256, pFile);
+    sscanf(buf, "count=%d", &m_wl_count);
+    fgets(buf, 256, pFile);
+    sscanf(buf, "checksum=%X", &m_wl_checksum);
+    fgets(buf, 256, pFile);
+    sscanf(buf, "maxid=%d", &m_wl_maxid);
+
+    printf("Get : m_wl_count = 0x%02X, m_wl_checksum = 0x%04X, m_wl_maxid = %d\n", m_wl_count, m_wl_checksum, m_wl_maxid);
+    sprintf(buf, "DataLogger LoadWhiteListV3() : m_wl_count = 0x%02X, m_wl_checksum = 0x%04X, m_wl_maxid = %d", m_wl_count, m_wl_checksum, m_wl_maxid);
+    SaveLog(buf, m_st_time);
+
+    for (num = 0; num < m_wl_count; num++) {
+        fgets(buf, 256, pFile);
+        sscanf(buf, "%16s %08X %010ld", sntmp, &devtmp, &oktmp);
+        // check SN in loop list
+        for (i = 0; i < m_snCount; i++) {
+            if ( !strncmp(sntmp, arySNobj[i].m_Sn, 16) ) {
+                // match SN, set m_Device & m_ok_time
+                arySNobj[i].m_Device = devtmp;
+                arySNobj[i].m_ok_time = oktmp;
+                break;
+            }
+        }
+    }
+    fclose(pFile);
+
+    printf("#### Dump White List V3 ####\n");
+    for (i = 0; i < m_snCount; i++) {
+        printf("Index %d, SN = %s, device = %08X, ok_time = %010ld\n", arySNobj[i].m_Addr, arySNobj[i].m_Sn, arySNobj[i].m_Device, arySNobj[i].m_ok_time);
+    }
+    printf("############################\n");
+
+    printf("#### LoadWhiteListV3 OK ####\n");
+    SaveLog((char *)"DataLogger LoadWhiteListV3() : OK", m_st_time);
+    return true;
 }
 
 bool CG320::SavePLCWhiteList()
@@ -2046,10 +2345,13 @@ bool CG320::SaveWhiteList()
 {
     FILE *pFile;
     int i = 0, checksum = 0, cnt = 0;
-    char buf[32] = {0};
+    char buf[256] = {0};
     unsigned int tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0, tmp6 = 0, tmp7 = 0, tmp8 = 0;
 
-    pFile = fopen(WHITE_LIST_PATH, "w");
+    if ( m_plcver == 3 )
+        pFile = fopen(WHITE_LIST_V3_PATH, "w");
+    else if ( m_plcver == 2 )
+        pFile = fopen(WHITE_LIST_PATH, "w");
     if ( pFile == NULL ) {
         printf("#### SaveWhiteList open file Fail ####\n");
         SaveLog((char *)"DataLogger SaveWhiteList() : fopen fail", m_st_time);
@@ -2076,7 +2378,7 @@ bool CG320::SaveWhiteList()
 
     for ( i = 0; i < m_snCount; i++) {
         if ( strlen(arySNobj[i].m_Sn) ) {
-            sprintf(buf, "%s\n", arySNobj[i].m_Sn);
+            sprintf(buf, "%s %08X %010ld\n", arySNobj[i].m_Sn, arySNobj[i].m_Device, arySNobj[i].m_ok_time);
             fputs(buf, pFile);
         }
     }
@@ -2164,7 +2466,21 @@ bool CG320::SaveDeviceList(bool first, bool last)
                     offset = index_end - index_start + 9;
                     strcat(buf, "<ERROR>");
                     strncat(buf, index_start, offset);
+
+                    if ( arySNobj[i].m_Device < 0x0A ) {
+                        sscanf(arySNobj[i].m_Sn+4, "%04X", &model); // get 5-8 digit from SN
+                        if ( model >= 3 ) { // G640, put B part
+                            index_tmp = strstr(index_end, arySNobj[i].m_Sn);
+                            if ( index_tmp != NULL ) {
+                                index_start = strstr(index_tmp-80, "<record dev_id=");
+                                index_end = strstr(index_start, "</record>");
+                                offset = index_end - index_start + 9;
+                                strncat(buf, index_start, offset);
+                            }
+                        }
+                    }
                     strcat(buf, "</ERROR>");
+
                 } else {
                     printf("%d errlog index_tmp = NULL!\n", arySNobj[i].m_Addr);
                     strcat(buf, "Empty");
@@ -2272,6 +2588,68 @@ bool CG320::DeleteWhiteList(int num, unsigned char *listbuf)
     }
 }
 
+bool CG320::GetPLCStatus(int index)
+{
+    printf("#### GetPLCStatus start ####\n");
+
+    int err = 0;
+    byte *lpdata = NULL;
+    char strbuf[1024] = {0};
+
+    unsigned char szPLCStatus[]={0x01, 0x32, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00};
+    MakeReadDataCRC(szPLCStatus,14);
+
+    MClearRX();
+    txsize=14;
+    waitAddr = 0x01;
+    waitFCode = 0x32;
+
+    while ( err < 2 ) {
+        memcpy(txbuffer, szPLCStatus, 14);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_1);
+
+        lpdata = GetRespond(m_busfd, 21, m_dl_config.m_delay_time_1);
+        if ( lpdata ) {
+            printf("#### GetPLCStatus(%d) OK : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+            //SaveLog((char *)"DataLogger GetPLCStatus() : OK", m_st_time);
+            sprintf(strbuf, "DataLogger GetPLCStatus(%d) OK : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+            SaveLog(strbuf, m_st_time);
+            //DumpPLCStatus(lpdata+9); if need, then add this function
+            if ( *(lpdata+9) & 0x20 ) { // check the bit5 ( 7 ~ 0 ) in Data1(Hi) byte
+                // busy
+                printf("#### Busy! ####\n");
+                SaveLog((char *)"DataLogger GetPLCStatus() : Busy!", m_st_time);
+                return true;
+            } else {
+                // idle
+                printf("#### Idle ####\n");
+                SaveLog((char *)"DataLogger GetPLCStatus() : Idle", m_st_time);
+                return false;
+            }
+        } else {
+            if ( have_respond == true ) {
+                printf("#### GetPLCStatus(%d) CRC Error : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                //SaveLog((char *)"DataLogger GetPLCStatus() : CRC Error", m_st_time);
+                sprintf(strbuf, "DataLogger GetPLCStatus(%d) CRC Error : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                SaveLog(strbuf, m_st_time);
+            }
+            else {
+                printf("#### GetPLCStatus(%d) No Response : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                //SaveLog((char *)"DataLogger GetPLCStatus() : No Response", m_st_time);
+                sprintf(strbuf, "DataLogger GetPLCStatus(%d) No Response : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                SaveLog(strbuf, m_st_time);
+            }
+            err++;
+        }
+    }
+
+    printf("#### Suppose Busy ####\n");
+    SaveLog((char *)"DataLogger GetPLCStatus() : Suppose Busy", m_st_time);
+
+    return true;
+}
+
 int CG320::WhiteListRegister()
 {
     char buf[256] = {0};
@@ -2317,10 +2695,11 @@ int CG320::WhiteListRegister()
             printf("=================================\n");
             printf("#### MyAssignAddress(%d) OK! ####\n", arySNobj[m_snCount].m_Addr);
             printf("=================================\n");
-            arySNobj[m_snCount].m_Device = -1;
+            //arySNobj[m_snCount].m_Device = -1; // set it when call LoadWhiteList before
             arySNobj[m_snCount].m_Err = 0;
             arySNobj[m_snCount].m_state = 1;
             arySNobj[m_snCount].m_FWver = 0;
+            arySNobj[m_snCount].m_ok_time = time(NULL);
             //m_snCount++;
             ok++;
         }
@@ -2341,7 +2720,7 @@ int CG320::WhiteListRegister()
 int CG320::StartRegisterProcess()
 {
     int DefaultMODValue = 20;
-    int i, ret = 0, cnt = 0;
+    int i, ret = 0, cnt = 0, total = 0;
 	bool Conflict = false;
 
 	/*if (m_snCount==0) {
@@ -2402,6 +2781,7 @@ int CG320::StartRegisterProcess()
 Allocate_address:
                         cnt = AllocateProcess(m_query_buf, ret);
                         printf("#### AllocateProcess success = %d ####\n", cnt);
+                        total += cnt;
                     }
                     usleep(1000000); // 1s
                 }
@@ -2426,7 +2806,7 @@ Allocate_address:
             break;
     }
 
-    return cnt;
+    return total;
 }
 
 int CG320::AllocateProcess(unsigned char *query, int len)
@@ -2470,6 +2850,7 @@ int CG320::AllocateProcess(unsigned char *query, int len)
                     arySNobj[index].m_Err = 0;
                     arySNobj[index].m_state = 1;
                     arySNobj[index].m_FWver = 0;
+                    arySNobj[index].m_ok_time = time(NULL);
                     if ( index == m_snCount ) {
                         m_snCount++;
                     }
@@ -2518,6 +2899,7 @@ bool CG320::ReRegister(int index)
         //arySNobj[index].m_Device = -1; // device not change
         arySNobj[index].m_Err = 0;
         arySNobj[index].m_state = 1;
+        arySNobj[index].m_ok_time = (NULL);
         return true;
     }
     else {
@@ -2541,9 +2923,9 @@ bool CG320::ReRegisterV3(int index)
     sprintf(buf, "DataLogger ReRegisterV3() : addr %d run", arySNobj[index].m_Addr);
     SaveLog(buf, m_st_time);
     printf("#### ReRegiser start ####\n");
-    printf("#### Remove %d Query ####\n", arySNobj[index].m_Addr);
-    RemoveRegisterQuery(m_busfd, arySNobj[index].m_Addr);
-    usleep(500000);
+    //printf("#### Remove %d Query ####\n", arySNobj[index].m_Addr);
+    //RemoveRegisterQuery(m_busfd, arySNobj[index].m_Addr);
+    //usleep(500000);
 
     printf("ReRegiser SN = %s\n", arySNobj[index].m_Sn);
     for (i = 0; i < 8; i++) {
@@ -2580,6 +2962,7 @@ bool CG320::ReRegisterV3(int index)
 
             arySNobj[index].m_Err = 0;
             arySNobj[index].m_state = 1;
+            //arySNobj[index].m_ok_time = time(NULL);
             return true;
         } else {
             if ( have_respond == true ) {
@@ -2591,11 +2974,48 @@ bool CG320::ReRegisterV3(int index)
                 SaveLog((char *)"DataLogger ReRegisterV3() : No Response", m_st_time);
             }
             szRegV3[1] = 0x4D;
+            MakeReadDataCRC(szRegV3,15);
             err++;
         }
     }
 
     return false;
+}
+
+int CG320::WhiteListV3Init()
+{
+    char buf[256] = {0};
+    int i = 0;
+
+    printf("#### WhiteListV3Init start ####\n");
+
+    // init arySNobj array
+    m_snCount = 0;
+    for (i = 0; i < m_wl_count; i++) {
+        printf("\n#### arySNobj[%d] parameter ####\n", i);
+        printf("m_snCount = %d\n", m_snCount);
+        printf("m_Addr = %d\n", arySNobj[m_snCount].m_Addr);
+        sprintf(arySNobj[m_snCount].m_Sn, "%02X%02X%02X%02X%02X%02X%02X%02X",
+                m_white_list_buf[0+i*8], m_white_list_buf[1+i*8], m_white_list_buf[2+i*8], m_white_list_buf[3+i*8],
+                m_white_list_buf[4+i*8], m_white_list_buf[5+i*8], m_white_list_buf[6+i*8], m_white_list_buf[7+i*8]);
+        printf("m_Sn = %s\n", arySNobj[m_snCount].m_Sn);
+        printf("################################\n");
+
+        arySNobj[m_snCount].m_Device = 0; // must MI
+        arySNobj[m_snCount].m_Err = 0;
+        arySNobj[m_snCount].m_state = 0;
+        arySNobj[m_snCount].m_FWver = 0;
+        arySNobj[m_snCount].m_ok_time = 0;
+        m_snCount++;
+    }
+
+    printf("\nm_snCount = %d\n", m_snCount);
+    sprintf(buf, "DataLogger WhiteListV3Init() end. m_snCount = %d", m_snCount);
+    SaveLog(buf, m_st_time);
+
+    printf("#### WhiteListV3Init start ####\n");
+
+    return m_snCount;
 }
 
 bool CG320::GetDevice(int index)
@@ -2604,6 +3024,15 @@ bool CG320::GetDevice(int index)
 
     int err = 0;
     byte *lpdata = NULL;
+
+    // check ok time
+    time_t current_time = 0;
+    current_time = time(NULL);
+    if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_MI ) {
+        printf("Last m_ok_time more then 1200 sec.\n");
+        if ( !ReRegister(index) )
+            return false;
+    }
 
     char buf[256] = {0};
     unsigned char szDevice[] = {0x00, 0x03, 0x00, 0x08, 0x00, 0x01, 0x00, 0x00};
@@ -2623,7 +3052,8 @@ bool CG320::GetDevice(int index)
         lpdata = GetRespond(m_busfd, 7, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetDevice OK ####\n");
-            arySNobj[index].m_Device = (*(lpdata+3) << 8) + *(lpdata+4);;
+            arySNobj[index].m_Device = (*(lpdata+3) << 8) + *(lpdata+4);
+            arySNobj[index].m_ok_time = time(NULL);
             if ( arySNobj[index].m_Device < 0x0A ) {
                 printf("#### Address %d, Device 0x%04X ==> MI ####\n", arySNobj[index].m_Addr, arySNobj[index].m_Device);
                 sprintf(buf, "DataLogger GetDevice() : Address %d, Device 0x%04X ==> MI", arySNobj[index].m_Addr, arySNobj[index].m_Device);
@@ -2658,6 +3088,15 @@ bool CG320::GetMiIDInfo(int index)
     int err = 0;
     byte *lpdata = NULL;
 
+    // check ok time
+    time_t current_time = 0;
+    current_time = time(NULL);
+    if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_MI ) {
+        printf("Last m_ok_time more then 1200 sec.\n");
+        if ( !ReRegister(index) )
+            return false;
+    }
+
     unsigned char szMIIDinfo[]={0x00, 0x03, 0x00, 0x01, 0x00, 0x0A, 0x00, 0x00};
     szMIIDinfo[0]=arySNobj[index].m_Addr;
     MakeReadDataCRC(szMIIDinfo,8);
@@ -2673,10 +3112,11 @@ bool CG320::GetMiIDInfo(int index)
         //usleep(m_dl_config.m_delay_time_1);
 
         //lpdata = GetRespond(m_busfd, 25, m_dl_config.m_delay_time_1);
-        lpdata = GetRespond(m_busfd, 25, PLC2_DELAY);
+        lpdata = GetRespond(m_busfd, 25, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetMiIDInfo OK ####\n");
             SaveLog((char *)"DataLogger GetMiIDInfo() : OK", m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
             DumpMiIDInfo(index, lpdata+3);
             return true;
         } else {
@@ -2702,6 +3142,15 @@ bool CG320::GetMiIDInfoV3(int index)
     int err = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
     byte *lpdata = NULL;
 
+    // check ok time
+    time_t current_time = 0;
+    current_time = time(NULL);
+    if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_MI ) {
+        printf("Last m_ok_time more then 1200 sec.\n");
+        if ( !ReRegisterV3(index) )
+            return false;
+    }
+
     unsigned char szMIIDinfoV3[]={0x01, 0x33, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0A, 0x00, 0x00};
     sscanf(arySNobj[index].m_Sn+6, "%02X%02X%02X%02X%02X", &tmp1, &tmp2, &tmp3, &tmp4, &tmp5);
     // set model & SN
@@ -2726,6 +3175,8 @@ bool CG320::GetMiIDInfoV3(int index)
         if ( lpdata ) {
             printf("#### GetMiIDInfoV3 OK ####\n");
             SaveLog((char *)"DataLogger GetMiIDInfoV3() : OK", m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
+            arySNobj[index].m_state = 1; // online
             DumpMiIDInfo(index, lpdata+9);
             return true;
         } else {
@@ -2738,6 +3189,7 @@ bool CG320::GetMiIDInfoV3(int index)
                 SaveLog((char *)"DataLogger GetMiIDInfoV3() : No Response", m_st_time);
             }
             szMIIDinfoV3[1] = 0x36;
+            MakeReadDataCRC(szMIIDinfoV3,14);
             err++;
         }
     }
@@ -2787,6 +3239,7 @@ void CG320::DumpMiIDInfo(int index, unsigned char *buf)
     printf("Month    = %02d\n", m_mi_id_info.Month);
     printf("Data     = %02d\n", m_mi_id_info.Date);
     printf("Device   = 0x%04X ==> ", m_mi_id_info.Device);
+    arySNobj[index].m_Device = m_mi_id_info.Device;
     if ( m_mi_id_info.Device < 0x0A )
         printf("MI\n");
     else
@@ -2803,6 +3256,16 @@ bool CG320::GetMiPowerInfo(int index)
 
     int err = 0;
     byte *lpdata = NULL;
+    char strbuf[1024] = {0};
+
+    // check ok time
+    time_t current_time = 0;
+    current_time = time(NULL);
+    if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_MI ) {
+        printf("Last m_ok_time more then 1200 sec.\n");
+        if ( !ReRegister(index) )
+            return false;
+    }
 
     unsigned char szMIPowerinfo[]={0x00, 0x03, 0x02, 0x00, 0x00, 0x21, 0x00, 0x00};
     szMIPowerinfo[0]=arySNobj[index].m_Addr;
@@ -2819,20 +3282,27 @@ bool CG320::GetMiPowerInfo(int index)
         //usleep(m_dl_config.m_delay_time_1);
 
         //lpdata = GetRespond(m_busfd, 71, m_dl_config.m_delay_time_1);
-        lpdata = GetRespond(m_busfd, 71, PLC2_DELAY);
+        lpdata = GetRespond(m_busfd, 71, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
-            printf("#### GetMiPowerInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetMiPowerInfo() : OK", m_st_time);
+            printf("#### GetMiPowerInfo(%d) OK : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+            //SaveLog((char *)"DataLogger GetMiPowerInfo() : OK", m_st_time);
+            sprintf(strbuf, "DataLogger GetMiPowerInfo(%d) OK : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+            SaveLog(strbuf, m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
             DumpMiPowerInfo(lpdata+3);
             return true;
         } else {
             if ( have_respond == true ) {
-                printf("#### GetMiPowerInfo CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetMiPowerInfo() : CRC Error", m_st_time);
+                printf("#### GetMiPowerInfo(%d) CRC Error : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                //SaveLog((char *)"DataLogger GetMiPowerInfo() : CRC Error", m_st_time);
+                sprintf(strbuf, "DataLogger GetMiPowerInfo(%d) CRC Error : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                SaveLog(strbuf, m_st_time);
             }
             else {
-                printf("#### GetMiPowerInfo No Response ####\n");
-                SaveLog((char *)"DataLogger GetMiPowerInfo() : No Response", m_st_time);
+                printf("#### GetMiPowerInfo(%d) No Response : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                //SaveLog((char *)"DataLogger GetMiPowerInfo() : No Response", m_st_time);
+                sprintf(strbuf, "DataLogger GetMiPowerInfo(%d) No Response : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                SaveLog(strbuf, m_st_time);
             }
             err++;
         }
@@ -2847,6 +3317,16 @@ bool CG320::GetMiPowerInfoV3(int index)
 
     int err = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
     byte *lpdata = NULL;
+    char strbuf[1024] = {0};
+
+    // check ok time
+    time_t current_time = 0;
+    current_time = time(NULL);
+    if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_MI ) {
+        printf("Last m_ok_time more then 1200 sec.\n");
+        if ( !ReRegisterV3(index) )
+            return false;
+    }
 
     unsigned char szMIPowerinfoV3[]={0x01, 0x33, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x21, 0x00, 0x00};
     sscanf(arySNobj[index].m_Sn+6, "%02X%02X%02X%02X%02X", &tmp1, &tmp2, &tmp3, &tmp4, &tmp5);
@@ -2870,20 +3350,29 @@ bool CG320::GetMiPowerInfoV3(int index)
 
         lpdata = GetRespond(m_busfd, 77, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
-            printf("#### GetMiPowerInfoV3 OK ####\n");
-            SaveLog((char *)"DataLogger GetMiPowerInfoV3() : OK", m_st_time);
+            printf("#### GetMiPowerInfoV3(%d) OK : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+            //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : OK", m_st_time);
+            sprintf(strbuf, "DataLogger GetMiPowerInfoV3(%d) OK : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+            SaveLog(strbuf, m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
+            arySNobj[index].m_state = 1; // online
             DumpMiPowerInfo(lpdata+9);
             return true;
         } else {
             if ( have_respond == true ) {
-                printf("#### GetMiPowerInfoV3 CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetMiPowerInfoV3() : CRC Error", m_st_time);
+                printf("#### GetMiPowerInfoV3(%d) CRC Error : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : CRC Error", m_st_time);
+                sprintf(strbuf, "DataLogger GetMiPowerInfoV3(%d) CRC Error : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                SaveLog(strbuf, m_st_time);
             }
             else {
-                printf("#### GetMiPowerInfoV3 No Response ####\n");
-                SaveLog((char *)"DataLogger GetMiPowerInfoV3() : No Response", m_st_time);
+                printf("#### GetMiPowerInfoV3(%d) No Response : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : No Response", m_st_time);
+                sprintf(strbuf, "DataLogger GetMiPowerInfoV3(%d) No Response : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
+                SaveLog(strbuf, m_st_time);
             }
             szMIPowerinfoV3[1] = 0x36;
+            MakeReadDataCRC(szMIPowerinfoV3,14);
             err++;
         }
     }
@@ -2964,6 +3453,15 @@ bool CG320::GetHybridIDData(int index)
     int err = 0;
     byte *lpdata = NULL;
 
+    // check ok time
+    time_t current_time = 0;
+    current_time = time(NULL);
+    if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_HB ) {
+        printf("Last m_ok_time more then 240 sec.\n");
+        if ( !ReRegister(index) )
+            return false;
+    }
+
     unsigned char szHBIDdata[]={0x00, 0x03, 0x00, 0x01, 0x00, 0x0E, 0x00, 0x00};
     szHBIDdata[0]=arySNobj[index].m_Addr;
     MakeReadDataCRC(szHBIDdata,8);
@@ -2983,6 +3481,7 @@ bool CG320::GetHybridIDData(int index)
             printf("#### GetHybridIDData OK ####\n");
             SaveLog((char *)"DataLogger GetHybridIDData() : OK", m_st_time);
             DumpHybridIDData(lpdata+3);
+            arySNobj[index].m_ok_time = time(NULL);
             ParserHybridIDFlags1(m_hb_id_data.Flags1);
             ParserHybridIDFlags2(m_hb_id_data.Flags2);
             return true;
@@ -3140,6 +3639,7 @@ bool CG320::SetHybridIDData(int index)
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridIDData OK ####\n");
                 SaveLog((char *)"DataLogger SetHybridIDData() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
                 //free(lpdata);
                 return true;
             } else {
@@ -3229,6 +3729,7 @@ bool CG320::GetHybridRTCData(int index)
         if ( lpdata ) {
             printf("#### GetHybridRTCData OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRTCData() : OK", m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRTCData(lpdata+3);
             return true;
         } else {
@@ -3277,6 +3778,13 @@ bool CG320::SetHybridRTCData(int index)
     //printf("#### SetHybridRTCData Start ####\n");
     current_time = time(NULL);
     st_time = localtime(&current_time);
+
+    // check ok time
+    if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_HB ) {
+        printf("Last m_ok_time more then 240 sec.\n");
+        if ( !ReRegister(index) )
+            return false;
+    }
 
     m_hb_rtc_data.Second = st_time->tm_sec;
     m_hb_rtc_data.Minute = st_time->tm_min;
@@ -3354,6 +3862,7 @@ bool CG320::SetHybridRTCData(int index)
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRTCData OK ####\n");
                 SaveLog((char *)"DataLogger SetHybridRTCData() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
                 //free(lpdata);
                 return true;
             } else {
@@ -3399,6 +3908,7 @@ bool CG320::GetHybridRSInfo(int index)
         if ( lpdata ) {
             printf("#### GetHybridRSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRSInfo() : OK", m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRSInfo(lpdata+3);
             return true;
         } else {
@@ -3596,6 +4106,7 @@ bool CG320::SetHybridRSInfo(int index)
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRSInfo OK ####\n");
                 SaveLog((char *)"DataLogger SetHybridRSInfo() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
                 //free(lpdata);
                 return true;
             } else {
@@ -3641,6 +4152,7 @@ bool CG320::GetHybridRRSInfo(int index)
         if ( lpdata ) {
             printf("#### GetHybridRRSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRRSInfo(lpdata+3);
             return true;
         } else {
@@ -3770,6 +4282,7 @@ bool CG320::SetHybridRRSInfo(int index)
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRRSInfo OK ####\n");
                 SaveLog((char *)"DataLogger SetHybridRRSInfo() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
                 //free(lpdata);
                 return true;
             } else {
@@ -3815,6 +4328,7 @@ bool CG320::GetHybridRTInfo(int index)
         if ( lpdata ) {
             printf("#### GetHybridRTInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRTInfo() : OK", m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRTInfo(lpdata+3);
             ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1_Record);
             ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1);
@@ -4227,6 +4741,7 @@ bool CG320::GetHybridBMSInfo(int index)
         if ( lpdata ) {
             printf("#### GetHybridBMSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridBMSInfo() : OK", m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
             DumpHybridBMSInfo(lpdata+3);
             return true;
         } else {
@@ -4326,6 +4841,7 @@ bool CG320::GetHybridPanasonicModule(int index)
         if ( lpdata ) {
             printf("#### GetHybridPanasonicModule OK ####\n");
             //SaveLog("DataLogger GetHybridPanasonicModule() : OK", m_st_time);
+            arySNobj[index].m_ok_time = time(NULL);
             memcpy(m_bms_panamod, lpdata+3, BMS_PANAMOD_SIZE);
             return true;
         } else {
@@ -4432,6 +4948,7 @@ bool CG320::GetHybridBMSModule(int index, int module)
             //sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, first half OK", arySNobj[index].m_Addr, module+1);
             //SaveLog(buf, m_st_time);
             //lpdata = testbuf + module;
+            arySNobj[index].m_ok_time = time(NULL);
             memcpy(m_bms_buf, lpdata+3, BMS_MODULE_SIZE/2);
             break;
         } else {
@@ -5276,87 +5793,262 @@ void CG320::SetErrorLogXML()
 bool CG320::WriteErrorLogXML(int index)
 {
     char buf[256] = {0};
+    char idtmp[13] = {0};
     unsigned long long int dev_id = 0;
+    int model = 0;
 
     SaveLog((char *)"DataLogger WriteErrorLogXML() : run", m_st_time);
     printf("==================== Set Error Log XML start ====================\n");
     //if ( strlen(m_errlog_buf) == 0 ) // empty, new file, add header <records>
     //    strcpy(m_errlog_buf, "<records>");
 
-    sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
-    sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
-        1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-        m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
-    strcat(m_errlog_buf, buf);
+    sscanf(arySNobj[index].m_Sn+4, "%04X", &model); // get 5-8 digit from SN
+    //printf("Index %d model = %X\n", index, model);
 
     if ( arySNobj[index].m_Device < 0x0A ) {
         // MI part
-        // Error_Code1
-        if ( m_mi_power_info.Error_Code1 & 0x0001 )
-            strcat(m_errlog_buf, "<code>COD1_0001</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0002 )
-            strcat(m_errlog_buf, "<code>COD1_0002</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0004 )
-            strcat(m_errlog_buf, "<code>COD1_0004</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0008 )
-            strcat(m_errlog_buf, "<code>COD1_0008</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0010 )
-            strcat(m_errlog_buf, "<code>COD1_0010</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0020 )
-            strcat(m_errlog_buf, "<code>COD1_0020</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0040 )
-            strcat(m_errlog_buf, "<code>COD1_0040</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0080 )
-            strcat(m_errlog_buf, "<code>COD1_0080</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0100 )
-            strcat(m_errlog_buf, "<code>COD1_0100</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0200 )
-            strcat(m_errlog_buf, "<code>COD1_0200</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0400 )
-            strcat(m_errlog_buf, "<code>COD1_0400</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x0800 )
-            strcat(m_errlog_buf, "<code>COD1_0800</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x1000 )
-            strcat(m_errlog_buf, "<code>COD1_1000</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x2000 )
-            strcat(m_errlog_buf, "<code>COD1_2000</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x4000 )
-            strcat(m_errlog_buf, "<code>COD1_4000</code>");
-        if ( m_mi_power_info.Error_Code1 & 0x8000 )
-            strcat(m_errlog_buf, "<code>COD1_8000</code>");
-        // Error_Code2
-        if ( m_mi_power_info.Error_Code2 & 0x0001 )
-            strcat(m_errlog_buf, "<code>COD2_0001</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0002 )
-            strcat(m_errlog_buf, "<code>COD2_0002</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0004 )
-            strcat(m_errlog_buf, "<code>COD2_0004</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0008 )
-            strcat(m_errlog_buf, "<code>COD2_0001</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0010 )
-            strcat(m_errlog_buf, "<code>COD2_0010</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0020 )
-            strcat(m_errlog_buf, "<code>COD2_0020</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0040 )
-            strcat(m_errlog_buf, "<code>COD2_0040</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0080 )
-            strcat(m_errlog_buf, "<code>COD2_0080</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0100 )
-            strcat(m_errlog_buf, "<code>COD2_0100</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0200 )
-            strcat(m_errlog_buf, "<code>COD2_0200</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0400 )
-            strcat(m_errlog_buf, "<code>COD2_0400</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x0800 )
-            strcat(m_errlog_buf, "<code>COD2_0800</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x1000 )
-            strcat(m_errlog_buf, "<code>COD2_1000</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x2000 )
-            strcat(m_errlog_buf, "<code>COD2_2000</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x4000 )
-            strcat(m_errlog_buf, "<code>COD2_4000</code>");
-        if ( m_mi_power_info.Error_Code2 & 0x8000 )
-            strcat(m_errlog_buf, "<code>COD2_8000</code>");
+        if ( model < 3 ) {
+            // G240/300, G320, G321 single channel
+            sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+                1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
+                m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+            strcat(m_errlog_buf, buf);
+
+            // Error_Code1
+            if ( m_mi_power_info.Error_Code1 & 0x0001 )
+                strcat(m_errlog_buf, "<code>COD1_0001</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0002 )
+                strcat(m_errlog_buf, "<code>COD1_0002</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0004 )
+                strcat(m_errlog_buf, "<code>COD1_0004</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0008 )
+                strcat(m_errlog_buf, "<code>COD1_0008</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0010 )
+                strcat(m_errlog_buf, "<code>COD1_0010</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0020 )
+                strcat(m_errlog_buf, "<code>COD1_0020</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0040 )
+                strcat(m_errlog_buf, "<code>COD1_0040</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0080 )
+                strcat(m_errlog_buf, "<code>COD1_0080</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0100 )
+                strcat(m_errlog_buf, "<code>COD1_0100</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0200 )
+                strcat(m_errlog_buf, "<code>COD1_0200</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0400 )
+                strcat(m_errlog_buf, "<code>COD1_0400</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0800 )
+                strcat(m_errlog_buf, "<code>COD1_0800</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x1000 )
+                strcat(m_errlog_buf, "<code>COD1_1000</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x2000 )
+                strcat(m_errlog_buf, "<code>COD1_2000</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x4000 )
+                strcat(m_errlog_buf, "<code>COD1_4000</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x8000 )
+                strcat(m_errlog_buf, "<code>COD1_8000</code>");
+            // Error_Code2
+            if ( m_mi_power_info.Error_Code2 & 0x0001 )
+                strcat(m_errlog_buf, "<code>COD2_0001</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0002 )
+                strcat(m_errlog_buf, "<code>COD2_0002</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0004 )
+                strcat(m_errlog_buf, "<code>COD2_0004</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0008 )
+                strcat(m_errlog_buf, "<code>COD2_0001</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0010 )
+                strcat(m_errlog_buf, "<code>COD2_0010</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0020 )
+                strcat(m_errlog_buf, "<code>COD2_0020</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0040 )
+                strcat(m_errlog_buf, "<code>COD2_0040</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0080 )
+                strcat(m_errlog_buf, "<code>COD2_0080</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0100 )
+                strcat(m_errlog_buf, "<code>COD2_0100</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0200 )
+                strcat(m_errlog_buf, "<code>COD2_0200</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0400 )
+                strcat(m_errlog_buf, "<code>COD2_0400</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0800 )
+                strcat(m_errlog_buf, "<code>COD2_0800</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x1000 )
+                strcat(m_errlog_buf, "<code>COD2_1000</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x2000 )
+                strcat(m_errlog_buf, "<code>COD2_2000</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x4000 )
+                strcat(m_errlog_buf, "<code>COD2_4000</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x8000 )
+                strcat(m_errlog_buf, "<code>COD2_8000</code>");
+        } else {
+            // G640, G642, G640R dual channel
+            // set ch1
+            idtmp[0] = 'A';
+            strcpy(idtmp+1, arySNobj[index].m_Sn+5);
+            sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+                    1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
+                    m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+            strcat(m_errlog_buf, buf);
+
+            // Error_Code1
+            if ( m_mi_power_info.Error_Code1 & 0x0001 )
+                strcat(m_errlog_buf, "<code>COD1_0001</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0002 )
+                strcat(m_errlog_buf, "<code>COD1_0002</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0004 )
+                strcat(m_errlog_buf, "<code>COD1_0004</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0008 )
+                strcat(m_errlog_buf, "<code>COD1_0008</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0010 )
+                strcat(m_errlog_buf, "<code>COD1_0010</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0020 )
+                strcat(m_errlog_buf, "<code>COD1_0020</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0040 )
+                strcat(m_errlog_buf, "<code>COD1_0040</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0080 )
+                strcat(m_errlog_buf, "<code>COD1_0080</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0100 )
+                strcat(m_errlog_buf, "<code>COD1_0100</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0200 )
+                strcat(m_errlog_buf, "<code>COD1_0200</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0400 )
+                strcat(m_errlog_buf, "<code>COD1_0400</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0800 )
+                strcat(m_errlog_buf, "<code>COD1_0800</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x1000 )
+                strcat(m_errlog_buf, "<code>COD1_1000</code>");
+            //if ( m_mi_power_info.Error_Code1 & 0x2000 ) // ch2
+            //    strcat(m_errlog_buf, "<code>COD1_2000</code>");
+            //if ( m_mi_power_info.Error_Code1 & 0x4000 ) // ch2
+            //    strcat(m_errlog_buf, "<code>COD1_4000</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x8000 )
+                strcat(m_errlog_buf, "<code>COD1_8000</code>");
+            // Error_Code2
+            if ( m_mi_power_info.Error_Code2 & 0x0001 )
+                strcat(m_errlog_buf, "<code>COD2_0001</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0002 )
+                strcat(m_errlog_buf, "<code>COD2_0002</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0004 )
+                strcat(m_errlog_buf, "<code>COD2_0004</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0008 )
+                strcat(m_errlog_buf, "<code>COD2_0001</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0010 )
+                strcat(m_errlog_buf, "<code>COD2_0010</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0020 )
+                strcat(m_errlog_buf, "<code>COD2_0020</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0040 )
+                strcat(m_errlog_buf, "<code>COD2_0040</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0080 )
+                strcat(m_errlog_buf, "<code>COD2_0080</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0100 )
+                strcat(m_errlog_buf, "<code>COD2_0100</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0200 )
+                strcat(m_errlog_buf, "<code>COD2_0200</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0400 )
+                strcat(m_errlog_buf, "<code>COD2_0400</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0800 )
+                strcat(m_errlog_buf, "<code>COD2_0800</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x1000 )
+                strcat(m_errlog_buf, "<code>COD2_1000</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x2000 )
+                strcat(m_errlog_buf, "<code>COD2_2000</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x4000 )
+                strcat(m_errlog_buf, "<code>COD2_4000</code>");
+            //if ( m_mi_power_info.Error_Code2 & 0x8000 ) // ch2
+            //    strcat(m_errlog_buf, "<code>COD2_8000</code>");
+
+            // set system error log
+            if ( m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0) ) {
+                if ( m_sys_error & SYS_0001_No_USB )
+                    strcat(m_errlog_buf, "<code>SYS_0001_No_USB</code>");
+                if ( m_sys_error & SYS_0002_Save_USB_Fail )
+                    strcat(m_errlog_buf, "<code>SYS_0002_Save_USB_Fail</code>");
+                if ( m_sys_error & SYS_0004_No_SD )
+                    strcat(m_errlog_buf, "<code>SYS_0004_No_SD</code>");
+                if ( m_sys_error & SYS_0008_Save_SD_Fail )
+                    strcat(m_errlog_buf, "<code>SYS_0008_Save_SD_Fail</code>");
+            }
+
+            strcat(m_errlog_buf, "</record>");
+
+            // set ch2
+            idtmp[0] = 'B';
+            //strcpy(idtmp+1, arySNobj[index].m_Sn+5);
+            sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+                    1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
+                    m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+            strcat(m_errlog_buf, buf);
+
+            // Error_Code1
+            if ( m_mi_power_info.Error_Code1 & 0x0001 )
+                strcat(m_errlog_buf, "<code>COD1_0001</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0002 )
+                strcat(m_errlog_buf, "<code>COD1_0002</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0004 )
+                strcat(m_errlog_buf, "<code>COD1_0004</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0008 )
+                strcat(m_errlog_buf, "<code>COD1_0008</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0010 )
+                strcat(m_errlog_buf, "<code>COD1_0010</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0020 )
+                strcat(m_errlog_buf, "<code>COD1_0020</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0040 )
+                strcat(m_errlog_buf, "<code>COD1_0040</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0080 )
+                strcat(m_errlog_buf, "<code>COD1_0080</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0100 )
+                strcat(m_errlog_buf, "<code>COD1_0100</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0200 )
+                strcat(m_errlog_buf, "<code>COD1_0200</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x0400 )
+                strcat(m_errlog_buf, "<code>COD1_0400</code>");
+            //if ( m_mi_power_info.Error_Code1 & 0x0800 ) // ch1
+            //    strcat(m_errlog_buf, "<code>COD1_0800</code>");
+            //if ( m_mi_power_info.Error_Code1 & 0x1000 ) // ch1
+            //    strcat(m_errlog_buf, "<code>COD1_1000</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x2000 )
+                strcat(m_errlog_buf, "<code>COD1_2000</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x4000 )
+                strcat(m_errlog_buf, "<code>COD1_4000</code>");
+            if ( m_mi_power_info.Error_Code1 & 0x8000 )
+                strcat(m_errlog_buf, "<code>COD1_8000</code>");
+            // Error_Code2
+            if ( m_mi_power_info.Error_Code2 & 0x0001 )
+                strcat(m_errlog_buf, "<code>COD2_0001</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0002 )
+                strcat(m_errlog_buf, "<code>COD2_0002</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0004 )
+                strcat(m_errlog_buf, "<code>COD2_0004</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0008 )
+                strcat(m_errlog_buf, "<code>COD2_0001</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0010 )
+                strcat(m_errlog_buf, "<code>COD2_0010</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0020 )
+                strcat(m_errlog_buf, "<code>COD2_0020</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0040 )
+                strcat(m_errlog_buf, "<code>COD2_0040</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0080 )
+                strcat(m_errlog_buf, "<code>COD2_0080</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0100 )
+                strcat(m_errlog_buf, "<code>COD2_0100</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0200 )
+                strcat(m_errlog_buf, "<code>COD2_0200</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0400 )
+                strcat(m_errlog_buf, "<code>COD2_0400</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x0800 )
+                strcat(m_errlog_buf, "<code>COD2_0800</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x1000 )
+                strcat(m_errlog_buf, "<code>COD2_1000</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x2000 )
+                strcat(m_errlog_buf, "<code>COD2_2000</code>");
+            //if ( m_mi_power_info.Error_Code2 & 0x4000 ) // ch1
+            //    strcat(m_errlog_buf, "<code>COD2_4000</code>");
+            if ( m_mi_power_info.Error_Code2 & 0x8000 )
+                strcat(m_errlog_buf, "<code>COD2_8000</code>");
+        }
     } else {
         // Hybrid part
         // 0xDB : error code

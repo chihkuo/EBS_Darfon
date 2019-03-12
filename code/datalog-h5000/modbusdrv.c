@@ -1556,6 +1556,12 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                                 return respond_buff+i;
                             }
                             break;
+                        case 0x32:
+                            if ( CheckCRC(respond_buff+i, respond_buff[i+2]) ) {
+                                DebugPrint(respond_buff+i, respond_buff[i+2], "Read Status recv");
+                                return respond_buff+i;
+                            }
+                            break;
                         case 0x33:
                             if ( CheckCRC(respond_buff+i, respond_buff[i+2]) ) {
                                 DebugPrint(respond_buff+i, respond_buff[i+2], "0x33 Read recv");

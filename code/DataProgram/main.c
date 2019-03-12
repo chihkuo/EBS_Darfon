@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.1.0"
+#define VERSION         "2.2.0"
 //#define USB_PATH        "/tmp/usb"
 #define USB_PATH        "/tmp/run/mountd/sda1"
 #define SDCARD_PATH     "/tmp/sdcard"
@@ -2327,7 +2327,7 @@ int QryRawDataFile()
 
 void clean_host_data(time_t time)
 {
-    char buf[256] = {0};
+    char buf[1024] = {0};
     int year = 0, month = 0, day = 0, hour = 0;
     struct tm st_dirtime = {0};
     struct tm *st_systime;
@@ -2502,7 +2502,7 @@ void clean_host_data(time_t time)
 
 void clean_storage_data(time_t time)
 {
-    char buf[256] = {0};
+    char buf[1024] = {0};
     int year = 0, month = 0, day = 0;
     struct tm st_dirtime = {0};
     struct tm *st_systime;
