@@ -164,14 +164,16 @@ clean.inputstyle = "apply"
 function clean.write(self, section)
         --luci.sys.call("echo \"clean button push\" > /usr/home/clean_button") -- for test
 		luci.sys.call("rm /usr/home/White-List.txt; sync;")
+		luci.sys.call("rm /usr/home/White-List_V3.txt; sync;")
 end
 local reset = cleanreset:option(Button, "Reset DL setting", translate("Reset DL setting"))
 reset.inputtitle = translate("Reset Execute")
 reset.inputstyle = "apply"
 function reset.write(self, section)
         --luci.sys.call("echo \"reset button push\" > /usr/home/reset_button") -- for test
-		luci.sys.call("cp /usr/home/G320_default.ini /usr/home/G320.ini; sync;")
-		luci.sys.call("cp /usr/home/dlsetting /etc/config/dlsetting; sync;")
+		--luci.sys.call("cp /usr/home/G320_default.ini /usr/home/G320.ini; sync;")
+		--luci.sys.call("cp /usr/home/dlsetting /etc/config/dlsetting; sync;")
+		luci.sys.call("cp /usr/home/config/* /etc/config/; sync;")
 		luci.sys.call("uci commit")
 end
 

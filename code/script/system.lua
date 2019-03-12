@@ -7,16 +7,16 @@ module("luci.controller.admin.system", package.seeall)
 function index()
 	local fs = require "nixio.fs"
 
-	entry({"admin", "system"}, alias("admin", "system", --[["system"]]"dlsetting"), _("System"), 10).index = true
+	entry({"admin", "system"}, alias("admin", "system", --[["system"]]"dlsetting"), _("System"), --[[30]]10).index = true
 
 	entry({"admin", "system", "dlsetting"}, cbi("admin_system/dlsetting"), _("DL Setting"), 1)
 	entry({"admin", "system", "dldevice"}, cbi("admin_system/dldevice"), _("DL Device"), 2)
 	entry({"admin", "system", "dllist"}, cbi("admin_system/dllist"), _("Model List"), 3)
-	
-	entry({"admin", "system", "system"}, cbi("admin_system/system"), _("System"), 10)
+
+	entry({"admin", "system", "system"}, cbi("admin_system/system"), _("System"), --[[1]]10)
 	entry({"admin", "system", "clock_status"}, post_on({ set = true }, "action_clock_status"))
 
-	entry({"admin", "system", "admin"}, cbi("admin_system/admin"), _("Administration"), 20)
+	entry({"admin", "system", "admin"}, cbi("admin_system/admin"), _("Administration"), --[[2]]20)
 
 	--[[if fs.access("/bin/opkg") then
 		entry({"admin", "system", "packages"}, post_on({ exec = "1" }, "action_packages"), _("Software"), 10)
@@ -32,7 +32,8 @@ function index()
 		entry({"admin", "system", "fstab", "swap"},  cbi("admin_system/fstab/swap"),  nil).leaf = true
 	end
 
-	if fs.access("/sys/class/leds") then
+	local nodes, number = fs.glob("/sys/class/leds/*")
+	if number > 0 then
 		entry({"admin", "system", "leds"}, cbi("admin_system/leds"), _("<abbr title=\"Light Emitting Diode\">LED</abbr> Configuration"), 60)
 	end]]
 
@@ -78,7 +79,7 @@ function action_packages()
 	local out, err
 
 	-- Display
-	local display = luci.http.formvalue("display") or "installed"
+	local display = luci.http.formvalue("display") or "available"
 
 	-- Letter
 	local letter = string.byte(luci.http.formvalue("letter") or "A", 1)
@@ -200,7 +201,7 @@ local function supports_sysupgrade()
 end
 
 local function supports_reset()
-	return (os.execute([[grep -sqE '"rootfs_data"|"ubi"' /proc/mtd]]) == 0)
+	return (os.execute([[grep -sq "^overlayfs:/overlay / overlay " /proc/mounts]]) == 0)
 end
 
 local function storage_size()
@@ -345,9 +346,17 @@ function action_restore()
 
 	local upload = http.formvalue("archive")
 	if upload and #upload > 0 then
-		luci.template.render("admin_system/applyreboot")
-		os.execute("tar -C / -xzf %q >/dev/null 2>&1" % archive_tmp)
-		luci.sys.reboot()
+		if os.execute("gunzip -t %q >/dev/null 2>&1" % archive_tmp) == 0 then
+			luci.template.render("admin_system/applyreboot")
+			os.execute("tar -C / -xzf %q >/dev/null 2>&1" % archive_tmp)
+			luci.sys.reboot()
+		else
+			luci.template.render("admin_system/flashops", {
+				reset_avail   = supports_reset(),
+				upgrade_avail = supports_sysupgrade(),
+				backup_invalid = true
+			})
+		end
 		return
 	end
 
