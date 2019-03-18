@@ -175,6 +175,7 @@ function reset.write(self, section)
 		--luci.sys.call("cp /usr/home/dlsetting /etc/config/dlsetting; sync;")
 		luci.sys.call("cp /usr/home/config/* /etc/config/; sync;")
 		luci.sys.call("uci commit")
+		luci.sys.call("cp /usr/home/ModelList_ini /usr/home/ModelList; sync;")
 end
 
 return map

@@ -14,9 +14,10 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.2.0"
+#define VERSION         "2.2.1"
 //#define USB_PATH        "/tmp/usb"
-#define USB_PATH        "/tmp/run/mountd/sda1"
+//#define USB_PATH        "/tmp/run/mountd/sda1"
+#define USB_PATH        "/mnt"
 #define SDCARD_PATH     "/tmp/sdcard"
 #define DEF_PATH        "/tmp/test"
 #define XML_PATH        "/tmp/test/XML"

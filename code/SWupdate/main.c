@@ -11,10 +11,11 @@
 #include "../common/SaveLog.h"
 
 //#define USB_PATH    "/tmp/usb"
-#define USB_PATH    "/tmp/run/mountd/sda1"
+//#define USB_PATH    "/tmp/run/mountd/sda1"
+#define USB_PATH    "/mnt"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.1.0"
+#define VERSION             "2.2.1"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"

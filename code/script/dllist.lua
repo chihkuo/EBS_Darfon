@@ -28,19 +28,19 @@ for i = 1,#allport do
 	inverter_port:value(allport[i])
 end
 
-local set = list:option(Button, "Set Data", translate("Set Data"))
+--[[local set = list:option(Button, "Set Data", translate("Set Data"))
 set.inputtitle = translate("Set Execute")
 set.inputstyle = "apply"
 function set.write(self, section)
 	-- apply ==> set parameter to uci
-end
+end]]
 
 local add = list:option(Button, "Add To List", translate("Add To List"))
 add.inputtitle = translate("Add Execute")
 add.inputstyle = "save"
 function add.write(self, section)
-	local tmpaddr = uci.get("dllist", "LIST", "slave_addr")
-	local tmpdevid = uci.get("dllist", "LIST", "dev_id")
+	local tmpaddr = map.uci:get("dllist", "LIST", "slave_addr")
+	local tmpdevid = map.uci:get("dllist", "LIST", "dev_id")
 	local addrtonum = tonumber(tmpaddr)
 	local devidtonum = tonumber(tmpdevid)
 	if ( (addrtonum ~= nil) and (devidtonum ~= nil) ) then
@@ -48,17 +48,17 @@ function add.write(self, section)
 			local intaddr = math.floor(addrtonum)
 			local intdevid = math.floor(devidtonum)
 			-- commit to uci & save data to model list
-			uci.set("dllist", "LIST", "slave_addr", intaddr)
-			uci.set("dllist", "LIST", "dev_id", intdevid)
-			uci.commit("dllist")
+			map.uci:set("dllist", "LIST", "slave_addr", intaddr)
+			map.uci:set("dllist", "LIST", "dev_id", intdevid)
+			map.uci:commit("dllist")
 			local file = io.open(MODEL_LIST_PATH,"a")
-			local comtmp = string.sub(uci.get("dllist", "LIST", "port"), 4, 4)
+			local comtmp = string.sub(map.uci:get("dllist", "LIST", "port"), 4, 4)
 			local idtmp = (comtmp-1)*255 + intaddr - 1
 			local str = string.format("%04d", idtmp) ..
 					" Addr:" .. string.format("%03d", intaddr) ..
 					" DEVID:" .. string.format("%d", intdevid) ..
-					" Port:" .. uci.get("dllist", "LIST", "port") ..
-					" Model:" .. uci.get("dllist", "LIST", "model") .. "\n"
+					" Port:" .. map.uci:get("dllist", "LIST", "port") ..
+					" Model:" .. map.uci:get("dllist", "LIST", "model") .. "\n"
 			file:write(str)
 			file:close()
 			luci.sys.call("sync")
@@ -92,12 +92,12 @@ function reload.write(self, section)
 		local tmparg = file:read()
 		file:close()
 		local tmpsetarg = string.sub(tmparg, 2, string.len(tmparg)-1)
-		uci.set("dllist", "LIST", "slave_addr", tmpsetarg)
+		map.uci:set("dllist", "LIST", "slave_addr", tmpsetarg)
 
 		local tmpstr = "echo \"" .. tmpsetarg .. "\" > /tmp/myteststr"
 		luci.sys.call(tmpstr)
 	end
-	--uci.commit("dllist")
+	--map.uci:commit("dllist")
 	]]
 end
 
@@ -110,13 +110,13 @@ function clean.write(self, section)
 	luci.sys.call("sync")
 end
 
-local download = list:option(Button, "Download Model List", translate("Download Model List"))
+--[[local download = list:option(Button, "Download Model List", translate("Download Model List"))
 download.inputtitle = translate("Download Execute")
 download.inputstyle = "apply"
 function download.write(self, section)
 	local dlcmd = "/usr/home/DataProgram.exe -d &"
 	luci.sys.exec(dlcmd)
-end
+end]]
 ------------------------------------------------------------------------------------------------------------
 
 

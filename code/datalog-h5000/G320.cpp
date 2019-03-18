@@ -12,7 +12,8 @@
 #define DEVICELIST_PATH "/tmp/DeviceList"
 #define DEV_XML_PATH        "/tmp/XML_PATH"
 //#define USB_PATH        "/tmp/usb"
-#define USB_PATH        "/tmp/run/mountd/sda1"
+//#define USB_PATH        "/tmp/run/mountd/sda1"
+#define USB_PATH        "/mnt"
 #define SDCARD_PATH     "/tmp/sdcard"
 
 #define WHITE_LIST_PATH "/usr/home/White-List.txt"
@@ -5741,7 +5742,7 @@ bool CG320::SaveLogXML(bool first, bool last)
         return true;
     else {
         if ( filesize < 42 ) {
-            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            printf("==== SaveLogXML file size = %d, too small, don't copy file to storage ====\n", filesize);
             return true;
         }
     }
@@ -6051,6 +6052,12 @@ bool CG320::WriteErrorLogXML(int index)
         }
     } else {
         // Hybrid part
+        sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
+        sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+            1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
+            m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+        strcat(m_errlog_buf, buf);
+
         // 0xDB : error code
         if ( m_hb_rt_info.Error_Code ) {
             sprintf(buf, "<code>%d</code>", m_hb_rt_info.Error_Code);
@@ -6218,7 +6225,7 @@ bool CG320::SaveErrorLogXML(bool first, bool last)
         return true;
     else {
         if ( filesize < 42 ) {
-            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            printf("==== SaveErrorLogXML file size = %d, too small, don't copy file to storage ====\n", filesize);
             return true;
         }
     }
@@ -6309,7 +6316,7 @@ bool CG320::SaveEnvXML(bool first, bool last)
         return true;
     else {
         if ( filesize < 42 ) {
-            printf("==== file size = %d, too small, don't copy file to storage ====\n", filesize);
+            printf("==== SaveEnvXML file size = %d, too small, don't copy file to storage ====\n", filesize);
             return true;
         }
     }
