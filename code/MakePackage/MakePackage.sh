@@ -15,7 +15,7 @@ function copy() {
 	cp ../script/ModelList ./update/
 	cp ../script/system.lua ./update/
 	cp ../script/status.lua ./update/
-	cp ../script/luci_statistics.lua ./update/
+	cp ../script/network.lua ./update/
 	cp ../script/index.lua ./update/
 	cp ../script/update.sh ./update/
 	cp ../script/run_DLSW.sh ./update/

@@ -1,20 +1,20 @@
 #!/bin/sh
 
 # initial package dir
-USB_PATH=/tmp/run/mountd/sda1
+USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial
 
 # program
 DATALOG=dlg320.exe
 DATAPRG=DataProgram.exe
 DATASWU=SWupdate.exe
+DATAFWU=FWupdate.exe
 
 # lua script
 SYSTEM=system.lua
 STAT=status.lua
-NET=network.lua
 INDEX=index.lua
-LST=luci_statistics.lua
+NET=network.lua
 DLD=dldevice.lua
 DLS=dlsetting.lua
 DLL=dllist.lua
@@ -43,6 +43,9 @@ cp $PACKAGE/$DATAPRG /usr/home/
 chmod 755 /usr/home/$DATAPRG
 cp $PACKAGE/$DATASWU /usr/home/
 chmod 755 /usr/home/$DATASWU
+cp $PACKAGE/$DATAFWU /usr/home/
+chmod 755 /usr/home/$DATAFWU
+
 
 echo "copy lua script"
 # lua script
@@ -50,12 +53,10 @@ cp $PACKAGE/$SYSTEM /usr/lib/lua/luci/controller/admin/
 chmod 755 /usr/lib/lua/luci/controller/admin/$SYSTEM
 cp $PACKAGE/$STAT /usr/lib/lua/luci/controller/admin/
 chmod 755 /usr/lib/lua/luci/controller/admin/$STAT
-cp $PACKAGE/$NET /usr/lib/lua/luci/controller/admin/
-chmod 755 /usr/lib/lua/luci/controller/admin/$NET
 cp $PACKAGE/$INDEX /usr/lib/lua/luci/controller/admin/
 chmod 755 /usr/lib/lua/luci/controller/admin/$INDEX
-cp $PACKAGE/$LST /usr/lib/lua/luci/controller/luci_statistics/
-chmod 755 /usr/lib/lua/luci/controller/luci_statistics/$LST
+cp $PACKAGE/$NET /usr/lib/lua/luci/model/cbi/admin_network/
+chmod 755 /usr/lib/lua/luci/model/cbi/admin_network/$NET
 cp $PACKAGE/$DLD /usr/lib/lua/luci/model/cbi/admin_system/
 chmod 755 /usr/lib/lua/luci/model/cbi/admin_system/$DLD
 cp $PACKAGE/$DLS /usr/lib/lua/luci/model/cbi/admin_system/
@@ -63,16 +64,23 @@ chmod 755 /usr/lib/lua/luci/model/cbi/admin_system/$DLS
 cp $PACKAGE/$DLL /usr/lib/lua/luci/model/cbi/admin_system/
 chmod 755 /usr/lib/lua/luci/model/cbi/admin_system/$DLL
 
+echo "backup config"
+cp -r /etc/config/ /usr/home/
+
 echo "copy setting file"
 # setting file
 cp $PACKAGE/$ST /etc/config/
 chmod 644 /etc/config/$ST
-cp $PACKAGE/$ST /usr/home/
-chmod 644 /usr/home/$ST
+cp $PACKAGE/$ST /usr/home/config/
+chmod 644 /usr/home/config/$ST
 cp $PACKAGE/$DLIST /etc/config/
 chmod 644 /etc/config/$DLIST
+cp $PACKAGE/$DLIST /usr/home/config/
+chmod 644 /usr/home/config/$DLIST
 cp $PACKAGE/$MLIST /usr/home/
 chmod 644 /usr/home/$MLIST
+cp $PACKAGE/$MLIST /usr/home/"$MLIST"_ini
+chmod 644 /usr/home/"$MLIST"_ini
 cp $PACKAGE/$INI /usr/home/
 chmod 644 /usr/home/$INI
 
@@ -86,6 +94,11 @@ chmod 755 /usr/home/$RDLSW
 echo "boot script enable"
 # boot script enable
 /etc/init.d/$RDL enable
+
+echo "clean luci"
+rm /tmp/luci-indexcache
+rm /tmp/luci-modulecache/*
+sync
 
 echo "DL initial script finished."
 
