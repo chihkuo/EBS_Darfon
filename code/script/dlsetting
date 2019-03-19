@@ -6,11 +6,12 @@ config sms
 	option update_port '8080'
 	option sample_time '3'
 	option upload_time '10'
+	option update_SW_time '30'
 	option delay_time_1 '20000000'
 	option delay_time_2 '1500000'
 	option cleartx_delay '200000'
 	option shelf_life '30'
-	option update_SW_time '3'
+	option reboot_time '1'
 
 config comport
 	option com1_data_bits '8'
@@ -31,8 +32,8 @@ config comport
 	option com1_baud '9600'
 
 config swver
-	option dlver '2.2.1'
-	option dpver '2.2.1'
+	option dlver '2.2.2'
+	option dpver '2.2.2'
 
 config button
 

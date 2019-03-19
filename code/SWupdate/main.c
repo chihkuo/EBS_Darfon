@@ -15,7 +15,7 @@
 #define USB_PATH    "/mnt"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.2.1"
+#define VERSION             "2.2.2"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -37,6 +37,7 @@ int sms_port = 0;
 char UPDATE_SERVER[128] = {0};
 int update_port = 0;
 int update_SW_time = 0;
+int reboot_time = 0;
 char g_CURL_CMD[256] = {0};
 char g_SYSLOG_PATH[64] = {0};
 char g_UPDATE_PATH[64] = {0};
@@ -159,6 +160,17 @@ void getConfig()
     pclose(fd);
     sscanf(buf, "%d", &update_SW_time);
     printf("Update SW time = %d\n", update_SW_time);
+
+    // get reboot time
+    fd = popen("uci get dlsetting.@sms[0].reboot_time", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+        return;
+    }
+    fgets(buf, 32, fd);
+    pclose(fd);
+    sscanf(buf, "%d", &reboot_time);
+    printf("Reboot time = %d\n", reboot_time);
 
     return;
 }
@@ -777,6 +789,7 @@ int main(int argc, char* argv[])
     int counter, run_processs_min, syslog_count;
     struct stat st;
     int doUpdDLSWStatus = 0;
+    int reboot_min = 0;
 
     current_time = time(NULL);
     st_time = localtime(&current_time);
@@ -819,6 +832,18 @@ int main(int argc, char* argv[])
                 CloseLog();
                 system("sync");
                 OpenLog(g_SYSLOG_PATH, st_time);
+            }
+
+            // check reboot time
+            reboot_min++;
+            printf("reboot_min = %d\n", reboot_min);
+            if ( reboot_min > (reboot_time * 24 * 60) ) {
+                SaveLog("SWupdate main() : Reboot time's up!", st_time);
+                CloseLog();
+                printf("SWupdate main() : Reboot now!\n");
+                system("sync; sync; sync;");
+                system("reboot");
+                usleep(2000000);
             }
         }
 

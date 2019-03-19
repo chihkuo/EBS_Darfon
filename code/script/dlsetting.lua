@@ -31,6 +31,7 @@ local delay_time_1 = sms:option(Value, "delay_time_1", translate("Delay time 1 (
 local delay_time_2 = sms:option(Value, "delay_time_2", translate("Delay time 2 (us. 1000000us = 1s)"))
 local cleartx_delay = sms:option(Value, "cleartx_delay", translate("Clear TX delay time (us. 1000000us = 1s)"))
 local shelf_life = sms:option(Value, "shelf_life", translate("Data shelf life (Day.)"))
+local reboot_time = sms:option(Value, "reboot_time", translate("Reboot time (Day.)"))
 
 -- COM port setting
 local comport = map:section(TypedSection, "comport", "COM Port setting")
