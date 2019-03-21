@@ -18,6 +18,7 @@
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
+#define USB_DEV         "/dev/sda1"
 #define SDCARD_PATH     "/tmp/sdcard"
 #define DEF_PATH        "/tmp/test"
 #define XML_PATH        "/tmp/test/XML"
@@ -210,7 +211,7 @@ void setPath()
 {
     struct stat st;
 
-    if ( stat(USB_PATH, &st) == 0 )
+    if ( stat(USB_DEV, &st) == 0 )
         strcpy(g_ROOT_PATH, USB_PATH);
     else if ( stat(SDCARD_PATH, &st) == 0 )
         strcpy(g_ROOT_PATH, SDCARD_PATH);
@@ -2512,7 +2513,7 @@ void clean_storage_data(time_t time)
     struct dirent *direntp;
 
     // check storage
-    if ( stat(USB_PATH, &st) ) {
+    if ( stat(USB_DEV, &st) ) {
         if ( stat(SDCARD_PATH, &st) ) {
             printf("Storage device not found!\n");
             return;

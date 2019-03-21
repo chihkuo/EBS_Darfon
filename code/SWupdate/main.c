@@ -13,6 +13,7 @@
 //#define USB_PATH    "/tmp/usb"
 //#define USB_PATH    "/tmp/run/mountd/sda1"
 #define USB_PATH    "/mnt"
+#define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
 #define VERSION             "2.2.2"
@@ -189,7 +190,7 @@ void setPath()
 {
     struct stat st;
 
-    if ( stat(USB_PATH, &st) == 0 ) { //linux storage detect
+    if ( stat(USB_DEV, &st) == 0 ) { //linux storage detect
         strcpy(g_SYSLOG_PATH, USB_PATH);
         strcat(g_SYSLOG_PATH, "/SYSLOG");
         strcpy(g_UPDATE_PATH, USB_PATH);
@@ -837,13 +838,15 @@ int main(int argc, char* argv[])
             // check reboot time
             reboot_min++;
             printf("reboot_min = %d\n", reboot_min);
-            if ( reboot_min > (reboot_time * 24 * 60) ) {
-                SaveLog("SWupdate main() : Reboot time's up!", st_time);
-                CloseLog();
-                printf("SWupdate main() : Reboot now!\n");
-                system("sync; sync; sync;");
-                system("reboot");
-                usleep(2000000);
+            if ( reboot_time > 0 ) {
+                if ( reboot_min > (reboot_time * 24 * 60) ) {
+                    SaveLog("SWupdate main() : Reboot time's up!", st_time);
+                    CloseLog();
+                    printf("SWupdate main() : Reboot now!\n");
+                    system("sync; sync; sync;");
+                    system("reboot");
+                    usleep(2000000);
+                }
             }
         }
 

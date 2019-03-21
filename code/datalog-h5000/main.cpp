@@ -132,13 +132,13 @@ int main(int argc, char* argv[])
             ////////////
             end_time = time(NULL);
             span_time = end_time - start_time;
-            if ( state == 0 )
+            /*if ( state == 0 )
                 state = 1;
             else if ( state == 1 ) {
                 Set_Sampletime((int)span_time/60+1);
                 state = 2;
             } else if ( state == 2 )
-                ;
+                ;*/
 
             printf("======= main loop end =======\n");
         }

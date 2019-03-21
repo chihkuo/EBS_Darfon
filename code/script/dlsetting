@@ -4,14 +4,14 @@ config sms
 	option sms_port '8080'
 	option update_server 'portal.darfon.com'
 	option update_port '8080'
-	option sample_time '3'
+	option sample_time '10'
 	option upload_time '10'
 	option update_SW_time '30'
 	option delay_time_1 '20000000'
 	option delay_time_2 '1500000'
 	option cleartx_delay '200000'
 	option shelf_life '30'
-	option reboot_time '1'
+	option reboot_time '0'
 
 config comport
 	option com1_data_bits '8'

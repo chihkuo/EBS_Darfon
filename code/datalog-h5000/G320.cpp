@@ -14,6 +14,7 @@
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
+#define USB_DEV         "/dev/sda1"
 #define SDCARD_PATH     "/tmp/sdcard"
 
 #define WHITE_LIST_PATH "/usr/home/White-List.txt"
@@ -1259,7 +1260,7 @@ bool CG320::SetPath()
     bool mk_tmp_dir = false;
 
     // set root path (XML & BMS & SYSLOG in the same dir.)
-    if ( stat(USB_PATH, &st) == 0 ) { /*linux usb storage detect*/
+    if ( stat(USB_DEV, &st) == 0 ) { /*linux usb storage detect*/
         strcpy(m_dl_path.m_root_path, USB_PATH); // set usb
         m_sys_error  &= ~SYS_0001_No_USB;
         mk_tmp_dir = true;
@@ -2596,6 +2597,8 @@ bool CG320::GetPLCStatus(int index)
     int err = 0;
     byte *lpdata = NULL;
     char strbuf[1024] = {0};
+    time_t current_time;
+    struct tm *log_time;
 
     unsigned char szPLCStatus[]={0x01, 0x32, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00};
     MakeReadDataCRC(szPLCStatus,14);
@@ -2610,43 +2613,46 @@ bool CG320::GetPLCStatus(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_1);
 
+        current_time = time(NULL);
+        log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 21, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetPLCStatus(%d) OK : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-            //SaveLog((char *)"DataLogger GetPLCStatus() : OK", m_st_time);
+            //SaveLog((char *)"DataLogger GetPLCStatus() : OK", log_time);
             sprintf(strbuf, "DataLogger GetPLCStatus(%d) OK : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-            SaveLog(strbuf, m_st_time);
+            SaveLog(strbuf, log_time);
             //DumpPLCStatus(lpdata+9); if need, then add this function
             if ( *(lpdata+9) & 0x20 ) { // check the bit5 ( 7 ~ 0 ) in Data1(Hi) byte
                 // busy
                 printf("#### Busy! ####\n");
-                SaveLog((char *)"DataLogger GetPLCStatus() : Busy!", m_st_time);
+                SaveLog((char *)"DataLogger GetPLCStatus() : Busy!", log_time);
                 return true;
             } else {
                 // idle
                 printf("#### Idle ####\n");
-                SaveLog((char *)"DataLogger GetPLCStatus() : Idle", m_st_time);
+                SaveLog((char *)"DataLogger GetPLCStatus() : Idle", log_time);
                 return false;
             }
         } else {
             if ( have_respond == true ) {
                 printf("#### GetPLCStatus(%d) CRC Error : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                //SaveLog((char *)"DataLogger GetPLCStatus() : CRC Error", m_st_time);
+                //SaveLog((char *)"DataLogger GetPLCStatus() : CRC Error", log_time);
                 sprintf(strbuf, "DataLogger GetPLCStatus(%d) CRC Error : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                SaveLog(strbuf, m_st_time);
+                SaveLog(strbuf, log_time);
             }
             else {
                 printf("#### GetPLCStatus(%d) No Response : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                //SaveLog((char *)"DataLogger GetPLCStatus() : No Response", m_st_time);
+                //SaveLog((char *)"DataLogger GetPLCStatus() : No Response", log_time);
                 sprintf(strbuf, "DataLogger GetPLCStatus(%d) No Response : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                SaveLog(strbuf, m_st_time);
+                SaveLog(strbuf, log_time);
             }
             err++;
         }
     }
 
     printf("#### Suppose Busy ####\n");
-    SaveLog((char *)"DataLogger GetPLCStatus() : Suppose Busy", m_st_time);
+    SaveLog((char *)"DataLogger GetPLCStatus() : Suppose Busy", log_time);
 
     return true;
 }
@@ -2920,9 +2926,14 @@ bool CG320::ReRegisterV3(int index)
     char buf[256] = {0};
     byte *lpdata = NULL;
 
+    time_t current_time;
+    struct tm *log_time;
+    current_time = time(NULL);
+    log_time = localtime(&current_time);
+
     printf("#### ReRegisterV3 start ####\n");
     sprintf(buf, "DataLogger ReRegisterV3() : addr %d run", arySNobj[index].m_Addr);
-    SaveLog(buf, m_st_time);
+    SaveLog(buf, log_time);
     printf("#### ReRegiser start ####\n");
     //printf("#### Remove %d Query ####\n", arySNobj[index].m_Addr);
     //RemoveRegisterQuery(m_busfd, arySNobj[index].m_Addr);
@@ -2953,13 +2964,16 @@ bool CG320::ReRegisterV3(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_1);
 
+        current_time = time(NULL);
+        log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 14, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("=================================\n");
             printf("#### ReRegisterV3(%d) OK! ####\n", arySNobj[index].m_Addr);
             printf("=================================\n");
             sprintf(buf, "DataLogger ReRegisterV3() : addr %d OK", arySNobj[index].m_Addr);
-            SaveLog(buf, m_st_time);
+            SaveLog(buf, log_time);
 
             arySNobj[index].m_Err = 0;
             arySNobj[index].m_state = 1;
@@ -2968,11 +2982,11 @@ bool CG320::ReRegisterV3(int index)
         } else {
             if ( have_respond == true ) {
                 printf("#### ReRegisterV3 CRC Error ####\n");
-                SaveLog((char *)"DataLogger ReRegisterV3() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger ReRegisterV3() : CRC Error", log_time);
             }
             else {
                 printf("#### ReRegisterV3 No Response ####\n");
-                SaveLog((char *)"DataLogger ReRegisterV3() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger ReRegisterV3() : No Response", log_time);
             }
             szRegV3[1] = 0x4D;
             MakeReadDataCRC(szRegV3,15);
@@ -3026,6 +3040,7 @@ bool CG320::GetDevice(int index)
     int err = 0;
     byte *lpdata = NULL;
 
+    struct tm *log_time;
     // check ok time
     time_t current_time = 0;
     current_time = time(NULL);
@@ -3050,6 +3065,9 @@ bool CG320::GetDevice(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_1);
 
+        current_time = time(NULL);
+        log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 7, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetDevice OK ####\n");
@@ -3058,22 +3076,22 @@ bool CG320::GetDevice(int index)
             if ( arySNobj[index].m_Device < 0x0A ) {
                 printf("#### Address %d, Device 0x%04X ==> MI ####\n", arySNobj[index].m_Addr, arySNobj[index].m_Device);
                 sprintf(buf, "DataLogger GetDevice() : Address %d, Device 0x%04X ==> MI", arySNobj[index].m_Addr, arySNobj[index].m_Device);
-                SaveLog(buf, m_st_time);
+                SaveLog(buf, log_time);
             }
             else {
                 printf("#### Address %d, Device 0x%04X ==> Hybrid ####\n", arySNobj[index].m_Addr, arySNobj[index].m_Device);
                 sprintf(buf, "DataLogger GetDevice() : Address %d, Device 0x%04X ==> Hybrid", arySNobj[index].m_Addr, arySNobj[index].m_Device);
-                SaveLog(buf, m_st_time);
+                SaveLog(buf, log_time);
             }
             return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetDevice CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetDevice() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger GetDevice() : CRC Error", log_time);
             }
             else {
                 printf("#### GetDevice No Response ####\n");
-                SaveLog((char *)"DataLogger GetDevice() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger GetDevice() : No Response", log_time);
             }
             err++;
         }
@@ -3089,6 +3107,7 @@ bool CG320::GetMiIDInfo(int index)
     int err = 0;
     byte *lpdata = NULL;
 
+    struct tm *log_time;
     // check ok time
     time_t current_time = 0;
     current_time = time(NULL);
@@ -3112,22 +3131,25 @@ bool CG320::GetMiIDInfo(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_1);
 
+        current_time = time(NULL);
+        log_time = localtime(&current_time);
+
         //lpdata = GetRespond(m_busfd, 25, m_dl_config.m_delay_time_1);
         lpdata = GetRespond(m_busfd, 25, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetMiIDInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetMiIDInfo() : OK", m_st_time);
+            SaveLog((char *)"DataLogger GetMiIDInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpMiIDInfo(index, lpdata+3);
             return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetMiIDInfo CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetMiIDInfo() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger GetMiIDInfo() : CRC Error", log_time);
             }
             else {
                 printf("#### GetMiIDInfo No Response ####\n");
-                SaveLog((char *)"DataLogger GetMiIDInfo() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger GetMiIDInfo() : No Response", log_time);
             }
             err++;
         }
@@ -3143,6 +3165,7 @@ bool CG320::GetMiIDInfoV3(int index)
     int err = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
     byte *lpdata = NULL;
 
+    struct tm *log_time;
     // check ok time
     time_t current_time = 0;
     current_time = time(NULL);
@@ -3172,10 +3195,13 @@ bool CG320::GetMiIDInfoV3(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_1);
 
+        current_time = time(NULL);
+        log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 31, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetMiIDInfoV3 OK ####\n");
-            SaveLog((char *)"DataLogger GetMiIDInfoV3() : OK", m_st_time);
+            SaveLog((char *)"DataLogger GetMiIDInfoV3() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             arySNobj[index].m_state = 1; // online
             DumpMiIDInfo(index, lpdata+9);
@@ -3183,11 +3209,11 @@ bool CG320::GetMiIDInfoV3(int index)
         } else {
             if ( have_respond == true ) {
                 printf("#### GetMiIDInfoV3 CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetMiIDInfoV3() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger GetMiIDInfoV3() : CRC Error", log_time);
             }
             else {
                 printf("#### GetMiIDInfoV3 No Response ####\n");
-                SaveLog((char *)"DataLogger GetMiIDInfoV3() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger GetMiIDInfoV3() : No Response", log_time);
             }
             szMIIDinfoV3[1] = 0x36;
             MakeReadDataCRC(szMIIDinfoV3,14);
@@ -3259,6 +3285,7 @@ bool CG320::GetMiPowerInfo(int index)
     byte *lpdata = NULL;
     char strbuf[1024] = {0};
 
+    struct tm *log_time;
     // check ok time
     time_t current_time = 0;
     current_time = time(NULL);
@@ -3282,28 +3309,31 @@ bool CG320::GetMiPowerInfo(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_1);
 
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
         //lpdata = GetRespond(m_busfd, 71, m_dl_config.m_delay_time_1);
         lpdata = GetRespond(m_busfd, 71, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetMiPowerInfo(%d) OK : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-            //SaveLog((char *)"DataLogger GetMiPowerInfo() : OK", m_st_time);
+            //SaveLog((char *)"DataLogger GetMiPowerInfo() : OK", log_time);
             sprintf(strbuf, "DataLogger GetMiPowerInfo(%d) OK : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-            SaveLog(strbuf, m_st_time);
+            SaveLog(strbuf, log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpMiPowerInfo(lpdata+3);
             return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetMiPowerInfo(%d) CRC Error : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                //SaveLog((char *)"DataLogger GetMiPowerInfo() : CRC Error", m_st_time);
+                //SaveLog((char *)"DataLogger GetMiPowerInfo() : CRC Error", log_time);
                 sprintf(strbuf, "DataLogger GetMiPowerInfo(%d) CRC Error : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                SaveLog(strbuf, m_st_time);
+                SaveLog(strbuf, log_time);
             }
             else {
                 printf("#### GetMiPowerInfo(%d) No Response : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                //SaveLog((char *)"DataLogger GetMiPowerInfo() : No Response", m_st_time);
+                //SaveLog((char *)"DataLogger GetMiPowerInfo() : No Response", log_time);
                 sprintf(strbuf, "DataLogger GetMiPowerInfo(%d) No Response : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                SaveLog(strbuf, m_st_time);
+                SaveLog(strbuf, log_time);
             }
             err++;
         }
@@ -3320,6 +3350,7 @@ bool CG320::GetMiPowerInfoV3(int index)
     byte *lpdata = NULL;
     char strbuf[1024] = {0};
 
+    struct tm *log_time;
     // check ok time
     time_t current_time = 0;
     current_time = time(NULL);
@@ -3349,12 +3380,15 @@ bool CG320::GetMiPowerInfoV3(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_1);
 
+        current_time = time(NULL);
+        log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 77, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetMiPowerInfoV3(%d) OK : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-            //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : OK", m_st_time);
+            //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : OK", log_time);
             sprintf(strbuf, "DataLogger GetMiPowerInfoV3(%d) OK : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-            SaveLog(strbuf, m_st_time);
+            SaveLog(strbuf, log_time);
             arySNobj[index].m_ok_time = time(NULL);
             arySNobj[index].m_state = 1; // online
             DumpMiPowerInfo(lpdata+9);
@@ -3362,15 +3396,15 @@ bool CG320::GetMiPowerInfoV3(int index)
         } else {
             if ( have_respond == true ) {
                 printf("#### GetMiPowerInfoV3(%d) CRC Error : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : CRC Error", m_st_time);
+                //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : CRC Error", log_time);
                 sprintf(strbuf, "DataLogger GetMiPowerInfoV3(%d) CRC Error : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                SaveLog(strbuf, m_st_time);
+                SaveLog(strbuf, log_time);
             }
             else {
                 printf("#### GetMiPowerInfoV3(%d) No Response : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : No Response", m_st_time);
+                //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : No Response", log_time);
                 sprintf(strbuf, "DataLogger GetMiPowerInfoV3(%d) No Response : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-                SaveLog(strbuf, m_st_time);
+                SaveLog(strbuf, log_time);
             }
             szMIPowerinfoV3[1] = 0x36;
             MakeReadDataCRC(szMIPowerinfoV3,14);
@@ -3454,6 +3488,7 @@ bool CG320::GetHybridIDData(int index)
     int err = 0;
     byte *lpdata = NULL;
 
+    struct tm *log_time;
     // check ok time
     time_t current_time = 0;
     current_time = time(NULL);
@@ -3477,10 +3512,13 @@ bool CG320::GetHybridIDData(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_2);
 
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 33, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridIDData OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridIDData() : OK", m_st_time);
+            SaveLog((char *)"DataLogger GetHybridIDData() : OK", log_time);
             DumpHybridIDData(lpdata+3);
             arySNobj[index].m_ok_time = time(NULL);
             ParserHybridIDFlags1(m_hb_id_data.Flags1);
@@ -3489,11 +3527,11 @@ bool CG320::GetHybridIDData(int index)
         } else {
             if ( have_respond == true ) {
                 printf("#### GetHybridIDData CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetHybridIDData() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridIDData() : CRC Error", log_time);
             }
             else {
                 printf("#### GetHybridIDData No Response ####\n");
-                SaveLog((char *)"DataLogger GetHybridIDData() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridIDData() : No Response", log_time);
             }
             err++;
         }
@@ -3711,6 +3749,8 @@ bool CG320::GetHybridRTCData(int index)
 
     int err = 0;
     byte *lpdata = NULL;
+    time_t current_time;
+    struct tm *log_time;
 
     unsigned char szHBRTCdata[]={0x00, 0x03, 0x00, 0x40, 0x00, 0x06, 0x00, 0x00};
     szHBRTCdata[0]=arySNobj[index].m_Addr;
@@ -3726,21 +3766,24 @@ bool CG320::GetHybridRTCData(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_2);
 
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRTCData OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridRTCData() : OK", m_st_time);
+            SaveLog((char *)"DataLogger GetHybridRTCData() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRTCData(lpdata+3);
             return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetHybridRTCData CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetHybridRTCData() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridRTCData() : CRC Error", log_time);
             }
             else {
                 printf("#### GetHybridRTCData No Response ####\n");
-                SaveLog((char *)"DataLogger GetHybridRTCData() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridRTCData() : No Response", log_time);
             }
             err++;
         }
@@ -3862,19 +3905,19 @@ bool CG320::SetHybridRTCData(int index)
         if ( lpdata ) {
             if ( CheckCRC(lpdata, 8) ) {
                 printf("#### SetHybridRTCData OK ####\n");
-                SaveLog((char *)"DataLogger SetHybridRTCData() : OK", m_st_time);
+                SaveLog((char *)"DataLogger SetHybridRTCData() : OK", st_time);
                 arySNobj[index].m_ok_time = time(NULL);
                 //free(lpdata);
                 return true;
             } else {
                 printf("#### SetHybridRTCData CRC Error ####\n");
-                SaveLog((char *)"DataLogger SetHybridRTCData() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger SetHybridRTCData() : CRC Error", st_time);
                 err++;
             }
             //free(lpdata);
         } else {
             printf("#### SetHybridRTCData No Response ####\n");
-            SaveLog((char *)"DataLogger SetHybridRTCData() : No Response", m_st_time);
+            SaveLog((char *)"DataLogger SetHybridRTCData() : No Response", st_time);
             err++;
         }
 
@@ -3890,6 +3933,8 @@ bool CG320::GetHybridRSInfo(int index)
 
     int err = 0;
     byte *lpdata = NULL;
+    time_t current_time;
+	struct tm *log_time;
 
     unsigned char szHBRSinfo[]={0x00, 0x03, 0x00, 0x90, 0x00, 0x0F, 0x00, 0x00};
     szHBRSinfo[0]=arySNobj[index].m_Addr;
@@ -3905,21 +3950,24 @@ bool CG320::GetHybridRSInfo(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_2);
 
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 35, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRSInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridRSInfo() : OK", m_st_time);
+            SaveLog((char *)"DataLogger GetHybridRSInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRSInfo(lpdata+3);
             return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetHybridRSInfo CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetHybridRSInfo() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridRSInfo() : CRC Error", log_time);
             }
             else {
                 printf("#### GetHybridRSInfo No Response ####\n");
-                SaveLog((char *)"DataLogger GetHybridRSInfo() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridRSInfo() : No Response", log_time);
             }
             err++;
         }
@@ -4134,6 +4182,8 @@ bool CG320::GetHybridRRSInfo(int index)
 
     int err = 0;
     byte *lpdata = NULL;
+    time_t current_time;
+	struct tm *log_time;
 
     unsigned char szHBRSinfo[]={0x00, 0x03, 0x00, 0xA0, 0x00, 0x06, 0x00, 0x00};
     szHBRSinfo[0]=arySNobj[index].m_Addr;
@@ -4149,21 +4199,24 @@ bool CG320::GetHybridRRSInfo(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_2);
 
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRRSInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", m_st_time);
+            SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRRSInfo(lpdata+3);
             return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetHybridRRSInfo CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetHybridRRSInfo() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridRRSInfo() : CRC Error", log_time);
             }
             else {
                 printf("#### GetHybridRRSInfo No Response ####\n");
-                SaveLog((char *)"DataLogger GetHybridRRSInfo() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridRRSInfo() : No Response", log_time);
             }
             err++;
         }
@@ -4310,6 +4363,8 @@ bool CG320::GetHybridRTInfo(int index)
 
     int err = 0;
     byte *lpdata = NULL;
+    time_t current_time;
+	struct tm *log_time;
 
     unsigned char szHBRTinfo[]={0x00, 0x03, 0x00, 0xB0, 0x00, 0x2F, 0x00, 0x00};
     szHBRTinfo[0]=arySNobj[index].m_Addr;
@@ -4325,10 +4380,13 @@ bool CG320::GetHybridRTInfo(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_2);
 
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 99, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRTInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridRTInfo() : OK", m_st_time);
+            SaveLog((char *)"DataLogger GetHybridRTInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRTInfo(lpdata+3);
             ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1_Record);
@@ -4342,11 +4400,11 @@ bool CG320::GetHybridRTInfo(int index)
         } else {
             if ( have_respond == true ) {
                 printf("#### GetHybridRTInfo CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetHybridRTInfo() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridRTInfo() : CRC Error", log_time);
             }
             else {
                 printf("#### GetHybridRTInfo No Response ####\n");
-                SaveLog((char *)"DataLogger GetHybridRTInfo() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridRTInfo() : No Response", log_time);
             }
             err++;
         }
@@ -4723,6 +4781,8 @@ bool CG320::GetHybridBMSInfo(int index)
 
     int err = 0;
     byte *lpdata = NULL;
+    time_t current_time;
+	struct tm *log_time;
 
     unsigned char szHBBMSinfo[]={0x00, 0x03, 0x02, 0x00, 0x00, 0x0B, 0x00, 0x00};
     szHBBMSinfo[0]=arySNobj[index].m_Addr;
@@ -4738,21 +4798,24 @@ bool CG320::GetHybridBMSInfo(int index)
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_2);
 
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 27, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridBMSInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridBMSInfo() : OK", m_st_time);
+            SaveLog((char *)"DataLogger GetHybridBMSInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridBMSInfo(lpdata+3);
             return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetHybridBMSInfo CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetHybridBMSInfo() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridBMSInfo() : CRC Error", log_time);
             }
             else {
                 printf("#### GetHybridBMSInfo No Response ####\n");
-                SaveLog((char *)"DataLogger GetHybridBMSInfo() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger GetHybridBMSInfo() : No Response", log_time);
             }
             err++;
         }
@@ -4917,6 +4980,8 @@ bool CG320::GetHybridBMSModule(int index, int module)
     //unsigned char testbuf[256] = {0};
     //for(int i=0; i<256; i++)
     //    testbuf[i] = (unsigned char)i;
+    time_t current_time;
+	struct tm *log_time;
 
     addr = 0x238 + module * 0x38;
     addrHi = (addr >> 8) & 0x00FF;
@@ -4943,11 +5008,14 @@ bool CG320::GetHybridBMSModule(int index, int module)
         else
             usleep(m_dl_config.m_delay_time_2*10);*/
 
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 61, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridBMSModule first half OK ####\n");
             //sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, first half OK", arySNobj[index].m_Addr, module+1);
-            //SaveLog(buf, m_st_time);
+            //SaveLog(buf, log_time);
             //lpdata = testbuf + module;
             arySNobj[index].m_ok_time = time(NULL);
             memcpy(m_bms_buf, lpdata+3, BMS_MODULE_SIZE/2);
@@ -4956,12 +5024,12 @@ bool CG320::GetHybridBMSModule(int index, int module)
             if ( have_respond == true ) {
                 printf("#### GetHybridBMSModule first half CRC Error ####\n");
                 sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, first half CRC Error", arySNobj[index].m_Addr, module+1);
-                SaveLog(buf, m_st_time);
+                SaveLog(buf, log_time);
             }
             else {
                 printf("#### GetHybridBMSModule first half No Response ####\n");
                 sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, first half No Response", arySNobj[index].m_Addr, module+1);
-                SaveLog(buf, m_st_time);
+                SaveLog(buf, log_time);
             }
             err++;
         }
@@ -4994,11 +5062,14 @@ bool CG320::GetHybridBMSModule(int index, int module)
         else
             usleep(m_dl_config.m_delay_time_2*10);*/
 
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
         lpdata = GetRespond(m_busfd, 61, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridBMSModule last half OK ####\n");
             //sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, last half OK", arySNobj[index].m_Addr, module+1);
-            //SaveLog(buf, m_st_time);
+            //SaveLog(buf, log_time);
             //lpdata = testbuf + module + BMS_MODULE_SIZE/2;
             memcpy(m_bms_buf + BMS_MODULE_SIZE/2, lpdata+3, BMS_MODULE_SIZE/2);
             return true;
@@ -5006,12 +5077,12 @@ bool CG320::GetHybridBMSModule(int index, int module)
             if ( have_respond == true ) {
                 printf("#### GetHybridBMSModule last half CRC Error ####\n");
                 sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, last half CRC Error", arySNobj[index].m_Addr, module+1);
-                SaveLog(buf, m_st_time);
+                SaveLog(buf, log_time);
             }
             else {
                 printf("#### GetHybridBMSModule last half No Response ####\n");
                 sprintf(buf, "DataLogger GetHybridBMSModule() : addr %d, module %d, last half No Response", arySNobj[index].m_Addr, module+1);
-                SaveLog(buf, m_st_time);
+                SaveLog(buf, log_time);
             }
             err++;
         }
@@ -5228,7 +5299,12 @@ bool CG320::WriteLogXML(int index)
     int error_tmp = 0;
     int model = 0;
 
-    SaveLog((char *)"DataLogger WriteLogXML() : run", m_st_time);
+    time_t current_time;
+    struct tm *log_time;
+    current_time = time(NULL);
+    log_time = localtime(&current_time);
+
+    SaveLog((char *)"DataLogger WriteLogXML() : run", log_time);
     printf("==================== Set Log XML start ====================\n");
     //if ( first && (strlen(m_log_buf) == 0) ) // empty, new file, add header <records>
     //    strcpy(m_log_buf, "<records>");
@@ -5798,7 +5874,12 @@ bool CG320::WriteErrorLogXML(int index)
     unsigned long long int dev_id = 0;
     int model = 0;
 
-    SaveLog((char *)"DataLogger WriteErrorLogXML() : run", m_st_time);
+    time_t current_time;
+    struct tm *log_time;
+    current_time = time(NULL);
+    log_time = localtime(&current_time);
+
+    SaveLog((char *)"DataLogger WriteErrorLogXML() : run", log_time);
     printf("==================== Set Error Log XML start ====================\n");
     //if ( strlen(m_errlog_buf) == 0 ) // empty, new file, add header <records>
     //    strcpy(m_errlog_buf, "<records>");

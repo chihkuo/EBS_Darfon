@@ -1,5 +1,6 @@
 #!/bin/sh
 
+# V2.2.2
 # initial package dir
 USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial
@@ -94,11 +95,6 @@ chmod 755 /usr/home/$RDLSW
 echo "boot script enable"
 # boot script enable
 /etc/init.d/$RDL enable
-
-echo "clean luci"
-rm /tmp/luci-indexcache
-rm /tmp/luci-modulecache/*
-sync
 
 echo "DL initial script finished."
 

@@ -12,6 +12,7 @@
 
 //#define USB_PATH    "/tmp/run/mountd/sda1"
 #define USB_PATH    "/mnt"
+#define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
 #define VERSION             "1.0.0"
@@ -208,7 +209,7 @@ void setPath()
 {
     struct stat st;
 
-    if ( stat(USB_PATH, &st) == 0 ) { //linux storage detect
+    if ( stat(USB_DEV, &st) == 0 ) { //linux storage detect
         strcpy(g_SYSLOG_PATH, USB_PATH);
         strcat(g_SYSLOG_PATH, "/SYSLOG");
         strcpy(g_UPDATE_PATH, USB_PATH);
