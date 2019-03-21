@@ -528,7 +528,7 @@ void GetAllData(time_t data_time)
     for (i = 0; i < MODEL_NUM; i++) {
         if ( (MList[i].addr > 0) && (MList[i].init == true) ) {
             // sleep
-            usleep(20000);
+            //usleep(20000);
             switch (MList[i].model_index)
             {
                 case ID_Unknown:

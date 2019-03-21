@@ -740,23 +740,31 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                 } while ( isbusy );
 
                 // check fwver if not get
-                if ( arySNobj[i].m_FWver == 0 )
-                    GetMiIDInfoV3(i);
+                if ( arySNobj[i].m_FWver == 0 ) {
+                    if ( GetMiIDInfoV3(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
+                } else {
+                    // get power data
+                    if ( GetMiPowerInfoV3(i) )
+                        arySNobj[i].m_Err = 0;
+                    else {
+                        if ( m_loopflag == 0 )
+                            arySNobj[i].m_Err++;
+                        m_loopflag++;
+                    }
 
-                // get power data
-                if ( GetMiPowerInfoV3(i) )
-                    arySNobj[i].m_Err = 0;
-                else {
-                    if ( m_loopflag == 0 )
-                        arySNobj[i].m_Err++;
-                    m_loopflag++;
+                    WriteLogXML(i);
+                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                        (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                        WriteErrorLogXML(i);
+                    }
                 }
 
-                WriteLogXML(i);
-                if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
-                    (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
-                    WriteErrorLogXML(i);
-                }
                 dosave = true;
 
             } else {
@@ -1810,7 +1818,7 @@ int CG320::GetWhiteListCount()
     while ( err < 3 ) {
         memcpy(txbuffer, szWLcount, 14);
         MStartTX(m_busfd);
-        usleep(100000); // 0.1s
+        //usleep(100000); // 0.1s
 
         if ( err == 0 )
             lpdata = GetRespond(m_busfd, 15, 200000); // 0.2s
