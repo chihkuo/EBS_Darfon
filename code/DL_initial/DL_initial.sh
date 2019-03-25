@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# V2.2.2
+# V2.2.4
 # initial package dir
 USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial

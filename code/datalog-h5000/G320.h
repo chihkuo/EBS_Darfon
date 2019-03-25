@@ -62,8 +62,8 @@ public:
 
 	int     Init(int addr, int com, bool open_com, bool first, int busfd);
 	bool    GetDLConfig();
-	int     DoReRegister(time_t time);
-	int     DoAllRegister(time_t time);
+	int     DoReRegister(time_t loop_time);
+	int     DoAllRegister(time_t loop_time);
     bool    SaveDeviceList(bool first, bool last);
 	void    Start();
 	void    GetData(time_t data_time, bool first, bool last);

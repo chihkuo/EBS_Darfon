@@ -294,21 +294,25 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
     return ret;
 }
 
-int CG320::DoReRegister(time_t time)
+int CG320::DoReRegister(time_t loop_time)
 {
     int i = 0, ret = 0;
     bool result = false;
+    time_t current_time;
+    struct tm *log_time;
+    current_time = time(NULL);
+    log_time = localtime(&current_time);
 
     printf("==== ReRegister part start ====\n");
 
-    m_current_time = time;
-    m_last_register_time = m_current_time;
-    m_st_time = localtime(&m_current_time);
+    //m_current_time = loop_time;
+    //m_last_register_time = m_current_time;
+    //m_st_time = localtime(&m_current_time);
     SetPath();
     //CheckConfig();
     //GetDLConfig();
 
-    OpenLog(m_dl_path.m_syslog_path, m_st_time);
+    OpenLog(m_dl_path.m_syslog_path, log_time);
     for ( i = 0; i < m_snCount; i++) {
         if ( !arySNobj[i].m_state ) {
             if ( m_plcver == 3 ) // MI PLC V3.0
@@ -335,21 +339,25 @@ int CG320::DoReRegister(time_t time)
     return ret;
 }
 
-int CG320::DoAllRegister(time_t time)
+int CG320::DoAllRegister(time_t loop_time)
 {
     int i = 0, ret = 0;
     char buf[256] = {0};
+    time_t current_time;
+    struct tm *log_time;
+    current_time = time(NULL);
+    log_time = localtime(&current_time);
 
     printf("==== AllRegister part start ====\n");
 
-    m_current_time = time;
-    m_last_search_time = m_current_time;
-    m_st_time = localtime(&m_current_time);
+    //m_current_time = loop_time;
+    //m_last_search_time = m_current_time;
+    //m_st_time = localtime(&m_current_time);
     SetPath();
     //CheckConfig();
     //GetDLConfig();
 
-    OpenLog(m_dl_path.m_syslog_path, m_st_time);
+    OpenLog(m_dl_path.m_syslog_path, log_time);
 
     // get white list & register
     if ( m_plcver == 3 ) { // 3.0
@@ -368,7 +376,7 @@ int CG320::DoAllRegister(time_t time)
         if ( ret ) {
             printf("Add %d new device to list\n", ret);
             sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", ret);
-            SaveLog(buf, m_st_time);
+            SaveLog(buf, log_time);
             for (i = 0; i < m_snCount; i++) {
                 if ( arySNobj[i].m_Device == -1 )
                     GetDevice(i);
@@ -395,7 +403,7 @@ void CG320::Start()
     struct stat st;
     bool    dosave = true;
 
-    GetLocalTime();
+    //GetLocalTime();
     SaveLog((char *)"DataLogger Start() : start", m_st_time);
     printf("\n================================\n");
     printf("StartRegisterProcess() Start!\n");
@@ -420,8 +428,8 @@ void CG320::Start()
 
     while (1) {
         // get local time
-        m_current_time = time(NULL);
-        m_st_time = localtime(&m_current_time);
+        //m_current_time = time(NULL);
+        //m_st_time = localtime(&m_current_time);
         // set path
         SetPath();
         SetLogXML();
@@ -579,7 +587,7 @@ void CG320::Start()
                     ;
             }
 
-            m_current_time = time(NULL);
+            //m_current_time = time(NULL);
             //printf("#### Debug : read end time : %ld ####\n", m_current_time);
             printf("#### Debug : read span time : %ld ####\n", m_current_time - m_last_read_time);
         }
@@ -590,7 +598,7 @@ void CG320::Start()
 
         // loop setting, delay, time ...
         usleep(1000000); // 1s
-        m_current_time = time(NULL);
+        //m_current_time = time(NULL);
         register_interval = m_current_time - m_last_register_time;
         search_interval = m_current_time - m_last_search_time;
         savelog_imterval = m_current_time - m_last_savelog_time;
@@ -613,7 +621,7 @@ void CG320::Start()
         // ReRegister part
         if ( register_interval >= 600 ) {
             printf("==== ReRegister part start ====\n");
-            m_current_time = time(NULL);
+            //m_current_time = time(NULL);
             m_last_register_time = m_current_time;
             for ( i = 0; i < m_snCount; i++) {
                 if ( !arySNobj[i].m_state ) {
@@ -638,7 +646,7 @@ void CG320::Start()
             // sync time from NTP
             GetNTPTime();
             // run StartRegisterProcess
-            m_current_time = time(NULL);
+            //m_current_time = time(NULL);
             m_last_search_time = m_current_time;
             idc = StartRegisterProcess();
             if ( idc ) {
@@ -656,7 +664,7 @@ void CG320::Start()
         // save syslog
         if ( savelog_imterval >= m_dl_config.m_sample_time*60 ) {
             printf("==== save syslog part start ====\n");
-            m_current_time = time(NULL);
+            //m_current_time = time(NULL);
             m_last_savelog_time = m_current_time;
             CloseLog();
             system("sync");
@@ -665,7 +673,7 @@ void CG320::Start()
             if ( m_do_get_TZ )
                 GetTimezone();
 
-            GetLocalTime();
+            //GetLocalTime();
             OpenLog(m_dl_path.m_syslog_path, m_st_time);
             printf("===== save syslog part end =====\n");
         }
@@ -904,168 +912,29 @@ void CG320::GetData(time_t data_time, bool first, bool last)
 
     }
 
-    // read data loop
-/*    for (i=0; i<m_snCount; i++) {
-        if ( m_loopstate != 0 ) {
-            if ( stat(m_log_filename, &st) == 0 ) {
-                printf("======== %s exist! ========\n", m_log_filename);
-                break;
-            }
-        }
-        printf("#### i = %d ####\n", i);
-        if ( !arySNobj[i].m_state ) {   // offline
-            continue;                   // read part skip
-        }
-        if( arySNobj[i].m_Err < 3 ) {
-            if ( arySNobj[i].m_Device == -1 ) { // unknown device, first time to do
-                if ( GetDevice(i) ) {
-                    dosave = true;
-                    if ( arySNobj[i].m_Device < 0x0A ) { // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
-                        if ( m_plcver == 3 )
-                            GetMiIDInfoV3(i);
-                        else
-                            GetMiIDInfo(i);
-                    } else
-                        ;
-                } else
-                    arySNobj[i].m_Err++;
-            } else if ( arySNobj[i].m_Device < 0x0A ) { // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
-            // MI part
-                CleanParameter();
-                // if fwver not get for MI
-                if ( arySNobj[i].m_FWver == 0 ) {
-                    if ( m_plcver == 3 )
-                        GetMiIDInfoV3(i);
-                    else
-                        GetMiIDInfo(i);
-                }
-
-                if ( m_loopstate != 0 ) {
-                    if ( m_plcver == 3 ) {
-                        if ( GetMiPowerInfoV3(i) )
-                            arySNobj[i].m_Err = 0;
-                        else {
-                            if ( m_loopflag == 0 )
-                                arySNobj[i].m_Err++;
-                            m_loopflag++;
-                        }
-                    } else {
-                        if ( GetMiPowerInfo(i) )
-                            arySNobj[i].m_Err = 0;
-                        else {
-                            if ( m_loopflag == 0 )
-                                arySNobj[i].m_Err++;
-                            m_loopflag++;
-                        }
-                    }
-
-                    WriteLogXML(i);
-                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
-                        (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
-                        WriteErrorLogXML(i);
-                    }
-                    dosave = true;
-                }
-            } else {
-            // Hybrid part
-                CleanParameter();
-
-                // first set rtc time
-                if ( m_loopstate == 1 )
-                    SetHybridRTCData(i);
-
-                if ( GetHybridIDData(i) )
-                    arySNobj[i].m_Err = 0;
-                else {
-                    if ( m_loopflag == 0 )
-                        arySNobj[i].m_Err++;
-                    m_loopflag++;
-                }
-
-                if ( GetHybridRTCData(i) )
-                    arySNobj[i].m_Err = 0;
-                else {
-                    if ( m_loopflag == 0 )
-                        arySNobj[i].m_Err++;
-                    m_loopflag++;
-                }
-
-                if ( GetHybridRSInfo(i) )
-                    arySNobj[i].m_Err = 0;
-                else {
-                    if ( m_loopflag == 0 )
-                        arySNobj[i].m_Err++;
-                    m_loopflag++;
-                }
-
-                if ( GetHybridRRSInfo(i) )
-                    arySNobj[i].m_Err = 0;
-                else {
-                    if ( m_loopflag == 0 )
-                        arySNobj[i].m_Err++;
-                    m_loopflag++;
-                }
-
-                if ( GetHybridRTInfo(i) )
-                    arySNobj[i].m_Err = 0;
-                else {
-                    if ( m_loopflag == 0 )
-                        arySNobj[i].m_Err++;
-                    m_loopflag++;
-                }
-
-                SetBMSPath(i);
-                if ( GetHybridBMSInfo(i) ) {
-                    arySNobj[i].m_Err = 0;
-                    SetHybridBMSModule(i);
-                    SaveBMS();
-                } else {
-                    if ( m_loopflag == 0 )
-                        arySNobj[i].m_Err++;
-                    m_loopflag++;
-                }
-
-                WriteLogXML(i);
-                if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ||
-                    (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
-                    WriteErrorLogXML(i);
-                }
-                dosave = true;
-            }
-        } else {
-            printf("Addr %d Error 3 times, call ReRegiser() later\n", arySNobj[i].m_Addr);
-            // set state to offline
-            arySNobj[i].m_state = 0;
-            //ReRegiser(i);
-        }
-
-        printf("Debug : index %d, m_Err = %d, m_loopflag = %d\n", i, arySNobj[i].m_Err, m_loopflag);
-        m_loopflag = 0;
-    }
-*/
-    if ( m_plcver == 3 ) {
+//    if ( m_plcver == 3 ) {
         if ( stat(m_log_filename, &st) != 0 ) {
             SaveLogXML(first, last);
             SaveErrorLogXML(first, last);
             SaveEnvXML(first, last);
             dosave = true;
         }
-    } else if ( m_plcver == 2 ){
-        if ( (m_loopstate != 0) /*&& (m_snCount > 0)*/ ) {
-            if ( stat(m_log_filename, &st) != 0 ) {
+//    } else if ( m_plcver == 2 ){
+//        if ( (m_loopstate != 0) /*&& (m_snCount > 0)*/ ) {
+/*            if ( stat(m_log_filename, &st) != 0 ) {
                 SaveLogXML(first, last);
                 SaveErrorLogXML(first, last);
                 SaveEnvXML(first, last);
                 dosave = true;
             }
         } else { // m_loopstate == 0
-            memset(m_log_buf, 0x00, LOG_BUF_SIZE);
-            memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
+            //memset(m_log_buf, 0x00, LOG_BUF_SIZE);
+            //memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
             SaveLogXML(first, last);
             SaveErrorLogXML(first, last);
             SaveEnvXML(first, last);
         }
-    }
+    }*/
 
 
     if ( m_loopstate == 0 ) { // init : device get OK
@@ -1087,7 +956,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
     }
 
     if ( m_snCount > 0 ) {
-        SaveLog((char *)"DataLogger Start() : run WriteMIListXML()", m_st_time);
+        SaveLog((char *)"DataLogger GetData() : run WriteMIListXML()", m_st_time);
         WriteMIListXML();
         SaveWhiteList();
     }
