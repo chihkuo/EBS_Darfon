@@ -67,6 +67,7 @@ CG320::CG320()
     m_loopflag = 0;
     m_sys_error = 0;
     m_do_get_TZ = false;
+    m_data_st_time = {0};
     m_st_time = NULL;
     m_last_read_time = 0;
     m_last_register_time = 0;
@@ -115,7 +116,7 @@ CG320::CG320()
     char buf[128] = {0};
     memset(m_bms_header, 0x00, 8192);
     strcpy(m_bms_header, "time,from/end address");
-    for (i = 0x209; i < 0x5B8; i++ ) {
+    for (i = 0x238; i < 0x5B8; i++ ) {
         memset(buf, 0, 128);
         sprintf(buf, ",0x%03X", i);
         strcat(m_bms_header, buf);
@@ -700,6 +701,12 @@ void CG320::GetData(time_t data_time, bool first, bool last)
     //m_current_time = time(NULL);
     m_current_time = data_time;
     m_st_time = localtime(&m_current_time);
+    m_data_st_time.tm_year = m_st_time->tm_year;
+	m_data_st_time.tm_mon = m_st_time->tm_mon;
+	m_data_st_time.tm_mday = m_st_time->tm_mday;
+	m_data_st_time.tm_hour = m_st_time->tm_hour;
+	m_data_st_time.tm_min = m_st_time->tm_min;
+	m_data_st_time.tm_sec = m_st_time->tm_sec;
     // set path
     SetPath();
     SetLogXML();
@@ -768,7 +775,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
 
                     WriteLogXML(i);
                     if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
-                        (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                        (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
                         WriteErrorLogXML(i);
                     }
                 }
@@ -827,7 +834,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
 
                     WriteLogXML(i);
                     if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
-                        (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                        (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
                         WriteErrorLogXML(i);
                     }
                     dosave = true;
@@ -895,7 +902,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
 
                     WriteLogXML(i);
                     if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ||
-                        (m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0)) ) {
+                        (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
                         WriteErrorLogXML(i);
                     }
                     dosave = true;
@@ -4833,8 +4840,8 @@ bool CG320::SetHybridPanasonicModule(int index)
     m_bms_panamod[93] = 'd';*/
     //////////////////////////////////////////////////
     memset(buf, 0, 256);
-    sprintf(buf, "%04d-%02d-%02d %02d:%02d:00,0x209-0x5B7", 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-                    m_st_time->tm_hour, m_st_time->tm_min);
+    sprintf(buf, "%04d-%02d-%02d %02d:%02d:00,0x209-0x5B7", 1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min);
     strcpy(m_bms_mainbuf, buf);
     for ( i = 0; i < BMS_PANAMOD_SIZE; i+=2 ) {
         sprintf(buf, ",0x%02X%02X", m_bms_panamod[i], m_bms_panamod[i+1]);
@@ -4985,6 +4992,15 @@ bool CG320::SetBMSFile(int index, int module)
     m_bms_buf[110] = 'n';
     m_bms_buf[111] = 'd';*/
     //////////////////////////////////////////////////
+
+    // add header
+    if ( module == 0 ) {
+        memset(buf, 0, 256);
+        sprintf(buf, "%04d-%02d-%02d %02d:%02d:00,0x238-0x5B7", 1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+                        m_data_st_time.tm_hour, m_data_st_time.tm_min);
+        strcpy(m_bms_mainbuf, buf);
+    }
+
     for ( i = 0; i < BMS_MODULE_SIZE; i+=2 ) {
         sprintf(buf, ",0x%02X%02X", m_bms_buf[i], m_bms_buf[i+1]);
         strcat(m_bms_mainbuf, buf);
@@ -5163,7 +5179,7 @@ void CG320::GetNTPTime()
 
 void CG320::SetLogXML()
 {
-    sprintf(m_log_filename, "%s/%02d%02d", m_dl_path.m_log_path, m_st_time->tm_hour, m_st_time->tm_min);
+    sprintf(m_log_filename, "%s/%02d%02d", m_dl_path.m_log_path, m_data_st_time.tm_hour, m_data_st_time.tm_min);
     //printf("log path = %s\n", m_log_filename);
     return;
 }
@@ -5195,8 +5211,8 @@ bool CG320::WriteLogXML(int index)
             // G240/300, G320, G321 single channel
             sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
             sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
-                    1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-                    m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+                    1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
             strcat(m_log_buf, buf);
 
             if ( m_loopflag == 0 ) {
@@ -5268,8 +5284,8 @@ bool CG320::WriteLogXML(int index)
             strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
             sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
-                    1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-                    m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+                    1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
             strcat(m_log_buf, buf);
 
             if ( m_loopflag == 0 ) {
@@ -5341,8 +5357,8 @@ bool CG320::WriteLogXML(int index)
             //strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
             sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
-                    1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-                    m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+                    1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
             strcat(m_log_buf, buf);
 
             if ( m_loopflag == 0 ) {
@@ -5412,8 +5428,8 @@ bool CG320::WriteLogXML(int index)
         // set slave ID, date time, SN
         sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
         sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
-                1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-                m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+                1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+                m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
         strcat(m_log_buf, buf);
 
         if ( m_loopflag == 0 ) {
@@ -5739,7 +5755,7 @@ bool CG320::SaveLogXML(bool first, bool last)
 
 void CG320::SetErrorLogXML()
 {
-    sprintf(m_errlog_filename, "%s/%02d%02d", m_dl_path.m_errlog_path, m_st_time->tm_hour, m_st_time->tm_min);
+    sprintf(m_errlog_filename, "%s/%02d%02d", m_dl_path.m_errlog_path, m_data_st_time.tm_hour, m_data_st_time.tm_min);
     //printf("errlog path = %s\n", m_errlog_filename);
     return;
 }
@@ -5770,8 +5786,8 @@ bool CG320::WriteErrorLogXML(int index)
             // G240/300, G320, G321 single channel
             sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
             sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
-                1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-                m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+                1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+                m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
             strcat(m_errlog_buf, buf);
 
             // Error_Code1
@@ -5847,8 +5863,8 @@ bool CG320::WriteErrorLogXML(int index)
             strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
             sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
-                    1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-                    m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+                    1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
             strcat(m_errlog_buf, buf);
 
             // Error_Code1
@@ -5919,7 +5935,7 @@ bool CG320::WriteErrorLogXML(int index)
             //    strcat(m_errlog_buf, "<code>COD2_8000</code>");
 
             // set system error log
-            if ( m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0) ) {
+            if ( m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0) ) {
                 if ( m_sys_error & SYS_0001_No_USB )
                     strcat(m_errlog_buf, "<code>SYS_0001_No_USB</code>");
                 if ( m_sys_error & SYS_0002_Save_USB_Fail )
@@ -5937,8 +5953,8 @@ bool CG320::WriteErrorLogXML(int index)
             //strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
             sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
-                    1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-                    m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+                    1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
             strcat(m_errlog_buf, buf);
 
             // Error_Code1
@@ -6012,8 +6028,8 @@ bool CG320::WriteErrorLogXML(int index)
         // Hybrid part
         sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
         sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
-            1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday,
-            m_st_time->tm_hour, m_st_time->tm_min, arySNobj[index].m_Sn);
+            1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
+            m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
         strcat(m_errlog_buf, buf);
 
         // 0xDB : error code
@@ -6123,7 +6139,7 @@ bool CG320::WriteErrorLogXML(int index)
     }
 
     // set system error log
-    if ( m_sys_error && (m_st_time->tm_hour%2 == 0) && (m_st_time->tm_min == 0) ) {
+    if ( m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0) ) {
         if ( m_sys_error & SYS_0001_No_USB )
             strcat(m_errlog_buf, "<code>SYS_0001_No_USB</code>");
         if ( m_sys_error & SYS_0002_Save_USB_Fail )
@@ -6227,7 +6243,7 @@ bool CG320::SaveErrorLogXML(bool first, bool last)
 
 void CG320::SetEnvXML()
 {
-    sprintf(m_env_filename, "%s/%02d%02d", m_dl_path.m_env_path, m_st_time->tm_hour, m_st_time->tm_min);
+    sprintf(m_env_filename, "%s/%02d%02d", m_dl_path.m_env_path, m_data_st_time.tm_hour, m_data_st_time.tm_min);
     printf("env path = %s\n", m_env_filename);
     return;
 }
@@ -6318,7 +6334,7 @@ bool CG320::SaveEnvXML(bool first, bool last)
 
 void CG320::SetBMSPath(int index)
 {
-    sprintf(m_bms_filename, "%s/%s_%02d", m_dl_path.m_bms_path, arySNobj[index].m_Sn, m_st_time->tm_hour);
+    sprintf(m_bms_filename, "%s/%s_%02d", m_dl_path.m_bms_path, arySNobj[index].m_Sn, m_data_st_time.tm_hour);
     //printf("bms path = %s\n", m_bms_filename);
     return;
 }
