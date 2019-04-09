@@ -314,12 +314,22 @@ int CG320::DoReRegister(time_t loop_time)
     //GetDLConfig();
 
     OpenLog(m_dl_path.m_syslog_path, log_time);
+
     for ( i = 0; i < m_snCount; i++) {
         if ( !arySNobj[i].m_state ) {
             if ( m_plcver == 3 ) // MI PLC V3.0
                 result = ReRegisterV3(i);
             else
                 result = ReRegister(i); // MI PLC V2.0 & Htbrid
+
+            // get time
+            current_time = time(NULL);
+            m_st_time = localtime(&current_time);
+            // get data time not 0 min. current time is 0 min.
+            if ( m_data_st_time.tm_min != 0 )
+                if ( m_st_time->tm_min == 0 )
+                    return -1;
+
             if ( result ) {
                 ret++;
                 if ( m_plcver == 3 )
@@ -330,9 +340,18 @@ int CG320::DoReRegister(time_t loop_time)
                     else
                         GetMiIDInfo(i); // MI PLC V2.0
                 }
+
+                // get time
+                current_time = time(NULL);
+                m_st_time = localtime(&current_time);
+                // get data time not 0 min. current time is 0 min.
+                if ( m_data_st_time.tm_min != 0 )
+                    if ( m_st_time->tm_min == 0 )
+                        return -1;
             }
         }
     }
+
     CloseLog();
 
     printf("===== ReRegister part end =====\n");
@@ -363,17 +382,39 @@ int CG320::DoAllRegister(time_t loop_time)
     // get white list & register
     if ( m_plcver == 3 ) { // 3.0
         ret = GetWhiteListCount();
+
+        // get time
+        current_time = time(NULL);
+        m_st_time = localtime(&current_time);
+        // get data time not 0 min. current time is 0 min.
+        if ( m_data_st_time.tm_min != 0 )
+            if ( m_st_time->tm_min == 0 )
+                return -1;
+
         if ( ret > 0 ) {
             if ( m_snCount != m_wl_count ) {
                 if ( GetWhiteListSN() ) {
                     WhiteListV3Init();
                     LoadWhiteListV3();
                     WriteMIListXML();
+                } else {
+
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
                 }
             }
         }
     } else if ( m_plcver == 2 ) { // 2.0
         ret = StartRegisterProcess();
+        if ( ret == -1 ) {
+            return -1;
+        }
+
         if ( ret ) {
             printf("Add %d new device to list\n", ret);
             sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", ret);
@@ -409,7 +450,7 @@ void CG320::Start()
     printf("\n================================\n");
     printf("StartRegisterProcess() Start!\n");
     printf("================================\n");
-    idc = StartRegisterProcess();
+    //idc = StartRegisterProcess();
     if ( idc ) {
         printf("StartRegisterProcess success find %d new invert\n", idc);
         sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", idc);
@@ -649,7 +690,7 @@ void CG320::Start()
             // run StartRegisterProcess
             //m_current_time = time(NULL);
             m_last_search_time = m_current_time;
-            idc = StartRegisterProcess();
+            //idc = StartRegisterProcess();
             if ( idc ) {
                 printf("Add %d new device to list\n", idc);
                 sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", idc);
@@ -689,11 +730,13 @@ void CG320::Start()
     getchar();
 }
 
-void CG320::GetData(time_t data_time, bool first, bool last)
+int CG320::GetData(time_t data_time, bool first, bool last)
 {
-    int     i = 0;
+    int     i = 0, j = 0;
     struct  stat st;
     bool    dosave = true, isbusy = false;
+
+    time_t current_time;
 
     m_first = first;
     m_last = last;
@@ -730,6 +773,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
     if ( m_plcver == 3 ) {
         // 3.0 part
         for (i = 0; i < m_snCount; i++) {
+            // get time
+            current_time = time(NULL);
+            m_st_time = localtime(&current_time);
+            // get data time not 0 min. current time is 0 min.
+            if ( m_data_st_time.tm_min != 0 )
+                if ( m_st_time->tm_min == 0 )
+                    return -1;
+
             // power data exit
             if ( m_loopstate != 0 ) {
                 if ( stat(m_log_filename, &st) == 0 ) {
@@ -739,6 +790,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
             }
             printf("#### i = %d ####\n", i);
             if( arySNobj[i].m_Err < 3 ) {
+                // get time
+                current_time = time(NULL);
+                m_st_time = localtime(&current_time);
+                // get data time not 0 min. current time is 0 min.
+                if ( m_data_st_time.tm_min != 0 )
+                    if ( m_st_time->tm_min == 0 )
+                        return -1;
+
                 // clean
                 CleanParameter();
 
@@ -747,12 +806,31 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                     isbusy = GetPLCStatus(i);
                     if ( isbusy ) { // busy
                         printf("sleep 60 sec.\n");
-                        usleep(60000000); // 60s
+                        // sleep 60s & check time
+                        for (j = 0; j < 60; j++) {
+                            // sleep 1s
+                            usleep(1000000); // 1s
+                            // get time
+                            current_time = time(NULL);
+                            m_st_time = localtime(&current_time);
+                            // get data time not 0 min. current time is 0 min.
+                            if ( m_data_st_time.tm_min != 0 )
+                                if ( m_st_time->tm_min == 0 )
+                                    return -1;
+                        }
                     } else { // idle
                         printf("sleep 1 sec.\n");
                         usleep(1000000); // 1s
                     }
                 } while ( isbusy );
+
+                // get time
+                current_time = time(NULL);
+                m_st_time = localtime(&current_time);
+                // get data time not 0 min. current time is 0 min.
+                if ( m_data_st_time.tm_min != 0 )
+                    if ( m_st_time->tm_min == 0 )
+                        return -1;
 
                 // check fwver if not get
                 if ( arySNobj[i].m_FWver == 0 ) {
@@ -763,6 +841,15 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                             arySNobj[i].m_Err++;
                         m_loopflag++;
                     }
+
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
+
                 } else {
                     // get power data
                     if ( GetMiPowerInfoV3(i) )
@@ -772,6 +859,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                             arySNobj[i].m_Err++;
                         m_loopflag++;
                     }
+
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
 
                     WriteLogXML(i);
                     if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
@@ -794,6 +889,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
     } else if ( m_plcver == 2 ) {
         // 2.0 part, MI or Hybrid possible
         for (i = 0; i < m_snCount; i++) {
+            // get time
+            current_time = time(NULL);
+            m_st_time = localtime(&current_time);
+            // get data time not 0 min. current time is 0 min.
+            if ( m_data_st_time.tm_min != 0 )
+                if ( m_st_time->tm_min == 0 )
+                    return -1;
+
             // power data exit
             if ( m_loopstate != 0 ) {
                 if ( stat(m_log_filename, &st) == 0 ) {
@@ -807,6 +910,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                 continue;                   // read part skip
             }
             if( arySNobj[i].m_Err < 3 ) {
+                // get time
+                current_time = time(NULL);
+                m_st_time = localtime(&current_time);
+                // get data time not 0 min. current time is 0 min.
+                if ( m_data_st_time.tm_min != 0 )
+                    if ( m_st_time->tm_min == 0 )
+                        return -1;
+
                 if ( arySNobj[i].m_Device == -1 ) { // unknown device, first time to do
                     if ( GetDevice(i) ) {
                         dosave = true;
@@ -814,6 +925,15 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                             GetMiIDInfo(i); // MI get fwver
                     } else
                         arySNobj[i].m_Err++;
+
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
+
                 } else if ( arySNobj[i].m_Device < 0x0A ) { // 0x00 ~ 0x09 ==> MI, 0x0A ~ 0xFFFF ==> Hybrid
                 // MI part
                     // clean
@@ -823,6 +943,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                     if ( arySNobj[i].m_FWver == 0 )
                         GetMiIDInfo(i);
 
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
+
                     // get power data
                     if ( GetMiPowerInfo(i) )
                         arySNobj[i].m_Err = 0;
@@ -831,6 +959,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                             arySNobj[i].m_Err++;
                         m_loopflag++;
                     }
+
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
 
                     WriteLogXML(i);
                     if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
@@ -848,6 +984,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                     if ( m_loopstate == 1 )
                         SetHybridRTCData(i);
 
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
+
                     // get power data
                     if ( GetHybridIDData(i) )
                         arySNobj[i].m_Err = 0;
@@ -857,6 +1001,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                         m_loopflag++;
                     }
 
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
+
                     if ( GetHybridRTCData(i) )
                         arySNobj[i].m_Err = 0;
                     else {
@@ -864,6 +1016,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                             arySNobj[i].m_Err++;
                         m_loopflag++;
                     }
+
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
 
                     if ( GetHybridRSInfo(i) )
                         arySNobj[i].m_Err = 0;
@@ -873,6 +1033,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                         m_loopflag++;
                     }
 
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
+
                     if ( GetHybridRRSInfo(i) )
                         arySNobj[i].m_Err = 0;
                     else {
@@ -880,6 +1048,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                             arySNobj[i].m_Err++;
                         m_loopflag++;
                     }
+
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
 
                     if ( GetHybridRTInfo(i) )
                         arySNobj[i].m_Err = 0;
@@ -889,8 +1065,24 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                         m_loopflag++;
                     }
 
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
+
                     SetBMSPath(i);
                     if ( GetHybridBMSInfo(i) ) {
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+                        // get data time not 0 min. current time is 0 min.
+                        if ( m_data_st_time.tm_min != 0 )
+                            if ( m_st_time->tm_min == 0 )
+                                return -1;
+
                         arySNobj[i].m_Err = 0;
                         SetHybridBMSModule(i);
                         SaveBMS();
@@ -899,6 +1091,14 @@ void CG320::GetData(time_t data_time, bool first, bool last)
                             arySNobj[i].m_Err++;
                         m_loopflag++;
                     }
+
+                    // get time
+                    current_time = time(NULL);
+                    m_st_time = localtime(&current_time);
+                    // get data time not 0 min. current time is 0 min.
+                    if ( m_data_st_time.tm_min != 0 )
+                        if ( m_st_time->tm_min == 0 )
+                            return -1;
 
                     WriteLogXML(i);
                     if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ||
@@ -980,7 +1180,7 @@ void CG320::GetData(time_t data_time, bool first, bool last)
     if ( m_do_get_TZ )
         GetTimezone();
 
-    return;
+    return 0;
 }
 
 void CG320::Pause()
@@ -1773,6 +1973,8 @@ bool CG320::GetWhiteListSN()
     byte *lpdata = NULL;
     unsigned char szWLSN[]={0x01, 0x31, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00};
 
+    time_t current_time;
+
     for ( i = 0; i < m_wl_count; i+=range ) {
         start_addr = i;
         if ( i+range < m_wl_count )
@@ -1798,6 +2000,17 @@ bool CG320::GetWhiteListSN()
             //usleep(1000000); // 1s
 
             lpdata = GetRespond(m_busfd, 11 + 8*num_of_data, m_dl_config.m_delay_time_1);
+
+            printf("debug print~\n");
+            getchar();
+            // get time
+            current_time = time(NULL);
+            m_st_time = localtime(&current_time);
+            // get data time not 0 min. current time is 0 min.
+            if ( m_data_st_time.tm_min != 0 )
+                if ( m_st_time->tm_min == 0 )
+                    return false;
+
             if ( lpdata ) {
                 printf("#### GetWhiteListSN index %d, data %d OK ####\n", i, num_of_data);
                 printf("copy %d data to white list buf\n", 8*num_of_data);
@@ -2614,6 +2827,8 @@ int CG320::StartRegisterProcess()
     int i, ret = 0, cnt = 0, total = 0;
 	bool Conflict = false;
 
+	time_t current_time;
+
 	/*if (m_snCount==0) {
         for (i=0; i<253; i++) {
             arySNobj[i].m_Addr=i+1; // address range 1 ~ 253
@@ -2655,6 +2870,15 @@ int CG320::StartRegisterProcess()
         } else {
             while ( m_snCount<253 && byMOD>=0 ) {
                 ret = MyOffLineQuery(m_busfd, 0x00, m_query_buf, QUERY_SIZE);
+
+                // get time
+                current_time = time(NULL);
+                m_st_time = localtime(&current_time);
+                // get data time not 0 min. current time is 0 min.
+                if ( m_data_st_time.tm_min != 0 )
+                    if ( m_st_time->tm_min == 0 )
+                        return -1;
+
                 if ( ret != -1 ) {
                     printf("#### MyOffLineQuery return %d ####\n", ret);
                     printf("========================================= Debug date value =========================================");
@@ -2671,6 +2895,8 @@ int CG320::StartRegisterProcess()
                     } else {
 Allocate_address:
                         cnt = AllocateProcess(m_query_buf, ret);
+                        if ( cnt == -1 )
+                            return -1;
                         printf("#### AllocateProcess success = %d ####\n", cnt);
                         total += cnt;
                     }
@@ -2705,6 +2931,8 @@ int CG320::AllocateProcess(unsigned char *query, int len)
     int i = 0, j = 0, index = 0, cnt = 0;
     char sn_tmp[17] = {0};
 
+    time_t current_time;
+
     SaveLog((char *)"DataLogger AllocateProcess() : run", m_st_time);
     for (i = 0; i < len-12; i++) {
         if ( query[i] == 0x00 && query[i+1] == 0x00 && query[i+2] == 0x08 ) {
@@ -2731,6 +2959,14 @@ int CG320::AllocateProcess(unsigned char *query, int len)
                 printf("m_Addr = %d\n", arySNobj[index].m_Addr);
                 printf("m_Sn = %s\n", arySNobj[index].m_Sn);
                 printf("#########################################\n");
+
+                // get time
+                current_time = time(NULL);
+                m_st_time = localtime(&current_time);
+                // get data time not 0 min. current time is 0 min.
+                if ( m_data_st_time.tm_min != 0 )
+                    if ( m_st_time->tm_min == 0 )
+                        return -1;
 
                 if ( MyAssignAddress(m_busfd, &query[i+3],  arySNobj[index].m_Addr) )
                 {

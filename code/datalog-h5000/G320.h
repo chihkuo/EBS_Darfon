@@ -66,7 +66,7 @@ public:
 	int     DoAllRegister(time_t loop_time);
     bool    SaveDeviceList(bool first, bool last);
 	void    Start();
-	void    GetData(time_t data_time, bool first, bool last);
+	int     GetData(time_t data_time, bool first, bool last);
 	void    Pause();
 	void    Play();
 	void    Stop();

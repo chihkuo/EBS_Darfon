@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#define VERSION         "2.2.4"
+#define VERSION         "2.3.0"
 #define MODEL_LIST_PATH "/usr/home/ModelList"
 #define MODEL_NUM       1020 //255*4
 
@@ -21,7 +21,7 @@ void Init();
 int  ReRegister(time_t time);
 int  AllRegister(time_t time);
 void SaveList();
-void GetAllData(time_t data_time);
+int GetAllData(time_t data_time);
 void Show_State();
 void Show_Time(struct tm *st_time);
 void Set_Sampletime(int num);
@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
     int previous_hour = 24;
     //int reregister_hour = 24;
     //int allregister_day = 0;
-    int state = 0;
+    int state = 0, ret = 0;
     time_t sys_current_time = 0, start_time = 0, end_time = 0, span_time = 0;
     time_t get_data_time = 0;
     struct tm *sys_st_time = NULL;
@@ -122,11 +122,25 @@ int main(int argc, char* argv[])
             GetModelList();
             Init();
             Show_State();
-            GetAllData(get_data_time);
+            ret = GetAllData(get_data_time);
+            if ( ret == -1 ) {
+                printf("Continue main while loop.\n");
+                continue;
+            }
             // reregister
             if ( state != 0 ) {
-                ReRegister(sys_current_time);
-                AllRegister(sys_current_time);
+                ret = ReRegister(sys_current_time);
+                if ( ret == -1 ) {
+                    printf("Continue main while loop.\n");
+                    continue;
+                }
+
+                ret = AllRegister(sys_current_time);
+                if ( ret == -1 ) {
+                    printf("Continue main while loop.\n");
+                    continue;
+                }
+
                 SaveList();
             }
             ////////////
@@ -401,6 +415,10 @@ int ReRegister(time_t time)
                 case ID_Darfon:
                     printf("%d Darfon DoReRegister start~\n", MList[i].addr);
                     ret = pg320->DoReRegister(time);
+                    if ( ret == -1 ) {
+                        printf("Time's up, Quit ReRegister()\n");
+                        return -1;
+                    }
                     if ( ret ) {
                         printf("DoReRegister %d device\n", ret);
                         cnt += ret;
@@ -444,6 +462,10 @@ int AllRegister(time_t time)
                 case ID_Darfon:
                     printf("%d Darfon DoAllRegister start~\n", MList[i].addr);
                     ret = pg320->DoAllRegister(time);
+                    if ( ret == -1 ) {
+                        printf("Time's up, Quit AllRegister()\n");
+                        return -1;
+                    }
                     if ( ret ) {
                         printf("DoAllRegister %d device\n", ret);
                         cnt += ret;
@@ -511,14 +533,14 @@ void SaveList()
     return;
 }
 
-void GetAllData(time_t data_time)
+int GetAllData(time_t data_time)
 {
     int i = 0;
 
     // for test ////////////
     FILE *pFile = NULL;
     struct stat filest;
-    int filesize = 0;
+    int filesize = 0, ret = 0;
     static int tmpsize = 0;
     char buf[256] = {0};
     struct tm *st_time = NULL;
@@ -538,8 +560,12 @@ void GetAllData(time_t data_time)
                     break;
                 case ID_Darfon:
                     printf("%d Darfon GetData start~\n", MList[i].addr);
-                    pg320->GetData(data_time, MList[i].first, MList[i].last);
+                    ret = pg320->GetData(data_time, MList[i].first, MList[i].last);
                     printf("Darfon GetData end.\n");
+                    if ( ret == -1 ) {
+                        printf("Time's up, Quit GetAllData()\n");
+                        return -1;
+                    }
                     break;
                 case ID_CyberPower1P:
                     printf("%d CyberPower Get1PData %d start~\n", MList[i].addr, MList[i].devid);
@@ -727,7 +753,7 @@ void GetAllData(time_t data_time)
 
     printf("======= main GetAllData end =======\n");
 
-    return;
+    return 0;
 }
 
 void Show_State()
