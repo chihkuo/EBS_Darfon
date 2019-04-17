@@ -1624,10 +1624,26 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                                 }
                             }
                             break;
+                        case 0x4A:
+                            if ( respond_buff[i+2] == 0x0E ) {
+                                if ( CheckCRC(respond_buff+i, 14) ) {
+                                    DebugPrint(respond_buff+i, 14, " LBD Device Rejoin the Network recv");
+                                    return respond_buff+i;
+                                }
+                            }
+                            break;
                         case 0x4B:
                             if ( respond_buff[i+2] == 0x0E ) {
                                 if ( CheckCRC(respond_buff+i, 14) ) {
                                     DebugPrint(respond_buff+i, 14, "LBD Re-register recv");
+                                    return respond_buff+i;
+                                }
+                            }
+                            break;
+                        case 0x4E:
+                            if ( respond_buff[i+2] == 0x0F ) {
+                                if ( CheckCRC(respond_buff+i, 14) ) {
+                                    DebugPrint(respond_buff+i, 14, "Control LBS White-List recv");
                                     return respond_buff+i;
                                 }
                             }

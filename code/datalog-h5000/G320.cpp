@@ -196,6 +196,15 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
     SetPath();
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
 
+/*    unsigned char testbuf_tmp[] = {
+                                0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0FE,
+                                0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0FA,
+//                                0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0FC,
+                                };
+    WriteWhiteList(sizeof(testbuf_tmp)/8, testbuf_tmp);
+    usleep(5000000);
+*/    //getchar();
+
     m_wl_count = 0;
     m_wl_checksum = 0;
     // check plc version
@@ -206,7 +215,6 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
         m_plcver = 2;
     //m_plcver = 2; // for test
     printf("m_plcver = %d\n", m_plcver);
-
     // get white list & register
     if ( m_plcver == 3 ) { // 3.0
         if ( GetWhiteListSN() ) {
@@ -258,14 +266,14 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
         testbuf_write[7 + i*8] = 0xFE - i;
     }
     unsigned char testbuf_tmp[] = {
+                                0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0FE,
                                 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0FA,
-                                0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0FB,
-                                0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0FC,
+//                                0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0FC,
                                 };
-*/    //WriteWhiteList(sizeof(testbuf_tmp)/8, testbuf_tmp);
-    //usleep(2000000);
-    //getchar();
-
+    WriteWhiteList(sizeof(testbuf_tmp)/8, testbuf_tmp);
+    usleep(2000000);
+    getchar();
+*/
     //AddWhiteList(sizeof(testbuf_tmp)/8, testbuf_tmp);
     //usleep(2000000);
     //getchar();
@@ -1754,6 +1762,11 @@ bool CG320::RunWhiteListChanged()
     int i = 0;
     bool match = false;
     bool save = false;
+    struct tm *log_time;
+    time_t current_time = 0;
+
+    current_time = time(NULL);
+    log_time = localtime(&current_time);
 
     fd = fopen(WL_CHANGED_PATH, "rb");
     if ( fd == NULL ) {
@@ -1766,8 +1779,16 @@ bool CG320::RunWhiteListChanged()
             break;
         memset(sn, 0x00, 17);
         memset(type, 0x00, 4);
-        sscanf(buf, "%s %s", sn, type);
-        printf("Get SN = %s, TYPE = %s\n", sn, type);
+        //sscanf(buf, "%s %s", sn, type);
+        //printf("Get SN = %s, TYPE = %s\n", sn, type);
+        // get type
+        sscanf(buf, "%s", type);
+        printf("type = %s\n", type);
+        if ( (strstr(type, "ADD") != NULL) || (strstr(type, "DEL") != NULL) ) {
+            // ADD or DEL, get sn
+        	sscanf(buf+4, "%s", sn);
+            printf("sn = %s\n", sn);
+        }
 
         if ( !strcmp(type, "DEL") ) {
             for ( i = 0; i < m_snCount; i++ ) {
@@ -1785,7 +1806,7 @@ bool CG320::RunWhiteListChanged()
                         arySNobj[i].m_ok_time = 0;
                         // delete SN to PLC box
                         sscanf(sn, "%02X%02X%02X%02X%02X%02X%02X%02X", &num[0], &num[1], &num[2], &num[3], &num[4], &num[5], &num[6], &num[7]);
-                        SaveLog((char *)"DataLogger RunWhiteListChanged() : run DeleteWhiteList()", m_st_time);
+                        SaveLog((char *)"DataLogger RunWhiteListChanged() : run DeleteWhiteList()", log_time);
                         tmp[0] = (unsigned char)num[0];
                         tmp[1] = (unsigned char)num[1];
                         tmp[2] = (unsigned char)num[2];
@@ -1829,7 +1850,7 @@ bool CG320::RunWhiteListChanged()
 
                 sscanf(sn, "%02X%02X%02X%02X%02X%02X%02X%02X", &num[0], &num[1], &num[2], &num[3], &num[4], &num[5], &num[6], &num[7]);
                 // add SN to PLC box
-                SaveLog((char *)"DataLogger RunWhiteListChanged() : run AddWhiteList()", m_st_time);
+                SaveLog((char *)"DataLogger RunWhiteListChanged() : run AddWhiteList()", log_time);
                 tmp[0] = (unsigned char)num[0];
                 tmp[1] = (unsigned char)num[1];
                 tmp[2] = (unsigned char)num[2];
@@ -1857,6 +1878,23 @@ bool CG320::RunWhiteListChanged()
                 if ( i == m_snCount )
                     m_snCount++;
             }
+        } else if ( !strcmp(type, "Rejoin") ) {
+            printf("run Rejoin\n");
+            SaveLog((char *)"DataLogger RunWhiteListChanged() : run RunRejoin()", log_time);
+            RunRejoin();
+        } else if ( !strcmp(type, "ClearAll") ) {
+            printf("run ClearAll\n");
+            SaveLog((char *)"DataLogger RunWhiteListChanged() : run RunClearAll()", log_time);
+            RunClearAll();
+            printf("RunClearAll end, restart this program.\n");
+            fclose(fd);
+            remove(WL_CHANGED_PATH);
+            current_time = time(NULL);
+            log_time = localtime(&current_time);
+            SaveLog((char *)"DataLogger RunWhiteListChanged() : RunClearAll() end, stop program", log_time);
+            CloseLog();
+            usleep(1000000); // 1s
+            system("sync; sync; killall -9 dlg320.exe; sync; sync");
         }
     }
     fclose(fd);
@@ -1871,6 +1909,143 @@ bool CG320::RunWhiteListChanged()
     printf("\n##### RunWhiteListChanged end #####\n");
 
     return true;
+}
+
+bool CG320::RunRejoin()
+{
+    printf("#### RunRejoin start ####\n");
+
+    int err = 0;
+    byte *lpdata = NULL;
+    struct tm *log_time;
+    time_t current_time = 0;
+
+    unsigned char cmd[]={0x01, 0x4E, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    MakeReadDataCRC(cmd,15);
+
+    MClearRX();
+    txsize=15;
+    waitAddr = 0x01;
+    waitFCode = 0x4E;
+
+    while ( err < 2 ) {
+        memcpy(txbuffer, cmd, 15);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_1);
+
+        current_time = time(NULL);
+        log_time = localtime(&current_time);
+
+        lpdata = GetRespond(m_busfd, 14, m_dl_config.m_delay_time_1);
+        if ( lpdata ) {
+            printf("#### RunRejoin OK ####\n");
+            SaveLog((char *)"DataLogger RunRejoin() : OK", log_time);
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### RunRejoin CRC Error ####\n");
+                SaveLog((char *)"DataLogger RunRejoin() : CRC Error", log_time);
+            }
+            else {
+                printf("#### RunRejoin No Response ####\n");
+                SaveLog((char *)"DataLogger RunRejoin() : No Response", log_time);
+            }
+            err++;
+        }
+    }
+
+    return false;
+}
+
+bool CG320::RunClearAll()
+{
+    printf("#### RunClearAll start ####\n");
+
+    bool isbusy = false;
+    // LBD Device Rejoin the Network 0x4A
+    SendRejoinNetwork();
+    printf("sleep 5 sec.\n");
+    usleep(5000000);
+    SendRejoinNetwork();
+    printf("sleep 5 sec.\n");
+    usleep(5000000);
+    SendRejoinNetwork();
+    printf("sleep 5 sec.\n");
+    usleep(5000000);
+
+    // Clear the White-List 0x40
+    ClearWhiteList();
+    printf("sleep 5 sec.\n");
+    usleep(5000000);
+
+    // Control LBS White-List 0x4E
+    RunRejoin();
+    printf("sleep 15 min.\n");
+    usleep(60000000*15); // 60 * 15 sec. = 15 min.
+
+    // check status
+    while (1) {
+        printf("check PLC status\n");
+        isbusy = GetPLCStatus(0);
+        if ( isbusy ) {
+            printf("busy, sleep 60 sec.\n");
+            usleep(60000000); // 60s
+        } else {
+            printf("idle, sleep 1 sec.\n");
+            usleep(1000000); // 1s
+            break;
+        }
+    }
+
+    printf("##### RunClearAll end #####\n");
+
+    return true;
+}
+
+bool CG320::SendRejoinNetwork()
+{
+    printf("#### SendRejoinNetwork start ####\n");
+
+    int err = 0;
+    byte *lpdata = NULL;
+    struct tm *log_time;
+    time_t current_time = 0;
+
+    unsigned char cmd[]={0x01, 0x4A, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00};
+    MakeReadDataCRC(cmd,15);
+
+    MClearRX();
+    txsize=15;
+    waitAddr = 0x01;
+    waitFCode = 0x4A;
+
+    while ( err < 2 ) {
+        memcpy(txbuffer, cmd, 15);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_1);
+
+        current_time = time(NULL);
+        log_time = localtime(&current_time);
+
+        lpdata = GetRespond(m_busfd, 14, m_dl_config.m_delay_time_1);
+        if ( lpdata ) {
+            printf("#### SendRejoinNetwork OK ####\n");
+            SaveLog((char *)"DataLogger SendRejoinNetwork() : OK", log_time);
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### SendRejoinNetwork CRC Error ####\n");
+                SaveLog((char *)"DataLogger SendRejoinNetwork() : CRC Error", log_time);
+            }
+            else {
+                printf("#### SendRejoinNetwork No Response ####\n");
+                SaveLog((char *)"DataLogger SendRejoinNetwork() : No Response", log_time);
+            }
+            err++;
+        }
+    }
+
+    return false;
 }
 
 int CG320::GetWhiteListCount()
@@ -2001,8 +2176,6 @@ bool CG320::GetWhiteListSN()
 
             lpdata = GetRespond(m_busfd, 11 + 8*num_of_data, m_dl_config.m_delay_time_1);
 
-            printf("debug print~\n");
-            getchar();
             // get time
             current_time = time(NULL);
             m_st_time = localtime(&current_time);
@@ -2084,6 +2257,8 @@ bool CG320::ClearWhiteList()
 
     int err = 0;
     byte *lpdata = NULL;
+    struct tm *log_time;
+    time_t current_time = 0;
 
     unsigned char szClearWL[]={0x01, 0x40, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     MakeReadDataCRC(szClearWL,15);
@@ -2093,30 +2268,28 @@ bool CG320::ClearWhiteList()
     waitAddr = 0x01;
     waitFCode = 0x40;
 
-    while ( err < 3 ) {
+    while ( err < 2 ) {
         memcpy(txbuffer, szClearWL, 15);
         MStartTX(m_busfd);
-        usleep(1000000); // 1s
+        //usleep(1000000); // 1s
 
-        if ( err == 0 )
-            lpdata = GetRespond(m_busfd, 14, 100000); // 0.1s
-        else if ( err == 1 )
-            lpdata = GetRespond(m_busfd, 14, 500000); // 0.5s
-        else
-            lpdata = GetRespond(m_busfd, 14, 1000000); // 1s
+        current_time = time(NULL);
+        log_time = localtime(&current_time);
+
+        lpdata = GetRespond(m_busfd, 14, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### ClearWhiteList OK ####\n");
-            SaveLog((char *)"DataLogger ClearWhiteList() : OK", m_st_time);
+            SaveLog((char *)"DataLogger ClearWhiteList() : OK", log_time);
             // get 0x01 0x40 0x0E 0x00 0x00 0x00 0x00 0x00 0xFF 0x00 0x00 0x00 crcH crcL
             return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### ClearWhiteList CRC Error ####\n");
-                SaveLog((char *)"DataLogger ClearWhiteList() : CRC Error", m_st_time);
+                SaveLog((char *)"DataLogger ClearWhiteList() : CRC Error", log_time);
             }
             else {
                 printf("#### ClearWhiteList No Response ####\n");
-                SaveLog((char *)"DataLogger ClearWhiteList() : No Response", m_st_time);
+                SaveLog((char *)"DataLogger ClearWhiteList() : No Response", log_time);
             }
             err++;
         }
@@ -5489,6 +5662,10 @@ bool CG320::WriteLogXML(int index)
                 strcat(m_log_buf, buf);
 
                 sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
+                strcat(m_log_buf, buf);
+
+                // FW ver
+                sprintf(buf, "<Ver_MI>%d</Ver_MI>", arySNobj[index].m_FWver);
                 strcat(m_log_buf, buf);
 
                 // set error code

@@ -79,6 +79,9 @@ protected:
     bool    CheckConfig();
     bool    RunTODOList();
     bool    RunWhiteListChanged();
+    bool    RunRejoin();
+    bool    RunClearAll();
+    bool    SendRejoinNetwork();
 
     int     GetWhiteListCount();
     bool    DumpWhiteListCount(unsigned char *buf);
