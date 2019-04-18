@@ -340,9 +340,10 @@ int CG320::DoReRegister(time_t loop_time)
 
             if ( result ) {
                 ret++;
-                if ( m_plcver == 3 )
-                    GetMiIDInfoV3(i); // MI PLC V3.0
-                else {
+                if ( m_plcver == 3 ) {
+                    if ( arySNobj[i].m_FWver == 0 )
+                        GetMiIDInfoV3(i); // MI PLC V3.0
+                } else {
                     if ( arySNobj[i].m_Device >= 0x0A ) // Hybrid
                         SetHybridRTCData(i);
                     else
@@ -3199,7 +3200,7 @@ bool CG320::ReRegister(int index)
         //arySNobj[index].m_Device = -1; // device not change
         arySNobj[index].m_Err = 0;
         arySNobj[index].m_state = 1;
-        arySNobj[index].m_ok_time = (NULL);
+        arySNobj[index].m_ok_time = time(NULL);
         return true;
     }
     else {
@@ -3270,7 +3271,7 @@ bool CG320::ReRegisterV3(int index)
 
             arySNobj[index].m_Err = 0;
             arySNobj[index].m_state = 1;
-            //arySNobj[index].m_ok_time = time(NULL);
+            arySNobj[index].m_ok_time = time(NULL);
             return true;
         } else {
             if ( have_respond == true ) {
