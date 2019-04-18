@@ -40,3 +40,14 @@ else
 	echo "SWupdate.exe alive"
 fi
 
+sleep 30
+
+ps | grep FWupdate.exe | grep -v grep
+if [ $? != 0 ]
+then
+	echo "run FWupdate.exe"
+	/usr/home/FWupdate.exe &
+else
+	echo "FWupdate.exe alive"
+fi
+
