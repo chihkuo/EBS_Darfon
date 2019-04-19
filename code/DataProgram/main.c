@@ -459,7 +459,7 @@ int CheckWhiteListUploaded()
 
         return 4;
     }
-    sscanf(index, "<UpdheartbeattimeResult>%02d</UpdheartbeattimeResult>", &ret);
+    sscanf(index, "<CheckWhiteListUploadedResult>%02d</CheckWhiteListUploadedResult>", &ret);
     printf("ret = %02d\n", ret);
     if ( ret == 0 ) {
         check_milist = 0;
@@ -1251,13 +1251,15 @@ int Updheartbeattime(time_t time)
     }
     memset(buf, 0, 512);
     fputs(SOAP_HEAD, fd);
-    sprintf(buf, "\t\t<Updheartbeattime xmlns=\"http://tempuri.org/\">\n");
+    sprintf(buf, "\t\t<UpdheartbeattimeV2 xmlns=\"http://tempuri.org/\">\n");
     fputs(buf, fd);
     sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
     fputs(buf, fd);
     sprintf(buf, "\t\t\t<hearttime>%s</hearttime>\n", timebuf);
     fputs(buf, fd);
-    sprintf(buf, "\t\t</Updheartbeattime>\n");
+    sprintf(buf, "\t\t\t<Ver>%s</Ver>\n", VERSION);
+    fputs(buf, fd);
+    sprintf(buf, "\t\t</UpdheartbeattimeV2>\n");
     fputs(buf, fd);
     fputs(SOAP_TAIL, fd);
     fclose(fd);
@@ -1285,21 +1287,21 @@ int Updheartbeattime(time_t time)
     //printf("/tmp/Updheartbeattime : \n%s\n", buf);
 
     // check result
-    index = strstr(buf, "<UpdheartbeattimeResult>");
+    index = strstr(buf, "<UpdheartbeattimeV2Result>");
     if ( index == NULL ) {
-        printf("#### Updheartbeattime() <UpdheartbeattimeResult> not found ####\n");
-        SaveLog("DataProgram Updheartbeattime() : <UpdheartbeattimeResult> not found", st_time);
-        index = strstr(buf, "<UpdheartbeattimeResult />");
+        printf("#### Updheartbeattime() <UpdheartbeattimeV2Result> not found ####\n");
+        SaveLog("DataProgram Updheartbeattime() : <UpdheartbeattimeV2Result> not found", st_time);
+        index = strstr(buf, "<UpdheartbeattimeV2Result />");
         if ( index == NULL )
-            printf("#### Updheartbeattime() <UpdheartbeattimeResult /> not found ####\n");
+            printf("#### Updheartbeattime() <UpdheartbeattimeV2Result /> not found ####\n");
         else {
-            printf("<UpdheartbeattimeResult /> find, result data not exist!\n");
+            printf("<UpdheartbeattimeV2Result /> find, result data not exist!\n");
             SaveLog("DataProgram Updheartbeattime() : result data not exist", st_time);
         }
 
         return 4;
     }
-    sscanf(index, "<UpdheartbeattimeResult>%02d</UpdheartbeattimeResult>", &ret);
+    sscanf(index, "<UpdheartbeattimeV2Result>%02d</UpdheartbeattimeV2Result>", &ret);
     printf("ret = %02d\n", ret);
     if ( ret == 0 ) {
         printf("Updheartbeattime update OK\n");
