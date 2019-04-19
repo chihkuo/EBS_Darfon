@@ -176,10 +176,10 @@ typedef struct stHybrid_Realtime_Info {
     int PV2_Power; //Ppv_B;
     int Load_Voltage; //Vac_A;
     int Load_Current; //Iac_A;
-    int Load_Power; //Pac_A;
+    short Load_Power; //Pac_A; //+-
     int Grid_Voltage; //VGrid_A;
     int Grid_Current; //IGrid_A;
-    int Grid_Power; //PGrid_A;
+    short Grid_Power; //PGrid_A; //+-
     int Battery_Voltage; //VBattery;
     int Battery_Current; //IBattery;
     int Bus_Voltage; //Vbus;
@@ -211,6 +211,7 @@ typedef struct stHybrid_Realtime_Info {
     int Battery_SOC;
     int Invert_Frequency;
     int Grid_Frequency;
+    short PBat; //+-
 }HB_RT_INFO;
 
 typedef struct stHybrid_PV_Inv_Error_COD1 {
