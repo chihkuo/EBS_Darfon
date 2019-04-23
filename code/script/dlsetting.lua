@@ -33,6 +33,16 @@ local cleartx_delay = sms:option(Value, "cleartx_delay", translate("Clear TX del
 local shelf_life = sms:option(Value, "shelf_life", translate("Data shelf life (Day.)"))
 local reboot_time = sms:option(Value, "reboot_time", translate("Reboot time (Day.)"))
 
+local update_FW_value = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}
+local update_FW_start = sms:option(ListValue, "update_FW_start", translate("Update FW start time (clock)"))
+for i = 1,#update_FW_value do
+	update_FW_start:value(update_FW_value[i])
+end
+local update_FW_stop = sms:option(ListValue, "update_FW_stop", translate("Update FW stop time (clock)"))
+for i = 1,#update_FW_value do
+	update_FW_stop:value(update_FW_value[i])
+end
+
 -- COM port setting
 local comport = map:section(TypedSection, "comport", "COM Port setting")
 comport.addremove = false

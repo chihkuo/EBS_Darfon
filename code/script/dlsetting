@@ -12,6 +12,8 @@ config sms
 	option cleartx_delay '200000'
 	option shelf_life '30'
 	option reboot_time '0'
+	option update_FW_start '7'
+	option update_FW_stop '19'
 
 config comport
 	option com1_data_bits '8'

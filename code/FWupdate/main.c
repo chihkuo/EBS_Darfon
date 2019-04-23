@@ -21,14 +21,32 @@
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
 //#define UPDATE_FILE         "/tmp/fwfile"
 //#define UPDATE_LIST         "/tmp/fwulist"
-#define MIFW_FILE           "/tmp/mifwfile"
-#define MIFW_LIST           "/tmp/mifwlist"
-#define MIFW_BFILE          "/tmp/mifwbroadcastfile"
-#define MIFW_BLIST          "/tmp/mifwbroadcastlist"
-#define HBFW_FILE           "/tmp/hybridfwfile"
-#define HBFW_LIST           "/tmp/hybridfwlist"
-#define PLC_FILE            "/tmp/plcfile"
-#define PLCM_FILE           "/tmp/plcmfile"
+//#define MIFW_FILE           "/tmp/mifwfile"
+//#define MIFW_LIST           "/tmp/mifwlist"
+//#define MIFW_BFILE          "/tmp/mifwbroadcastfile"
+//#define MIFW_BLIST          "/tmp/mifwbroadcastlist"
+//#define HBFW_FILE           "/tmp/hybridfwfile"
+//#define HBFW_LIST           "/tmp/hybridfwlist"
+//#define PLC_FILE            "/tmp/plcfile"
+//#define PLCM_FILE           "/tmp/plcmfile"
+
+#define TMP_MIFW_FILE           "/tmp/mifwfile"
+#define TMP_MIFW_LIST           "/tmp/mifwlist"
+#define TMP_MIFW_BFILE          "/tmp/mifwbroadcastfile"
+#define TMP_MIFW_BLIST          "/tmp/mifwbroadcastlist"
+#define TMP_HBFW_FILE           "/tmp/hybridfwfile"
+#define TMP_HBFW_LIST           "/tmp/hybridfwlist"
+#define TMP_PLC_FILE            "/tmp/plcfile"
+#define TMP_PLCM_FILE           "/tmp/plcmfile"
+
+#define USB_MIFW_FILE           "/mnt/mifwfile"
+#define USB_MIFW_LIST           "/mnt/mifwlist"
+#define USB_MIFW_BFILE          "/mnt/mifwbroadcastfile"
+#define USB_MIFW_BLIST          "/mnt/mifwbroadcastlist"
+#define USB_HBFW_FILE           "/mnt/hybridfwfile"
+#define USB_HBFW_LIST           "/mnt/hybridfwlist"
+#define USB_PLC_FILE            "/mnt/plcfile"
+#define USB_PLCM_FILE           "/mnt/plcmfile"
 
 #define SYSLOG_PATH         "/tmp/test/SYSLOG"
 #define MAX_DATA_SIZE       144
@@ -71,8 +89,8 @@ int WriteDataV2(int slaveid, unsigned char *fwdata, int datasize);
 int WriteHBData(int slaveid, unsigned char *fwdata, int datasize);
 int WriteDataV3(char *sn, unsigned char *fwdata, int datasize);
 int ReadV3Ver(char *sn, unsigned char *fwver);
-int GetFWData(char *file_path);
-int GetHbFWData();
+int GetFWData(char *file_path, char *list_path);
+int GetHbFWData(char *file_path, char *list_path);
 int stopProcess();
 int runProcess();
 int GetPort(char *file_path);
@@ -95,10 +113,13 @@ int update_port = 0;
 int update_SW_time = 0;
 int delay_time_1 = 0;
 int delay_time_2 = 0;
+int update_FW_start = 0;
+int update_FW_stop = 0;
 char g_CURL_CMD[256] = {0};
 char g_SYSLOG_PATH[64] = {0};
 char g_UPDATE_PATH[64] = {0};
 
+int gisusb = 0;
 int gbaud = 0;
 int gdatabits = 0;
 char gparity[8] = {0};
@@ -188,6 +209,28 @@ void getConfig()
     sscanf(buf, "%d", &update_SW_time);
     printf("Update SW time = %d\n", update_SW_time);
 
+    // get update FW start
+    fd = popen("uci get dlsetting.@sms[0].update_FW_start", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+        return;
+    }
+    fgets(buf, 32, fd);
+    pclose(fd);
+    sscanf(buf, "%d", &update_FW_start);
+    printf("Update FW start = %d\n", update_FW_start);
+
+    // get update FW stop
+    fd = popen("uci get dlsetting.@sms[0].update_FW_stop", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+        return;
+    }
+    fgets(buf, 32, fd);
+    pclose(fd);
+    sscanf(buf, "%d", &update_FW_stop);
+    printf("Update FW stop = %d\n", update_FW_stop);
+
     // get delay_time_1
     fd = popen("uci get dlsetting.@sms[0].delay_time_1", "r");
     if ( fd == NULL ) {
@@ -232,16 +275,22 @@ void setPath()
         strcat(g_SYSLOG_PATH, "/SYSLOG");
         //strcpy(g_UPDATE_PATH, USB_PATH);
         //strcat(g_UPDATE_PATH, "/test.hex");
+
+        gisusb = 1;
     }
     else if ( stat(SDCARD_PATH, &st) == 0 ) {
         strcpy(g_SYSLOG_PATH, SDCARD_PATH);
         strcat(g_SYSLOG_PATH, "/SYSLOG");
         //strcpy(g_UPDATE_PATH, SDCARD_PATH);
         //strcat(g_UPDATE_PATH, "/test.hex");
+
+        gisusb = 0;
     }
     else {
         strcpy(g_SYSLOG_PATH, SYSLOG_PATH);
         //strcpy(g_UPDATE_PATH, UPDATE_FILE);
+
+        gisusb = 0;
     }
 
     //strcpy(g_UPDATE_PATH, UPDATE_FILE);
@@ -254,9 +303,9 @@ void setPath()
 
 int QryDeviceFWUpdate()
 {
-    char buf[512] = {0};
+    char buf[512] = {0}, pre_url[128] = {0};
     FILE *fd = NULL, *miufd = NULL, *mibfd = NULL, *hbufd = NULL;
-    int size = 0, inlen = 0, outlen = 0;
+    int size = 0, inlen = 0, outlen = 0, download = 1;
     char *data = NULL, *start_index = NULL, *end_index = NULL;
     unsigned char *decode_data = NULL;
     struct stat mystat;
@@ -366,6 +415,15 @@ int QryDeviceFWUpdate()
             break;
         memset(myupdate.FWURL, 0, 128);
         strncpy(myupdate.FWURL, start_index+7, end_index-(start_index+7));
+        if ( strcmp(myupdate.FWURL, pre_url) == 0 ) {
+            printf("The same FWURL, skip download!\n");
+            download = 0;
+        } else {
+            download = 1;
+            memset(pre_url, 0, 128);
+            strcpy(pre_url, myupdate.FWURL);
+            printf("Save pre_url = %s\n", pre_url);
+        }
 
         // set SN
         start_index = strstr(start_index, "<sn>");
@@ -385,59 +443,101 @@ int QryDeviceFWUpdate()
         if ( strcmp(myupdate.UpdateTarget, "MI") == 0 ) {
             if ( strcmp(myupdate.UpdateType, "Unicast") == 0 ) {
                 // open list file
-                if ( miufd == NULL )
-                    miufd = fopen(MIFW_LIST, "wb");
+                if ( miufd == NULL ) {
+                    if ( gisusb ) {
+                        // usb
+                        if ( stat(USB_MIFW_LIST, &mystat) == 0 )
+                            miufd = fopen(USB_MIFW_LIST, "ab");
+                        else
+                            miufd = fopen(USB_MIFW_LIST, "wb");
+                    } else {
+                        // tmp
+                        if ( stat(TMP_MIFW_LIST, &mystat) == 0 )
+                            miufd = fopen(TMP_MIFW_LIST, "ab");
+                        else
+                            miufd = fopen(TMP_MIFW_LIST, "wb");
+                    }
+                }
                 // write sn to file
                 fputs(myupdate.SN, miufd);
                 fputc('\n', miufd);
                 // download fw file
-                if ( stat(MIFW_FILE, &mystat) != 0 ) { // file not exist
+                if ( download ) {
                     if ( strlen(myupdate.FWURL) ) {
                         current_time = time(NULL);
                         st_time = localtime(&current_time);
-                        sprintf(buf, "curl -o %s %s", MIFW_FILE, myupdate.FWURL);
+                        if ( gisusb )
+                            sprintf(buf, "curl -o %s %s", USB_MIFW_FILE, myupdate.FWURL);
+                        else
+                            sprintf(buf, "curl -o %s %s", TMP_MIFW_FILE, myupdate.FWURL);
                         if ( !system(buf) ) {
                             printf("Download %s OK\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, MIFW_FILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, USB_MIFW_FILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, TMP_MIFW_FILE);
                             SaveLog(buf, st_time);
                         }
                         else {
                             printf("Download %s Fail\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, MIFW_FILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, USB_MIFW_FILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, TMP_MIFW_FILE);
                             SaveLog(buf, st_time);
                         }
                     } else
                         printf("FWURL empty!\n");
-                } else
-                    printf("%s exist!\n", MIFW_FILE);
+                }
 
             } else if ( strcmp(myupdate.UpdateType, "Broadcast") == 0 ) {
                 // open list file
-                if ( mibfd == NULL )
-                    mibfd = fopen(MIFW_BLIST, "wb");
+                if ( mibfd == NULL ) {
+                    if ( gisusb ) {
+                        // usb
+                        if ( stat(USB_MIFW_BLIST, &mystat) == 0 )
+                            mibfd = fopen(USB_MIFW_BLIST, "ab");
+                        else
+                            mibfd = fopen(USB_MIFW_BLIST, "wb");
+                    } else {
+                        // tmp
+                        if ( stat(TMP_MIFW_BLIST, &mystat) == 0 )
+                            mibfd = fopen(TMP_MIFW_BLIST, "ab");
+                        else
+                            mibfd = fopen(TMP_MIFW_BLIST, "wb");
+                    }
+                }
                 // write sn to file
                 fputs("MIALL", mibfd);
                 fputc('\n', mibfd);
                 // download fw file
-                if ( stat(MIFW_BFILE, &mystat) != 0 ) { // file not exist
+                if ( download ) {
                     if ( strlen(myupdate.FWURL) ) {
                         current_time = time(NULL);
                         st_time = localtime(&current_time);
-                        sprintf(buf, "curl -o %s %s", MIFW_BFILE, myupdate.FWURL);
+                        if ( gisusb )
+                            sprintf(buf, "curl -o %s %s", USB_MIFW_BFILE, myupdate.FWURL);
+                        else
+                            sprintf(buf, "curl -o %s %s", TMP_MIFW_BFILE, myupdate.FWURL);
                         if ( !system(buf) ) {
                             printf("Download %s OK\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, MIFW_BFILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, USB_MIFW_BFILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, TMP_MIFW_BFILE);
                             SaveLog(buf, st_time);
                         }
                         else {
                             printf("Download %s Fail\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, MIFW_BFILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, USB_MIFW_BFILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, TMP_MIFW_BFILE);
                             SaveLog(buf, st_time);
                         }
                     } else
                         printf("FWURL empty!\n");
-                } else
-                    printf("%s exist!\n", MIFW_BFILE);
+                }
 
             } else {
                 printf("UpdateType error!\n");
@@ -446,31 +546,53 @@ int QryDeviceFWUpdate()
         } else if ( strcmp(myupdate.UpdateTarget, "Hybrid") == 0 ) {
             if ( strcmp(myupdate.UpdateType, "Unicast") == 0 ) {
                 // open list file
-                if ( hbufd == NULL )
-                    hbufd = fopen(HBFW_LIST, "wb");
+                if ( hbufd == NULL ) {
+                    if ( gisusb ) {
+                        // usb
+                        if ( stat(USB_HBFW_LIST, &mystat) == 0 )
+                            hbufd = fopen(USB_HBFW_LIST, "ab");
+                        else
+                            hbufd = fopen(USB_HBFW_LIST, "wb");
+                    } else {
+                        // tmp
+                        if ( stat(TMP_HBFW_LIST, &mystat) == 0 )
+                            hbufd = fopen(TMP_HBFW_LIST, "ab");
+                        else
+                            hbufd = fopen(TMP_HBFW_LIST, "wb");
+                    }
+                }
                 // write sn to file
                 fputs(myupdate.SN, hbufd);
                 fputc('\n', hbufd);
                 // download fw file
-                if ( stat(HBFW_FILE, &mystat) != 0 ) { // file not exist
+                if ( download ) {
                     if ( strlen(myupdate.FWURL) ) {
                         current_time = time(NULL);
                         st_time = localtime(&current_time);
-                        sprintf(buf, "curl -o %s %s", HBFW_FILE, myupdate.FWURL);
+                        if ( gisusb )
+                            sprintf(buf, "curl -o %s %s", USB_HBFW_FILE, myupdate.FWURL);
+                        else
+                            sprintf(buf, "curl -o %s %s", TMP_HBFW_FILE, myupdate.FWURL);
                         if ( !system(buf) ) {
                             printf("Download %s OK\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, HBFW_FILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, USB_HBFW_FILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, TMP_HBFW_FILE);
                             SaveLog(buf, st_time);
                         }
                         else {
                             printf("Download %s Fail\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, HBFW_FILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, USB_HBFW_FILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, TMP_HBFW_FILE);
                             SaveLog(buf, st_time);
                         }
                     } else
                         printf("FWURL empty!\n");
-                } else
-                    printf("%s exist!\n", HBFW_FILE);
+                }
+
             } else {
                 printf("UpdateType error!\n");
             }
@@ -478,25 +600,33 @@ int QryDeviceFWUpdate()
         } else if ( strcmp(myupdate.UpdateTarget, "PLC") == 0 ) {
             if ( strcmp(myupdate.UpdateType, "Unicast") == 0 ) {
                 // download fw file
-                if ( stat(PLC_FILE, &mystat) != 0 ) { // file not exist
+                if ( download ) {
                     if ( strlen(myupdate.FWURL) ) {
                         current_time = time(NULL);
                         st_time = localtime(&current_time);
-                        sprintf(buf, "curl -o %s %s", PLC_FILE, myupdate.FWURL);
+                        if ( gisusb )
+                            sprintf(buf, "curl -o %s %s", USB_PLC_FILE, myupdate.FWURL);
+                        else
+                            sprintf(buf, "curl -o %s %s", TMP_PLC_FILE, myupdate.FWURL);
                         if ( !system(buf) ) {
                             printf("Download %s OK\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, PLC_FILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, USB_PLC_FILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, TMP_PLC_FILE);
                             SaveLog(buf, st_time);
                         }
                         else {
                             printf("Download %s Fail\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, PLC_FILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, USB_PLC_FILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, TMP_PLC_FILE);
                             SaveLog(buf, st_time);
                         }
-                    } else
-                        printf("FWURL empty!\n");
-                } else
-                    printf("%s exist!\n", PLC_FILE);
+                    }
+                }
+
             } else {
                 printf("UpdateType error!\n");
             }
@@ -504,28 +634,38 @@ int QryDeviceFWUpdate()
         } else if ( strcmp(myupdate.UpdateTarget, "PLC Module") == 0 ) {
             if ( strcmp(myupdate.UpdateType, "Broadcast") == 0 ) {
                 // download fw file
-                if ( stat(PLCM_FILE, &mystat) != 0 ) { // file not exist
+                if ( download ) {
                     if ( strlen(myupdate.FWURL) ) {
                         current_time = time(NULL);
                         st_time = localtime(&current_time);
-                        sprintf(buf, "curl -o %s %s", PLCM_FILE, myupdate.FWURL);
+                        if ( gisusb )
+                            sprintf(buf, "curl -o %s %s", USB_PLCM_FILE, myupdate.FWURL);
+                        else
+                            sprintf(buf, "curl -o %s %s", TMP_PLCM_FILE, myupdate.FWURL);
                         if ( !system(buf) ) {
                             printf("Download %s OK\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, PLCM_FILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, USB_PLCM_FILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, TMP_PLCM_FILE);
                             SaveLog(buf, st_time);
                         }
                         else {
                             printf("Download %s Fail\n", myupdate.FWURL);
-                            sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, PLCM_FILE);
+                            if ( gisusb )
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, USB_PLCM_FILE);
+                            else
+                                sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s Fail", myupdate.FWURL, TMP_PLCM_FILE);
                             SaveLog(buf, st_time);
                         }
                     } else
                         printf("FWURL empty!\n");
-                } else
-                    printf("%s exist!\n", PLCM_FILE);
+                }
+
             } else {
                 printf("UpdateType error!\n");
             }
+
         } else {
             printf("UpdateTarget error!\n");
         }
@@ -1666,7 +1806,7 @@ int ReadV3Ver(char *sn, unsigned char *fwver)
     return ret;
 }
 
-int GetFWData(char *file_path)
+int GetFWData(char *file_path, char *list_path)
 {
     unsigned char *ucbuffer = NULL;
     char read_buf[256] = {0}, strtmp[1024] = {0};
@@ -1674,7 +1814,7 @@ int GetFWData(char *file_path)
     FILE *pfile_fd = NULL;
     int major = 0, minor = 0, patchh = 0, patchl = 0, datasize = 0;
     unsigned char ucfwver[4] = {0};
-    int index = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, start = 0, end = 0, i = 0, count = 0, dowritedata = 0, retver = -1, retdata = -1;
+    int index = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, start = 0, end = 0, i = 0, count = 0, dowritedata = 0, retver = -1, retdata = -1, clearsn = 0;
 
     time_t      current_time = 0;
     struct tm   *st_time = NULL;
@@ -1814,6 +1954,26 @@ int GetFWData(char *file_path)
         printf("gsncount = %d\n", gsncount);
         // fw update loop
         for (count = 0; count < gsncount; count++) {
+            printf("count = %d\n", count);
+            // check time
+            while (1) {
+                current_time = time(NULL);
+                st_time = localtime(&current_time);
+
+                if ( update_FW_start == update_FW_stop )
+                    break;
+                else if ( update_FW_start < update_FW_stop ) {
+                    if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
+                        break;
+                } else {
+                    if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
+                        break;
+                }
+
+                printf("sleep 60 sec.\n");
+                usleep(60000000);
+            }
+
             // protocol V2.0 part
             if ( gprotocolver == 2 ) {
                 // register at first
@@ -1871,13 +2031,58 @@ int GetFWData(char *file_path)
                     retdata = WriteDataV3(snlist[count].SN, ucbuffer, datasize);
                 }
                 if ( !retdata ) {
-                    printf("sn[%d] write fw data OK\n", count);
+                    printf("sn[%d] = %s write fw data OK\n", count, snlist[count].SN);
+                    sprintf(strtmp, "FWupdate GetFWData() : SN %s write data OK", snlist[count].SN);
+                    SaveLog(strtmp, st_time);
                     //if ( gprotocolver == 3 )
                     //    ReadV3Ver(snlist[count].SN, ucfwver);
-                } else
-                    printf("sn[%d] write fw data Fail\n", count);
+                    // delete the SN from list
+                    memset(strtmp, 0x00, 1024);
+                    sprintf(strtmp, "sed -i '/%s/d' %s; sync;", snlist[count].SN, list_path);
+                    system(strtmp);
+                } else {
+                    printf("sn[%d] = %s write fw data Fail\n", count, snlist[count].SN);
+                    sprintf(strtmp, "FWupdate GetFWData() : SN %s write data FAIL", snlist[count].SN);
+                    SaveLog(strtmp, st_time);
+                    // delete the SN from list if stop time is not up
+                    current_time = time(NULL);
+                    st_time = localtime(&current_time);
+                    clearsn = 0;
+                    if ( update_FW_start == update_FW_stop )
+                        clearsn = 1;
+                    else if ( update_FW_start < update_FW_stop ) {
+                        if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
+                            clearsn = 1;
+                    } else {
+                        if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
+                            clearsn = 1;
+                    }
+                    if ( clearsn ) {
+                        memset(strtmp, 0x00, 1024);
+                        sprintf(strtmp, "sed -i '/%s/d' %s; sync;", snlist[count].SN, list_path);
+                        system(strtmp);
+                    }
+                }
             } else {
-                printf("sn[%d] don't write data\n", count);
+                printf("WriteVer Fail, sn[%d] = %s don't write data\n", count, snlist[count].SN);
+                // delete the SN from list if stop time is not up
+                current_time = time(NULL);
+                st_time = localtime(&current_time);
+                clearsn = 0;
+                if ( update_FW_start == update_FW_stop )
+                    clearsn = 1;
+                else if ( update_FW_start < update_FW_stop ) {
+                    if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
+                        clearsn = 1;
+                } else {
+                    if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
+                        clearsn = 1;
+                }
+                if ( clearsn ) {
+                    memset(strtmp, 0x00, 1024);
+                    sprintf(strtmp, "sed -i '/%s/d' %s; sync;", snlist[count].SN, list_path);
+                    system(strtmp);
+                }
             }
 
             // some info
@@ -1896,10 +2101,10 @@ int GetFWData(char *file_path)
     return 0;
 }
 
-int GetHbFWData()
+int GetHbFWData(char *file_path, char *list_path)
 {
     unsigned char *ucbuffer = NULL;
-    int i = 0, byte_count = 0, addr = 0, recoed_type = 0, tmp = 0, next_addr = 0, size = 0, index = 0, retval = -1, count = 0, index_tmp = 0;
+    int i = 0, byte_count = 0, addr = 0, recoed_type = 0, tmp = 0, next_addr = 0, size = 0, index = 0, retval = -1, count = 0, index_tmp = 0, clearsn = 0;
     unsigned char hi_addr_hi = 0, hi_addr_lo = 0, lo_addr_hi = 0, lo_addr_lo = 0;
     unsigned short checksum = 0;
     char read_buf[256] = {0}, strtmp[1024] = {0};
@@ -1914,10 +2119,10 @@ int GetHbFWData()
 
     printf("######### run GetHbFWData() #########\n");
 
-    pfile_fd = fopen(HBFW_FILE, "r");
+    pfile_fd = fopen(file_path, "r");
     if ( pfile_fd == NULL ) {
-        printf("#### Open /tmp/hybridfwfile ####\n");
-        SaveLog((char *)"FWupdate GetHbFWData() : Open /tmp/hybridfwfile Fail", st_time);
+        printf("#### Open %s FAIL ####\n", file_path);
+        SaveLog((char *)"FWupdate GetHbFWData() : Open fw file Fail", st_time);
         return 1;
     }
 
@@ -2190,41 +2395,121 @@ int GetHbFWData()
     system("sync");
     OpenLog(g_SYSLOG_PATH, st_time);
 
-    // register part
-    // remove register
-    if ( gcomportfd > 0 ) {
-        RemoveRegisterQuery(gcomportfd, 0);
-        CleanRespond();
-        usleep(500000);
-        RemoveRegisterQuery(gcomportfd, 0);
-        CleanRespond();
-        usleep(500000);
-        RemoveRegisterQuery(gcomportfd, 0);
-        CleanRespond();
-        usleep(500000);
-    }
-    // register
-    retval = RunRegister(snlist[0].SN);
-    if ( retval ) {
-        // fail
-        printf("RunRegister fail retval = %d\n", retval);
-        free(ucbuffer);
-        return 6;
-    }
-    // register OK, get slave id gV2id
-    printf("RunRegister return OK, get gV2id = %d\n", gV2id);
+    if ( gsncount ) {
+        printf("==================== FW update start ====================\n");
+        printf("gsncount = %d\n", gsncount);
+        // fw update loop
+        for (count = 0; count < gsncount; count++) {
+            printf("count = %d\n", count);
+            // check time
+            while (1) {
+                current_time = time(NULL);
+                st_time = localtime(&current_time);
 
-    // send file header & check sum & byte count
-    retval = WriteHBData(gV2id, ucbuffer, index);
+                if ( update_FW_start == update_FW_stop )
+                    break;
+                else if ( update_FW_start < update_FW_stop ) {
+                    if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
+                        break;
+                } else {
+                    if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
+                        break;
+                }
+
+                printf("sleep 60 sec.\n");
+                usleep(60000000);
+            }
+
+            // register part
+            // remove register
+            if ( gcomportfd > 0 ) {
+                RemoveRegisterQuery(gcomportfd, 0);
+                CleanRespond();
+                usleep(500000);
+                RemoveRegisterQuery(gcomportfd, 0);
+                CleanRespond();
+                usleep(500000);
+                RemoveRegisterQuery(gcomportfd, 0);
+                CleanRespond();
+                usleep(500000);
+            }
+            // register
+            retval = RunRegister(snlist[count].SN);
+            if ( retval ) {
+                // fail
+                printf("RunRegister fail retval = %d\n", retval);
+                //free(ucbuffer);
+                //return 6;
+                // delete the SN from list if stop time is not up
+                current_time = time(NULL);
+                st_time = localtime(&current_time);
+                clearsn = 0;
+                if ( update_FW_start == update_FW_stop )
+                    clearsn = 1;
+                else if ( update_FW_start < update_FW_stop ) {
+                    if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
+                        clearsn = 1;
+                } else {
+                    if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
+                        clearsn = 1;
+                }
+                if ( clearsn ) {
+                    memset(strtmp, 0x00, 1024);
+                    sprintf(strtmp, "sed -i '/%s/d' %s; sync;", snlist[count].SN, list_path);
+                    system(strtmp);
+                }
+
+            } else {
+                // register OK, get slave id gV2id
+                printf("RunRegister return OK, get gV2id = %d\n", gV2id);
+
+                // send file header & check sum & byte count
+                retval = WriteHBData(gV2id, ucbuffer, index);
+                if ( retval ) {
+                    // fail
+                    printf("sn[%d] = %s write fw data FAIL\n", count, snlist[count].SN);
+                    sprintf(strtmp, "FWupdate GetHbFWData() : SN %s write data FAIL", snlist[count].SN);
+                    SaveLog(strtmp, st_time);
+                    // delete the SN from list if stop time is not up
+                    current_time = time(NULL);
+                    st_time = localtime(&current_time);
+                    clearsn = 0;
+                    if ( update_FW_start == update_FW_stop )
+                        clearsn = 1;
+                    else if ( update_FW_start < update_FW_stop ) {
+                        if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
+                            clearsn = 1;
+                    } else {
+                        if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
+                            clearsn = 1;
+                    }
+                    if ( clearsn ) {
+                        memset(strtmp, 0x00, 1024);
+                        sprintf(strtmp, "sed -i '/%s/d' %s; sync;", snlist[count].SN, list_path);
+                        system(strtmp);
+                    }
+                } else {
+                    // ok
+                    printf("sn[%d] = %s write fw data OK\n", count, snlist[count].SN);
+                    sprintf(strtmp, "FWupdate GetHbFWData() : SN %s write data OK", snlist[count].SN);
+                    SaveLog(strtmp, st_time);
+                    // delete the SN from list
+                    memset(strtmp, 0x00, 1024);
+                    sprintf(strtmp, "sed -i '/%s/d' %s; sync;", snlist[count].SN, list_path);
+                    system(strtmp);
+                }
+            }
+        }
+    }
 
     free(ucbuffer);
 
     printf("######### GetHbFWData() end #########\n");
 
-    if ( !retval ) // ok
+    //if ( !retval ) // ok
         return 0;
-    else    // fail
-        return 7;
+    //else    // fail
+    //    return 7;
 }
 
 int stopProcess()
@@ -2411,7 +2696,7 @@ int GetSNList(char *list_path, int type)
 {
     FILE *pfile_fd = NULL;
     char buf[512] = {0};
-    int i = 0, j = 0;
+    int i = 0, j = 0, snexist = 0;
 
     time_t      current_time;
     struct tm   *st_time = NULL;
@@ -2442,19 +2727,35 @@ int GetSNList(char *list_path, int type)
             // get list
             while ( fgets(buf, 512, pfile_fd) != NULL ) {
                 //printf("buf = %s\n", buf);
-                strncpy(snlist[gsncount].SN, buf, 16);
-                gsncount++;
+                // check sn in list
+                snexist = 0;
+                for (i = 0; i < gsncount; i++) {
+                    if ( strstr(buf, snlist[i].SN) != NULL ) {
+                        // exist
+                        printf("sn = %s already in list!\n", buf);
+                        snexist = 1;
+                        break;
+                    }
+                }
+
+                if ( snexist )
+                    continue;
+                else {
+                    strncpy(snlist[gsncount].SN, buf, 16);
+                    gsncount++;
+                }
             }
             fclose(pfile_fd);
-        // type == 1, brocast, copy all sn if it is mi.
+        // type == 1, brocast, set sncount = 1, sn = 0000000000000000
         } else {
-            for (i = 0; i < gmicount; i++) {
+            /*for (i = 0; i < gmicount; i++) {
                 if ( milist[i].OtherType != 2 ) {
                     strcpy(snlist[j].SN, milist[i].SN);
                     j++;
                 }
-            }
-            gsncount = j;
+            }*/
+            gsncount = 1;
+            strcpy(snlist[j].SN, "0000000000000000");
         }
     }
 
@@ -2510,6 +2811,7 @@ int DoUpdate(char *file_path, char *list_path, int type)
     char buf[512] = {0}, strtmp[512] = {0};
     char FILENAME[64] = {0};
     int comport = 0, ret = 0, index = -1;
+    struct stat listst;
 
     time_t      current_time;
     struct tm   *st_time = NULL;
@@ -2578,7 +2880,6 @@ int DoUpdate(char *file_path, char *list_path, int type)
         }
         printf("update end, remove fw file.\n");
         sprintf(buf, "rm %s; sync; sync", file_path);
-        printf(buf);
         system(buf);
         return 0;
     }
@@ -2587,17 +2888,15 @@ int DoUpdate(char *file_path, char *list_path, int type)
         printf("gsncount = 0, exit DoUpdate.\n");
         printf("remove fw file.\n");
         sprintf(buf, "rm %s; sync; sync", file_path);
-        printf(buf);
         system(buf);
         printf("remove sn list.\n");
         sprintf(buf, "rm %s; sync; sync", list_path);
-        printf(buf);
         system(buf);
         return 0;
     }
 
-    // mi
-    if ( (strstr(file_path, MIFW_FILE) != NULL) || (strstr(file_path, MIFW_BFILE) != NULL) ) {
+    // mi unicast
+    if ( (strstr(file_path, USB_MIFW_FILE) != NULL) || (strstr(file_path, TMP_MIFW_FILE) != NULL) ) {
         // check version 2.0 or 3.0
         if ( gcomportfd > 0 ) {
             if ( CheckVer() ) {
@@ -2620,20 +2919,58 @@ int DoUpdate(char *file_path, char *list_path, int type)
         }
         printf("gprotocolver = %d\n", gprotocolver);
 
-        if ( gprotocolver )
-            GetFWData(file_path);
+        if ( gprotocolver ) {
+            printf("run GetFWData()\n");
+            GetFWData(file_path, list_path);
+            // check list status
+            if ( stat(list_path, &listst) == 0 ) {
+                if ( listst.st_size < 16 ) {
+                    printf("update end, remove fw file.\n");
+                    sprintf(buf, "rm %s; sync; sync", file_path);
+                    system(buf);
+                    printf("remove sn list.\n");
+                    sprintf(buf, "rm %s; sync; sync", list_path);
+                    system(buf);
+                }
+            }
+        }
+    // mi broadcast
+    } else if ( (strstr(file_path, USB_MIFW_BFILE) != NULL) || (strstr(file_path, TMP_MIFW_BFILE) != NULL) ) {
+        printf("run GetFWBCData()\n");
+        // GetFWBCData(file_path, list_path); // 0x50 & 0x51
+        printf("update end, remove fw file.\n");
+        sprintf(buf, "rm %s; sync; sync", file_path);
+        system(buf);
+        printf("remove sn list.\n");
+        sprintf(buf, "rm %s; sync; sync", list_path);
+        system(buf);
+        return 0;
     // hybrid
-    } else if ( strstr(file_path, HBFW_FILE) != NULL ) {
+    } else if ( (strstr(file_path, USB_HBFW_FILE) != NULL) || (strstr(file_path, TMP_HBFW_FILE) != NULL) ) {
         ret = CheckType(0, &index);
         if ( ret == 2 ) {
             printf("Check Hybrid, list index = %d\n", index);
-            GetHbFWData();
+            GetHbFWData(file_path, list_path);
+            // check list status
+            if ( stat(list_path, &listst) == 0 ) {
+                if ( listst.st_size < 16 ) {
+                    printf("update end, remove fw file.\n");
+                    sprintf(buf, "rm %s; sync; sync", file_path);
+                    system(buf);
+                    printf("remove sn list.\n");
+                    sprintf(buf, "rm %s; sync; sync", list_path);
+                    system(buf);
+                }
+            }
         }
     } else {
         printf("file_path = %s error.\n", file_path);
     }
 
-    printf("update end.\n");
+    // check sn list, empty then delete list
+    // list not exist, delete fw file
+
+/*    printf("update end.\n");
     printf("remove fw file.\n");
     sprintf(buf, "rm %s; sync; sync", file_path);
     printf(buf);
@@ -2642,7 +2979,7 @@ int DoUpdate(char *file_path, char *list_path, int type)
     sprintf(buf, "rm %s; sync; sync", list_path);
     printf(buf);
     system(buf);
-
+*/
 /*    // if only 1 device, check type (Hybrid?)
     if ( gsncount == 1 )
         ret = CheckType(0, &index);
@@ -2722,7 +3059,7 @@ int main(int argc, char* argv[])
     time_t  previous_time;
     time_t  current_time;
     struct tm   *st_time = NULL;
-    int counter, run_min, syslog_count, restart = 0;
+    int counter, run_min, syslog_count, doflag = 0, restart = 0;
     struct stat st;
     //int doUpdDLFWStatus = 0;
 
@@ -2779,7 +3116,7 @@ int main(int argc, char* argv[])
         if ( st_time->tm_min % update_SW_time == 0 ) {
             // if update file not exist
             //if ( stat(g_UPDATE_PATH, &st) ) { // not in /tmp
-                if ( stat(MIFW_FILE, &st) ) { // not in /tmp
+                //if ( stat(MIFW_FILE, &st) ) { // not in /tmp
                     previous_time = current_time;
                     printf("localtime : %4d/%02d/%02d %02d:%02d:%02d\n", 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
                     //printf("#### Debug : QryDeviceFWUpdate start time : %ld ####\n", previous_time);
@@ -2792,9 +3129,9 @@ int main(int argc, char* argv[])
                     counter = current_time - previous_time;
                     //printf("#### Debug : QryDeviceFWUpdate end time : %ld ####\n", current_time);
                     printf("#### Debug : QryDeviceFWUpdate span time : %d ####\n", counter);
-                }
-                else
-                    printf("%s exist!\n", MIFW_FILE);
+                //}
+                //else
+                //    printf("%s exist!\n", MIFW_FILE);
             //}
             //else
                 //printf("%s exist!\n", g_UPDATE_PATH);
@@ -2809,40 +3146,88 @@ int main(int argc, char* argv[])
         printf("localtime : %4d/%02d/%02d %02d:%02d:%02d\n", 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
         printf("##############################\n");
 
-        // check mi unicast fw
-        if ( stat(MIFW_FILE, &st) == 0 ) {
-            DoUpdate(MIFW_FILE, MIFW_LIST, 0);
-            restart = 1;
+        doflag = 0;
+        // check fw update time
+        if ( update_FW_start == update_FW_stop )
+            doflag = 1;
+        else if ( update_FW_start < update_FW_stop ) {
+            if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
+                doflag = 1;
+        } else { // update_FW_stop < update_FW_start, e.g. update_FW_start = 20, update_FW_stop = 8
+            if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
+                doflag = 1;
         }
 
-        // check mi broadcast fw
-        if ( stat(MIFW_BFILE, &st) == 0 ) {
-            DoUpdate(MIFW_BFILE, MIFW_BLIST, 1);
-            restart = 1;
-        }
+        if ( doflag ) {
+            printf("doflag = 1, fw update check start\n");
+            if ( gisusb ) {
+                // check mi unicast fw
+                if ( stat(USB_MIFW_FILE, &st) == 0 ) {
+                    DoUpdate(USB_MIFW_FILE, USB_MIFW_LIST, 0);
+                    restart = 1;
+                }
 
-        // check hybrid unicast fw
-        if ( stat(HBFW_FILE, &st) == 0 ) {
-            DoUpdate(HBFW_FILE, HBFW_LIST, 0);
-            restart = 1;
-        }
+                // check mi broadcast fw
+                if ( stat(USB_MIFW_BFILE, &st) == 0 ) {
+                    DoUpdate(USB_MIFW_BFILE, USB_MIFW_BLIST, 1);
+                    restart = 1;
+                }
 
-        // check plc unicast fw
-        if ( stat(PLC_FILE, &st) == 0 ) {
-            DoUpdate(PLC_FILE, NULL, 0);
-            restart = 1;
-        }
+                // check hybrid unicast fw
+                if ( stat(USB_HBFW_FILE, &st) == 0 ) {
+                    DoUpdate(USB_HBFW_FILE, USB_HBFW_LIST, 0);
+                    restart = 1;
+                }
 
-        // check plc module broadcast fw
-        if ( stat(PLCM_FILE, &st) == 0 ) {
-            DoUpdate(PLCM_FILE, NULL, 1);
-            restart = 1;
-        }
+                // check plc unicast fw
+                if ( stat(USB_PLC_FILE, &st) == 0 ) {
+                    DoUpdate(USB_PLC_FILE, NULL, 0);
+                    restart = 1;
+                }
 
-        if ( restart == 1 ) {
-            runProcess();
-            restart = 0;
-        }
+                // check plc module broadcast fw
+                if ( stat(USB_PLCM_FILE, &st) == 0 ) {
+                    DoUpdate(USB_PLCM_FILE, NULL, 1);
+                    restart = 1;
+                }
+            } else {
+                // check mi unicast fw
+                if ( stat(TMP_MIFW_FILE, &st) == 0 ) {
+                    DoUpdate(TMP_MIFW_FILE, TMP_MIFW_LIST, 0);
+                    restart = 1;
+                }
+
+                // check mi broadcast fw
+                if ( stat(TMP_MIFW_BFILE, &st) == 0 ) {
+                    DoUpdate(TMP_MIFW_BFILE, TMP_MIFW_BLIST, 1);
+                    restart = 1;
+                }
+
+                // check hybrid unicast fw
+                if ( stat(TMP_HBFW_FILE, &st) == 0 ) {
+                    DoUpdate(TMP_HBFW_FILE, TMP_HBFW_LIST, 0);
+                    restart = 1;
+                }
+
+                // check plc unicast fw
+                if ( stat(TMP_PLC_FILE, &st) == 0 ) {
+                    DoUpdate(TMP_PLC_FILE, NULL, 0);
+                    restart = 1;
+                }
+
+                // check plc module broadcast fw
+                if ( stat(TMP_PLCM_FILE, &st) == 0 ) {
+                    DoUpdate(TMP_PLCM_FILE, NULL, 1);
+                    restart = 1;
+                }
+            }
+
+            if ( restart == 1 ) {
+                runProcess();
+                restart = 0;
+            }
+        } else
+            printf("doflag = 0, nothing to do\n");
     }
     return 0;
 }
