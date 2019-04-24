@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# V2.2.4
+# V2.3.0
 # initial package dir
 USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial
@@ -8,33 +8,36 @@ PACKAGE=$USB_PATH/DL_initial
 # program
 DATALOG=dlg320.exe
 DATAPRG=DataProgram.exe
-DATASWU=SWupdate.exe
+#DATASWU=SWupdate.exe
 DATAFWU=FWupdate.exe
 
 # lua script
-SYSTEM=system.lua
-STAT=status.lua
-INDEX=index.lua
-NET=network.lua
-DLD=dldevice.lua
+#SYSTEM=system.lua
+#STAT=status.lua
+#INDEX=index.lua
+#NET=network.lua
+#DLD=dldevice.lua
 DLS=dlsetting.lua
-DLL=dllist.lua
+#DLL=dllist.lua
 
 # setting file
 ST=dlsetting
-DLIST=dllist
-MLIST=ModelList
-INI=G320.ini
+#DLIST=dllist
+#MLIST=ModelList
+#INI=G320.ini
 
 # boot script
 RDL=run_DL.sh
 RDLSW=run_DLSW.sh
 
-echo "DL initial script start~"
+echo "DL initial V2.3.0 script start~"
 
-echo "make dir"
-mkdir /usr/home
-chmod 755 /usr/home
+echo "Stop running progame"
+/etc/init.d/run_DL.sh stop
+
+#echo "make dir"
+#mkdir /usr/home
+#chmod 755 /usr/home
 
 echo "copy program"
 # program
@@ -42,31 +45,31 @@ cp $PACKAGE/$DATALOG /usr/home/
 chmod 755 /usr/home/$DATALOG
 cp $PACKAGE/$DATAPRG /usr/home/
 chmod 755 /usr/home/$DATAPRG
-cp $PACKAGE/$DATASWU /usr/home/
-chmod 755 /usr/home/$DATASWU
+#cp $PACKAGE/$DATASWU /usr/home/
+#chmod 755 /usr/home/$DATASWU
 cp $PACKAGE/$DATAFWU /usr/home/
 chmod 755 /usr/home/$DATAFWU
 
 
 echo "copy lua script"
 # lua script
-cp $PACKAGE/$SYSTEM /usr/lib/lua/luci/controller/admin/
-chmod 755 /usr/lib/lua/luci/controller/admin/$SYSTEM
-cp $PACKAGE/$STAT /usr/lib/lua/luci/controller/admin/
-chmod 755 /usr/lib/lua/luci/controller/admin/$STAT
-cp $PACKAGE/$INDEX /usr/lib/lua/luci/controller/admin/
-chmod 755 /usr/lib/lua/luci/controller/admin/$INDEX
-cp $PACKAGE/$NET /usr/lib/lua/luci/model/cbi/admin_network/
-chmod 755 /usr/lib/lua/luci/model/cbi/admin_network/$NET
-cp $PACKAGE/$DLD /usr/lib/lua/luci/model/cbi/admin_system/
-chmod 755 /usr/lib/lua/luci/model/cbi/admin_system/$DLD
+#cp $PACKAGE/$SYSTEM /usr/lib/lua/luci/controller/admin/
+#chmod 755 /usr/lib/lua/luci/controller/admin/$SYSTEM
+#cp $PACKAGE/$STAT /usr/lib/lua/luci/controller/admin/
+#chmod 755 /usr/lib/lua/luci/controller/admin/$STAT
+#cp $PACKAGE/$INDEX /usr/lib/lua/luci/controller/admin/
+#chmod 755 /usr/lib/lua/luci/controller/admin/$INDEX
+#cp $PACKAGE/$NET /usr/lib/lua/luci/model/cbi/admin_network/
+#chmod 755 /usr/lib/lua/luci/model/cbi/admin_network/$NET
+#cp $PACKAGE/$DLD /usr/lib/lua/luci/model/cbi/admin_system/
+#chmod 755 /usr/lib/lua/luci/model/cbi/admin_system/$DLD
 cp $PACKAGE/$DLS /usr/lib/lua/luci/model/cbi/admin_system/
 chmod 755 /usr/lib/lua/luci/model/cbi/admin_system/$DLS
-cp $PACKAGE/$DLL /usr/lib/lua/luci/model/cbi/admin_system/
-chmod 755 /usr/lib/lua/luci/model/cbi/admin_system/$DLL
+#cp $PACKAGE/$DLL /usr/lib/lua/luci/model/cbi/admin_system/
+#chmod 755 /usr/lib/lua/luci/model/cbi/admin_system/$DLL
 
-echo "backup config"
-cp -r /etc/config/ /usr/home/
+#echo "backup config"
+#cp -r /etc/config/ /usr/home/
 
 echo "copy setting file"
 # setting file
@@ -74,16 +77,16 @@ cp $PACKAGE/$ST /etc/config/
 chmod 644 /etc/config/$ST
 cp $PACKAGE/$ST /usr/home/config/
 chmod 644 /usr/home/config/$ST
-cp $PACKAGE/$DLIST /etc/config/
-chmod 644 /etc/config/$DLIST
-cp $PACKAGE/$DLIST /usr/home/config/
-chmod 644 /usr/home/config/$DLIST
-cp $PACKAGE/$MLIST /usr/home/
-chmod 644 /usr/home/$MLIST
-cp $PACKAGE/$MLIST /usr/home/"$MLIST"_ini
-chmod 644 /usr/home/"$MLIST"_ini
-cp $PACKAGE/$INI /usr/home/
-chmod 644 /usr/home/$INI
+#cp $PACKAGE/$DLIST /etc/config/
+#chmod 644 /etc/config/$DLIST
+#cp $PACKAGE/$DLIST /usr/home/config/
+#chmod 644 /usr/home/config/$DLIST
+#cp $PACKAGE/$MLIST /usr/home/
+#chmod 644 /usr/home/$MLIST
+#cp $PACKAGE/$MLIST /usr/home/"$MLIST"_ini
+#chmod 644 /usr/home/"$MLIST"_ini
+#cp $PACKAGE/$INI /usr/home/
+#chmod 644 /usr/home/$INI
 
 echo "copy boot script"
 # boot script
@@ -92,9 +95,9 @@ chmod 755 /etc/init.d/$RDL
 cp $PACKAGE/$RDLSW /usr/home/
 chmod 755 /usr/home/$RDLSW
 
-echo "boot script enable"
+#echo "boot script enable"
 # boot script enable
-/etc/init.d/$RDL enable
+#/etc/init.d/$RDL enable
 
-echo "DL initial script finished."
+echo "DL initial V2.3.0 script finished."
 
