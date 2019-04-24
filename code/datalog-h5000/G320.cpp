@@ -989,9 +989,13 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     // clean
                     CleanParameter();
 
-                    // first set rtc time
+                    // first set rtc time, and one day set one time
                     if ( m_loopstate == 1 )
                         SetHybridRTCData(i);
+                    else if ( m_loopstate == 2 ) {
+                        if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) )
+                            SetHybridRTCData(i);
+                    }
 
                     // get time
                     current_time = time(NULL);
