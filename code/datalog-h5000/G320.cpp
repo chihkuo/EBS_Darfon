@@ -5748,6 +5748,10 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
                 strcat(m_log_buf, buf);
 
+		// FW ver
+                sprintf(buf, "<Ver_MI>%d</Ver_MI>", arySNobj[index].m_FWver);
+                strcat(m_log_buf, buf);
+
                 // set error code
                 if ( m_mi_power_info.Error_Code1 )
                     error_tmp = m_mi_power_info.Error_Code1;
@@ -5819,6 +5823,10 @@ bool CG320::WriteLogXML(int index)
                 strcat(m_log_buf, buf);
 
                 sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
+                strcat(m_log_buf, buf);
+
+		// FW ver
+                sprintf(buf, "<Ver_MI>%d</Ver_MI>", arySNobj[index].m_FWver);
                 strcat(m_log_buf, buf);
 
                 // set error code
