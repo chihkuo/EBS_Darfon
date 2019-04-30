@@ -1765,7 +1765,7 @@ bool CG320::RunWhiteListChanged()
     unsigned int num[8] = {0};
     unsigned char tmp[8] = {0};
     FILE *fd = NULL;
-    int i = 0, cnt = 0;
+    int i = 0;
     bool match = false;
     bool save = false;
     struct tm *log_time;
@@ -1819,7 +1819,7 @@ bool CG320::RunWhiteListChanged()
                         arySNobj[i].m_Err = 0;
                         arySNobj[i].m_FWver = 0;
                         arySNobj[i].m_ok_time = 0;
-                        cnt++;
+                        //cnt++;
                         // delete SN to PLC box
                         sscanf(sn, "%02X%02X%02X%02X%02X%02X%02X%02X", &num[0], &num[1], &num[2], &num[3], &num[4], &num[5], &num[6], &num[7]);
                         SaveLog((char *)"DataLogger RunWhiteListChanged() : run DeleteWhiteList()", log_time);
@@ -1837,7 +1837,7 @@ bool CG320::RunWhiteListChanged()
                     //}
                 }
             }
-            m_snCount -= cnt;
+            //m_snCount -= cnt;
             //m_wl_count -= cnt;
             //m_wl_checksum = 0;
         } else if ( !strcmp(type, "ADD") ) {
@@ -2085,17 +2085,12 @@ int CG320::GetWhiteListCount()
     waitAddr = 0x01;
     waitFCode = 0x30;
 
-    while ( err < 3 ) {
+    while ( err < 2 ) {
         memcpy(txbuffer, szWLcount, 14);
         MStartTX(m_busfd);
         //usleep(100000); // 0.1s
 
-        if ( err == 0 )
-            lpdata = GetRespond(m_busfd, 15, 200000); // 0.2s
-        else if ( err == 1 )
-            lpdata = GetRespond(m_busfd, 15, 500000); // 0.5s
-        else
-            lpdata = GetRespond(m_busfd, 15, m_dl_config.m_delay_time_1);
+        lpdata = GetRespond(m_busfd, 15, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetWhiteListCount OK ####\n");
             SaveLog((char *)"DataLogger GetWhiteListCount() : OK", m_st_time);
