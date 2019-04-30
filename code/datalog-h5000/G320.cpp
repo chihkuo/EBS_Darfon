@@ -769,7 +769,8 @@ int CG320::GetData(time_t data_time, bool first, bool last)
 
     OpenLog(m_dl_path.m_syslog_path, m_st_time);
 
-    if ( (m_loopstate != 0) && (m_snCount > 0) ) {
+    // mark m_snCount, do it if no device
+    if ( (m_loopstate != 0) /*&& (m_snCount > 0)*/ ) {
         // before read, get write command
         RunTODOList();
         RunWhiteListChanged();
@@ -1764,7 +1765,7 @@ bool CG320::RunWhiteListChanged()
     unsigned int num[8] = {0};
     unsigned char tmp[8] = {0};
     FILE *fd = NULL;
-    int i = 0;
+    int i = 0, cnt = 0;
     bool match = false;
     bool save = false;
     struct tm *log_time;
@@ -1799,16 +1800,26 @@ bool CG320::RunWhiteListChanged()
             for ( i = 0; i < m_snCount; i++ ) {
                 // find match SN
                 if ( !strcmp(arySNobj[i].m_Sn, sn) ) {
-                    // device off line
-                    if ( arySNobj[i].m_state == 0 ) {
+                    // device off line, mark, online delete too
+                    //if ( arySNobj[i].m_state == 0 ) {
                         printf("Clean index %d data\n", i);
-                        RemoveRegisterQuery(m_busfd, arySNobj[i].m_Addr);
-                        usleep(500000); // 0.5s
+                        SendRejoinNetwork();
+                        printf("sleep 5 sec.\n");
+                        usleep(5000000);
+                        SendRejoinNetwork();
+                        printf("sleep 5 sec.\n");
+                        usleep(5000000);
+                        SendRejoinNetwork();
+                        printf("sleep 5 sec.\n");
+                        usleep(5000000);
+                        //RemoveRegisterQuery(m_busfd, arySNobj[i].m_Addr);
+                        //usleep(500000); // 0.5s
                         memset(arySNobj[i].m_Sn, 0x00, 17);
                         arySNobj[i].m_Device = -2;
                         arySNobj[i].m_Err = 0;
                         arySNobj[i].m_FWver = 0;
                         arySNobj[i].m_ok_time = 0;
+                        cnt++;
                         // delete SN to PLC box
                         sscanf(sn, "%02X%02X%02X%02X%02X%02X%02X%02X", &num[0], &num[1], &num[2], &num[3], &num[4], &num[5], &num[6], &num[7]);
                         SaveLog((char *)"DataLogger RunWhiteListChanged() : run DeleteWhiteList()", log_time);
@@ -1823,9 +1834,12 @@ bool CG320::RunWhiteListChanged()
                         DeleteWhiteList(1, tmp);
                         usleep(1000000); // 1s
                         save = true;
-                    }
+                    //}
                 }
             }
+            m_snCount -= cnt;
+            //m_wl_count -= cnt;
+            //m_wl_checksum = 0;
         } else if ( !strcmp(type, "ADD") ) {
             match = false;
             for ( i = 0; i < m_snCount; i++ ) {
@@ -1925,7 +1939,7 @@ bool CG320::RunRejoin()
     struct tm *log_time;
     time_t current_time = 0;
 
-    unsigned char cmd[]={0x01, 0x4E, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    unsigned char cmd[]={0x01, 0x4E, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00};
     MakeReadDataCRC(cmd,15);
 
     MClearRX();

@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.3.1"
+#define VERSION         "2.3.2"
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
@@ -1698,7 +1698,7 @@ int GetWhiteListChanged()
 {
     char buf[256] = {0};
     char sn[17] = {0};
-    char type[4] = {0};
+    char type[17] = {0};
     FILE *fd = NULL;
     int size = 0, inlen = 0, outlen = 0;
     char *data = NULL, *start_index = NULL, *end_index = NULL;
@@ -1815,6 +1815,7 @@ int GetWhiteListChanged()
         end_index = strstr(end_index, "</ChangeType>");
         if ( start_index == NULL || end_index == NULL )
             break;
+        memset(type, 0, 17);
         strncpy(type, start_index+12, end_index-(start_index+12));
         // write type
         fwrite(type, 1, strlen(type), fd);

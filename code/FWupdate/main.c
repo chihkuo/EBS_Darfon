@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.1.0"
+#define VERSION             "1.1.1"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -1978,6 +1978,8 @@ int GetFWData(char *list_path)
                     } else
                         clearfile = 1;
                 }
+                if ( count == gsncount-1 )
+                    clearfile = 1;
                 if ( clearfile ) {
                     memset(strtmp, 0x00, 1024);
                     sprintf(strtmp, "rm %s; sync;", snlist[count].FILE);
@@ -2028,6 +2030,8 @@ int GetFWData(char *list_path)
                     } else
                         clearfile = 1;
                 }
+                if ( count == gsncount-1 )
+                    clearfile = 1;
                 if ( clearfile ) {
                     memset(strtmp, 0x00, 1024);
                     sprintf(strtmp, "rm %s; sync;", snlist[count].FILE);
@@ -2061,6 +2065,8 @@ int GetFWData(char *list_path)
                         } else
                             clearfile = 1;
                     }
+                    if ( count == gsncount-1 )
+                        clearfile = 1;
                     if ( clearfile ) {
                         memset(strtmp, 0x00, 1024);
                         sprintf(strtmp, "rm %s; sync;", snlist[count].FILE);
@@ -2094,6 +2100,8 @@ int GetFWData(char *list_path)
                     } else
                         clearfile = 1;
                 }
+                if ( count == gsncount-1 )
+                    clearfile = 1;
                 if ( clearfile ) {
                     memset(strtmp, 0x00, 1024);
                     sprintf(strtmp, "rm %s; sync;", snlist[count].FILE);
@@ -2517,6 +2525,8 @@ int GetHbFWData(char *list_path)
                     } else
                         clearfile = 1;
                 }
+                if ( loop == gsncount-1 )
+                    clearfile = 1;
                 if ( clearfile ) {
                     memset(strtmp, 0x00, 1024);
                     sprintf(strtmp, "rm %s; sync;", snlist[loop].FILE);
@@ -2559,6 +2569,8 @@ int GetHbFWData(char *list_path)
                         } else
                             clearfile = 1;
                     }
+                    if ( loop == gsncount-1 )
+                        clearfile = 1;
                     if ( clearfile ) {
                         memset(strtmp, 0x00, 1024);
                         sprintf(strtmp, "rm %s; sync;", snlist[loop].FILE);
@@ -2581,6 +2593,8 @@ int GetHbFWData(char *list_path)
                     } else
                         clearfile = 1;
                 }
+                if ( loop == gsncount-1 )
+                    clearfile = 1;
                 if ( clearfile ) {
                     memset(strtmp, 0x00, 1024);
                     sprintf(strtmp, "rm %s; sync;", snlist[loop].FILE);
@@ -2597,6 +2611,9 @@ int GetHbFWData(char *list_path)
         CloseLog();
         system("sync");
         OpenLog(g_SYSLOG_PATH, st_time);
+
+        // debug
+        usleep(20000000);
     }
 
     printf("######### GetHbFWData() end #########\n");
