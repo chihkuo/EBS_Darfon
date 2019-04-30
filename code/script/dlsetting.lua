@@ -164,6 +164,7 @@ swver.addremove = false
 swver.anonymous = true
 local dlver = swver:option(DummyValue, "dlver", translate("Data Logger VER"))
 local dpver = swver:option(DummyValue, "dpver", translate("Data Program VER"))
+local fuver = swver:option(DummyValue, "fuver", translate("FW Update VER"))
 
 -- Add button part
 local cleanreset = map:section(TypedSection, "button", "Clean and Reset")

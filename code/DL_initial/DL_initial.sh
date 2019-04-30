@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# V2.3.0
+# V2.3.3
 # initial package dir
 USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial
@@ -30,7 +30,7 @@ ST=dlsetting
 RDL=run_DL.sh
 RDLSW=run_DLSW.sh
 
-echo "DL initial V2.3.0 script start~"
+echo "DL initial V2.3.3 script start~"
 
 echo "Stop running progame"
 /etc/init.d/run_DL.sh stop
@@ -99,5 +99,5 @@ chmod 755 /usr/home/$RDLSW
 # boot script enable
 #/etc/init.d/$RDL enable
 
-echo "DL initial V2.3.0 script finished."
+echo "DL initial V2.3.3 script finished."
 

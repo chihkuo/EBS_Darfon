@@ -5,19 +5,21 @@ function copy() {
 	fi
 	cp ../datalog-h5000/dlg320.exe ./update/
 	cp ../DataProgram/DataProgram.exe ./update/
-	cp ../SWupdate/SWupdate.exe ./update/
-	cp ../script/newSWupdate.sh ./update/
-	cp ../script/dldevice.lua ./update/
-	cp ../script/dllist ./update/
-	cp ../script/dllist.lua ./update/
+	cp ../FWupdate/FWupdate.exe ./update/
+#	cp ../SWupdate/SWupdate.exe ./update/
+#	cp ../script/newSWupdate.sh ./update/
+#	cp ../script/dldevice.lua ./update/
+#	cp ../script/dllist ./update/
+#	cp ../script/dllist.lua ./update/
 	cp ../script/dlsetting ./update/
 	cp ../script/dlsetting.lua ./update/
-	cp ../script/ModelList ./update/
-	cp ../script/system.lua ./update/
-	cp ../script/status.lua ./update/
-	cp ../script/network.lua ./update/
-	cp ../script/index.lua ./update/
+#	cp ../script/ModelList ./update/
+#	cp ../script/system.lua ./update/
+#	cp ../script/status.lua ./update/
+#	cp ../script/network.lua ./update/
+#	cp ../script/index.lua ./update/
 	cp ../script/update.sh ./update/
+	cp ../script/run_DL.sh ./update/
 	cp ../script/run_DLSW.sh ./update/
 	sync
 }
