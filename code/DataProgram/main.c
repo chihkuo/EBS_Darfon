@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.3.3"
+#define VERSION         "2.3.4"
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
@@ -549,7 +549,8 @@ int Qrylogdata()
         else {
             printf("<QrylogdataResult /> find, last time data not exist!\n");
             SaveLog("DataProgram Qrylogdata() : last time data not exist", st_time);
-            data_time = current_time - (update_interval*60);
+            //data_time = current_time - (update_interval*60);
+            data_time = current_time - (60*60);
             st_log_time = *localtime(&data_time);
             printf("Set Qrylogdata time : %04d/%02d/%02d %02d:%02d:%02d\n",
             st_log_time.tm_year+1900, st_log_time.tm_mon+1, st_log_time.tm_mday, st_log_time.tm_hour, st_log_time.tm_min, st_log_time.tm_sec);
@@ -858,7 +859,8 @@ int Qryerrlogdata()
         else {
             printf("<QryerrlogdataResult /> find, last time data not exist!\n");
             SaveLog("DataProgram Qryerrlogdata() : last time data not exist", st_time);
-            data_time = current_time - (update_interval*60);
+            //data_time = current_time - (update_interval*60);
+            data_time = current_time - (60*60);
             st_errlog_time = *localtime(&data_time);
             printf("Set Qrylogdata time : %04d/%02d/%02d %02d:%02d:%02d\n",
             st_errlog_time.tm_year+1900, st_errlog_time.tm_mon+1, st_errlog_time.tm_mday, st_errlog_time.tm_hour, st_errlog_time.tm_min, st_errlog_time.tm_sec);
