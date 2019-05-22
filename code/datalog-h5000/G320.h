@@ -91,7 +91,7 @@ protected:
     bool    WriteWhiteList(int num, unsigned char *listbuf);
     bool    AddWhiteList(int num, unsigned char *listbuf);
     bool    DeleteWhiteList(int num, unsigned char *listbuf);
-    bool    GetPLCStatus(int index); // busy return true
+    int     GetPLCStatus(int index); // idel 0, busy 1, no respond or CRC error 2
 
     bool    LoadWhiteList();
     bool    LoadWhiteListV3();

@@ -16,7 +16,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.2.4"
+#define VERSION             "2.4.1"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -840,12 +840,14 @@ int main(int argc, char* argv[])
             printf("reboot_min = %d\n", reboot_min);
             if ( reboot_time > 0 ) {
                 if ( reboot_min > (reboot_time * 24 * 60) ) {
-                    SaveLog("SWupdate main() : Reboot time's up!", st_time);
-                    CloseLog();
-                    printf("SWupdate main() : Reboot now!\n");
-                    system("sync; sync; sync;");
-                    system("reboot");
-                    usleep(2000000);
+                    if ( st_time->tm_hour == 0 ) {
+                        SaveLog("SWupdate main() : Reboot time's up!", st_time);
+                        CloseLog();
+                        printf("SWupdate main() : Reboot now!\n");
+                        system("sync; sync; sync;");
+                        system("reboot");
+                        usleep(2000000);
+                    }
                 }
             }
         }

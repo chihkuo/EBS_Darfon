@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# V2.3.4
+# V2.4.1
 # initial package dir
 USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial
@@ -8,7 +8,7 @@ PACKAGE=$USB_PATH/DL_initial
 # program
 DATALOG=dlg320.exe
 DATAPRG=DataProgram.exe
-#DATASWU=SWupdate.exe
+DATASWU=SWupdate.exe
 DATAFWU=FWupdate.exe
 
 # lua script
@@ -30,7 +30,7 @@ ST=dlsetting
 RDL=run_DL.sh
 RDLSW=run_DLSW.sh
 
-echo "DL initial V2.3.4 script start~"
+echo "DL initial V2.4.1 script start~"
 
 echo "Stop running progame"
 /etc/init.d/run_DL.sh stop
@@ -45,8 +45,8 @@ cp $PACKAGE/$DATALOG /usr/home/
 chmod 755 /usr/home/$DATALOG
 cp $PACKAGE/$DATAPRG /usr/home/
 chmod 755 /usr/home/$DATAPRG
-#cp $PACKAGE/$DATASWU /usr/home/
-#chmod 755 /usr/home/$DATASWU
+cp $PACKAGE/$DATASWU /usr/home/
+chmod 755 /usr/home/$DATASWU
 cp $PACKAGE/$DATAFWU /usr/home/
 chmod 755 /usr/home/$DATAFWU
 
@@ -99,5 +99,15 @@ chmod 755 /usr/home/$RDLSW
 # boot script enable
 #/etc/init.d/$RDL enable
 
-echo "DL initial V2.3.4 script finished."
+sleep 1
+echo "change essid"
+sed -i 's/SBC700_/DL300_/g' /etc/config/wireless
+sync
+/etc/init.d/network restart
+sleep 10
+sync
+echo "network restart ok"
+
+
+echo "DL initial V2.4.1 script finished."
 

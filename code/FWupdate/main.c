@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.1.1"
+#define VERSION             "1.1.2"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -90,6 +90,7 @@ int CheckType(int index, int *ret);
 int DoUpdate(char *list_path);
 int UpdDLFWStatus();
 int CLEANSN(char *sn, char *file_path, char *list_path);
+int Updheartbeattime(time_t time);
 
 char SOAP_HEAD[] =
 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
@@ -1780,6 +1781,11 @@ int GetFWData(char *list_path)
         current_time = time(NULL);
         st_time = localtime(&current_time);
 
+        Updheartbeattime(current_time);
+        CloseLog();
+        system("sync");
+        OpenLog(g_SYSLOG_PATH, st_time);
+
         pfile_fd = fopen(snlist[count].FILE, "r");
         if ( pfile_fd == NULL ) {
             printf("#### Open %s Fail ####\n", snlist[count].FILE);
@@ -1934,6 +1940,10 @@ int GetFWData(char *list_path)
                     break;
             }
 
+            Updheartbeattime(current_time);
+            CloseLog();
+            system("sync");
+            OpenLog(g_SYSLOG_PATH, st_time);
             printf("sleep 60 sec.\n");
             usleep(60000000);
         }
@@ -2076,6 +2086,8 @@ int GetFWData(char *list_path)
             }
         } else {
             printf("WriteVer Fail, sn[%d] = %s don't write data\n", count, snlist[count].SN);
+            sprintf(strtmp, "FWupdate GetFWData() : SN %s WriteVer() FAIL", snlist[count].SN);
+            SaveLog(strtmp, st_time);
             // delete the SN from list if stop time is not up
             current_time = time(NULL);
             st_time = localtime(&current_time);
@@ -2152,6 +2164,11 @@ int GetHbFWData(char *list_path)
         size = 0;
         current_time = time(NULL);
         st_time = localtime(&current_time);
+
+        Updheartbeattime(current_time);
+        CloseLog();
+        system("sync");
+        OpenLog(g_SYSLOG_PATH, st_time);
 
         pfile_fd = fopen(snlist[loop].FILE, "r");
         if ( pfile_fd == NULL ) {
@@ -2477,6 +2494,10 @@ int GetHbFWData(char *list_path)
                     break;
             }
 
+            Updheartbeattime(current_time);
+            CloseLog();
+            system("sync");
+            OpenLog(g_SYSLOG_PATH, st_time);
             printf("sleep 60 sec.\n");
             usleep(60000000);
         }
@@ -2499,6 +2520,8 @@ int GetHbFWData(char *list_path)
         if ( retval ) {
             // fail
             printf("RunRegister fail retval = %d\n", retval);
+            sprintf(strtmp, "FWupdate GetHbFWData() : SN %s RunRegister FAIL", snlist[loop].SN);
+            SaveLog(strtmp, st_time);
             //free(ucbuffer);
             //return 6;
             // delete the SN from list if stop time is not up
@@ -3181,6 +3204,107 @@ int CLEANSN(char *sn, char *file_path, char *list_path)
         return -1;
 
     return 0;
+}
+
+int Updheartbeattime(time_t time)
+{
+    // Updheartbeattime result date length about = 396
+    char buf[512] = {0};
+    char timebuf[32] = {0}, swverbuf[32] = {0};
+    char *index = NULL;
+    FILE *fd = NULL, *swver_fd = NULL;
+    struct tm *st_time;
+    int ret = 0;
+    struct stat st;
+
+    printf("====================== Updheartbeattime start ======================\n");
+
+    // get local time
+    st_time = localtime(&time);
+    sprintf(timebuf, "%4d-%02d-%02d %02d:%02d:%02d", 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
+    printf("localtime : %s\n", timebuf);
+
+    // get SW ver
+    swver_fd = popen("/usr/home/dlg320.exe -v", "r");
+    if ( swver_fd != NULL ) {
+        fgets(swverbuf, 32, swver_fd);
+        swverbuf[strlen(swverbuf)-1] = 0; // set \n to 0
+        pclose(swver_fd);
+    } else {
+        strcpy(swverbuf, "Unknow");
+    }
+
+    // set Updheartbeattime xml file
+    fd = fopen(CURL_FILE, "wb");
+    if ( fd == NULL ) {
+        printf("#### Updheartbeattime() open %s Fail ####\n", CURL_FILE);
+        return 1;
+    }
+    memset(buf, 0, 512);
+    fputs(SOAP_HEAD, fd);
+    sprintf(buf, "\t\t<UpdheartbeattimeV2 xmlns=\"http://tempuri.org/\">\n");
+    fputs(buf, fd);
+    sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
+    fputs(buf, fd);
+    sprintf(buf, "\t\t\t<hearttime>%s</hearttime>\n", timebuf);
+    fputs(buf, fd);
+    sprintf(buf, "\t\t\t<Ver>%s</Ver>\n", swverbuf);
+    fputs(buf, fd);
+    sprintf(buf, "\t\t</UpdheartbeattimeV2>\n");
+    fputs(buf, fd);
+    fputs(SOAP_TAIL, fd);
+    fclose(fd);
+
+    // run curl soap command, save result to /tmp/Updheartbeattime
+    sprintf(buf, "%s > /tmp/Updheartbeattime", g_CURL_CMD);
+    system(buf);
+
+    // check responds
+    if ( stat("/tmp/Updheartbeattime", &st) == 0 )
+        if ( st.st_size == 0 ) {
+            printf("#### Updheartbeattime() /tmp/Updheartbeattime empty ####\n");
+            SaveLog("FWUpdate Updheartbeattime() : /tmp/Updheartbeattime empty", st_time);
+            return 2;
+        }
+    // read result
+    fd = fopen("/tmp/Updheartbeattime", "rb");
+    if ( fd == NULL ) {
+        printf("#### Updheartbeattime() open /tmp/Updheartbeattime Fail ####\n");
+        return 3;
+    }
+    memset(buf, 0, 512);
+    fread(buf, 1, 512, fd);
+    fclose(fd);
+    //printf("/tmp/Updheartbeattime : \n%s\n", buf);
+
+    // check result
+    index = strstr(buf, "<UpdheartbeattimeV2Result>");
+    if ( index == NULL ) {
+        printf("#### Updheartbeattime() <UpdheartbeattimeV2Result> not found ####\n");
+        SaveLog("FWUpdate Updheartbeattime() : <UpdheartbeattimeV2Result> not found", st_time);
+        index = strstr(buf, "<UpdheartbeattimeV2Result />");
+        if ( index == NULL )
+            printf("#### Updheartbeattime() <UpdheartbeattimeV2Result /> not found ####\n");
+        else {
+            printf("<UpdheartbeattimeV2Result /> find, result data not exist!\n");
+            SaveLog("FWUpdate Updheartbeattime() : result data not exist", st_time);
+        }
+
+        return 4;
+    }
+    sscanf(index, "<UpdheartbeattimeV2Result>%02d</UpdheartbeattimeV2Result>", &ret);
+    printf("ret = %02d\n", ret);
+    if ( ret == 0 ) {
+        printf("Updheartbeattime update OK\n");
+        SaveLog("FWUpdate Updheartbeattime() : update OK", st_time);
+        printf("======================= Updheartbeattime end =======================\n");
+        return 0;
+    } else {
+        printf("Updheartbeattime update Fail\n");
+        SaveLog("FWUpdate Updheartbeattime() : update Fail", st_time);
+        printf("======================= Updheartbeattime end =======================\n");
+        return 5;
+    }
 }
 
 int main(int argc, char* argv[])

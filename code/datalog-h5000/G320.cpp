@@ -741,9 +741,9 @@ void CG320::Start()
 
 int CG320::GetData(time_t data_time, bool first, bool last)
 {
-    int     i = 0, j = 0;
+    int     i = 0, j = 0, isbusy = 0;
     struct  stat st;
-    bool    dosave = true, isbusy = false;
+    bool    dosave = true;
 
     time_t current_time;
 
@@ -828,6 +828,9 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                                 if ( m_st_time->tm_min == 0 )
                                     return -1;
                         }
+                        // if no respond, continue to get data
+                        if ( isbusy == 2 )
+                            break;
                     } else { // idle
                         printf("sleep 1 sec.\n");
                         usleep(1000000); // 1s
@@ -859,6 +862,12 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     if ( m_data_st_time.tm_min != 0 )
                         if ( m_st_time->tm_min == 0 )
                             return -1;
+
+                    WriteLogXML(i);
+                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                        (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
+                        WriteErrorLogXML(i);
+                    }
 
                 } else {
                     // get power data
@@ -916,9 +925,9 @@ int CG320::GetData(time_t data_time, bool first, bool last)
             }
             printf("#### i = %d ####\n", i);
             // check state
-            if ( !arySNobj[i].m_state ) {   // offline
-                continue;                   // read part skip
-            }
+            //if ( !arySNobj[i].m_state ) {   // offline
+            //    continue;                   // read part skip
+            //}
             if( arySNobj[i].m_Err < 3 ) {
                 // get time
                 current_time = time(NULL);
@@ -1980,7 +1989,7 @@ bool CG320::RunClearAll()
 {
     printf("#### RunClearAll start ####\n");
 
-    bool isbusy = false;
+    int isbusy = 0;
     // LBD Device Rejoin the Network 0x4A
     SendRejoinNetwork();
     printf("sleep 5 sec.\n");
@@ -2006,12 +2015,16 @@ bool CG320::RunClearAll()
     while (1) {
         printf("check PLC status\n");
         isbusy = GetPLCStatus(0);
-        if ( isbusy ) {
+        if ( isbusy == 0 ) {
+            printf("idle, sleep 1 sec.\n");
+            usleep(1000000); // 1s
+            break;
+        } else if ( isbusy == 1 ) {
             printf("busy, sleep 60 sec.\n");
             usleep(60000000); // 60s
         } else {
-            printf("idle, sleep 1 sec.\n");
-            usleep(1000000); // 1s
+            printf("suppose busy, sleep 60 sec.\n");
+            usleep(60000000); // 60s
             break;
         }
     }
@@ -2709,7 +2722,7 @@ bool CG320::SaveDeviceList(bool first, bool last)
 
             if (arySNobj[i].m_state) {
                 // set log data
-                index_tmp = strstr(m_log_buf, arySNobj[i].m_Sn);
+                index_tmp = strstr(m_log_buf, arySNobj[i].m_Sn+1);
                 if ( index_tmp != NULL ) {
                     if ( index_tmp - m_log_buf > 80)
                         index_start = strstr(index_tmp-80, "<record dev_id=");
@@ -2724,7 +2737,7 @@ bool CG320::SaveDeviceList(bool first, bool last)
                     if ( arySNobj[i].m_Device < 0x0A ) {
                         sscanf(arySNobj[i].m_Sn+4, "%04X", &model); // get 5-8 digit from SN
                         if ( model >= 3 ) { // G640, put B part
-                            index_tmp = strstr(index_end, arySNobj[i].m_Sn);
+                            index_tmp = strstr(index_end, arySNobj[i].m_Sn+1);
                             if ( index_tmp != NULL ) {
                                 index_start = strstr(index_tmp-80, "<record dev_id=");
                                 index_end = strstr(index_start, "</record>");
@@ -2874,7 +2887,7 @@ bool CG320::DeleteWhiteList(int num, unsigned char *listbuf)
     }
 }
 
-bool CG320::GetPLCStatus(int index)
+int CG320::GetPLCStatus(int index)
 {
     printf("#### GetPLCStatus start ####\n");
 
@@ -2911,12 +2924,12 @@ bool CG320::GetPLCStatus(int index)
                 // busy
                 printf("#### Busy! ####\n");
                 SaveLog((char *)"DataLogger GetPLCStatus() : Busy!", log_time);
-                return true;
+                return 1;
             } else {
                 // idle
                 printf("#### Idle ####\n");
                 SaveLog((char *)"DataLogger GetPLCStatus() : Idle", log_time);
-                return false;
+                return 0;
             }
         } else {
             if ( have_respond == true ) {
@@ -2938,7 +2951,7 @@ bool CG320::GetPLCStatus(int index)
     printf("#### Suppose Busy ####\n");
     SaveLog((char *)"DataLogger GetPLCStatus() : Suppose Busy", log_time);
 
-    return true;
+    return 2;
 }
 
 int CG320::WhiteListRegister()
@@ -3653,9 +3666,9 @@ bool CG320::GetMiPowerInfoV3(int index)
 {
     printf("#### GetMiPowerInfoV3 start ####\n");
 
-    int err = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
+    int err = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0, i = 0;
     byte *lpdata = NULL;
-    char strbuf[1024] = {0};
+    char strbuf[1024] = {0}, datatmp[32] = {0};
 
     struct tm *log_time;
     // check ok time
@@ -3676,6 +3689,15 @@ bool CG320::GetMiPowerInfoV3(int index)
     szMIPowerinfoV3[6] = (unsigned char)tmp4;
     szMIPowerinfoV3[7] = (unsigned char)tmp5;
     MakeReadDataCRC(szMIPowerinfoV3,14);
+
+	// for debug
+	current_time = time(NULL);
+	log_time = localtime(&current_time);
+	memset(strbuf, 0, 1024);
+	sprintf(strbuf, "GetMiPowerInfoV3(%d) send : 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X",
+		index, szMIPowerinfoV3[0], szMIPowerinfoV3[1], szMIPowerinfoV3[2], szMIPowerinfoV3[3], szMIPowerinfoV3[4], szMIPowerinfoV3[5], szMIPowerinfoV3[6],
+		szMIPowerinfoV3[7], szMIPowerinfoV3[8], szMIPowerinfoV3[9], szMIPowerinfoV3[10], szMIPowerinfoV3[11], szMIPowerinfoV3[12], szMIPowerinfoV3[13]);
+	SaveLog(strbuf, log_time);
 
     MClearRX();
     txsize=14;
@@ -3698,6 +3720,16 @@ bool CG320::GetMiPowerInfoV3(int index)
             SaveLog(strbuf, log_time);
             arySNobj[index].m_ok_time = time(NULL);
             arySNobj[index].m_state = 1; // online
+
+	    // for debug
+            memset(strbuf, 0, 1024);
+            strcpy(strbuf, "Get Data : ");
+            for (i = 0; i < 77; i++) {
+                sprintf(datatmp, "0x%02X, ", lpdata[i]);
+                strcat(strbuf, datatmp);
+            }
+            SaveLog(strbuf, log_time);
+
             DumpMiPowerInfo(lpdata+9);
             return true;
         } else {
@@ -5644,10 +5676,10 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
                 strcat(m_log_buf, buf);
 
-                sprintf(buf, "<total_KWH>%05.3f</total_KWH>", m_mi_power_info.Ch1_EacH*100 + ((float)m_mi_power_info.Ch1_EacL)*0.01);
+                sprintf(buf, "<total_KWH>%05.3f</total_KWH>", m_mi_power_info.Ch2_EacH*100 + ((float)m_mi_power_info.Ch2_EacL)*0.01);
                 strcat(m_log_buf, buf);
 
-                sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Ch1_Pac)/10000);
+                sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Total_Pac)/10000);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Total_Pac)/10000);
                 strcat(m_log_buf, buf);
@@ -5712,9 +5744,9 @@ bool CG320::WriteLogXML(int index)
             idtmp[0] = 'A';
             strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"A%s\">", dev_id,
                     1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn+1);
             strcat(m_log_buf, buf);
 
             if ( m_loopflag == 0 ) {
@@ -5726,7 +5758,7 @@ bool CG320::WriteLogXML(int index)
 
                 sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Ch1_Pac)/10000);
                 strcat(m_log_buf, buf);
-                sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Total_Pac)/10000);
+                sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Ch1_Pac)/10000);
                 strcat(m_log_buf, buf);
 
                 sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
@@ -5749,10 +5781,21 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_mi_power_info.Vac)/10);
                 strcat(m_log_buf, buf);
 
-                sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Total_Iac)/1000);
-                strcat(m_log_buf, buf);
-                sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Total_Iac)/1000);
-                strcat(m_log_buf, buf);
+                //sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Total_Iac)/1000);
+                //strcat(m_log_buf, buf);
+                //sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Total_Iac)/1000);
+                //strcat(m_log_buf, buf);
+                if ( m_mi_power_info.Vac == 0 ) {
+                    sprintf(buf, "<aci_A>0</aci_A>");
+                    strcat(m_log_buf, buf);
+                    sprintf(buf, "<ac_current>0</ac_current>");
+                    strcat(m_log_buf, buf);
+                } else {
+                    sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Ch1_Pac)/((float)m_mi_power_info.Vac));
+                    strcat(m_log_buf, buf);
+                    sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Ch1_Pac)/((float)m_mi_power_info.Vac));
+                    strcat(m_log_buf, buf);
+                }
 
                 sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
                 strcat(m_log_buf, buf);
@@ -5789,9 +5832,9 @@ bool CG320::WriteLogXML(int index)
             idtmp[0] = 'B';
             //strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"B%s\">", dev_id,
                     1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn+1);
             strcat(m_log_buf, buf);
 
             if ( m_loopflag == 0 ) {
@@ -5803,7 +5846,7 @@ bool CG320::WriteLogXML(int index)
 
                 sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Ch2_Pac)/10000);
                 strcat(m_log_buf, buf);
-                sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Total_Pac)/10000);
+                sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Ch2_Pac)/10000);
                 strcat(m_log_buf, buf);
 
                 sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_mi_power_info.Ch2_Vpv)*0.1);
@@ -5826,10 +5869,21 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_mi_power_info.Vac)/10);
                 strcat(m_log_buf, buf);
 
-                sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Total_Iac)/1000);
-                strcat(m_log_buf, buf);
-                sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Total_Iac)/1000);
-                strcat(m_log_buf, buf);
+                //sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Total_Iac)/1000);
+                //strcat(m_log_buf, buf);
+                //sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Total_Iac)/1000);
+                //strcat(m_log_buf, buf);
+                if ( m_mi_power_info.Vac == 0 ) {
+                    sprintf(buf, "<aci_A>0</aci_A>");
+                    strcat(m_log_buf, buf);
+                    sprintf(buf, "<ac_current>0</ac_current>");
+                    strcat(m_log_buf, buf);
+                } else {
+                    sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Ch2_Pac)/((float)m_mi_power_info.Vac));
+                    strcat(m_log_buf, buf);
+                    sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Ch2_Pac)/((float)m_mi_power_info.Vac));
+                    strcat(m_log_buf, buf);
+                }
 
                 sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
                 strcat(m_log_buf, buf);

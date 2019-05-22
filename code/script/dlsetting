@@ -11,7 +11,7 @@ config sms
 	option delay_time_2 '1500000'
 	option cleartx_delay '200000'
 	option shelf_life '30'
-	option reboot_time '0'
+	option reboot_time '1'
 	option update_FW_start '8'
 	option update_FW_stop '17'
 
@@ -34,9 +34,9 @@ config comport
 	option com1_baud '9600'
 
 config swver
-	option dlver '2.3.4'
-	option dpver '2.3.4'
-	option fuver '1.1.1'
+	option dlver '2.4.1'
+	option dpver '2.4.1'
+	option fuver '1.1.2'
 
 config button
 
