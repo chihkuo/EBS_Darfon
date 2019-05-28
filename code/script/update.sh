@@ -16,6 +16,7 @@ INDEX=index.lua
 #LST=luci_statistics.lua
 RUNDLSW=run_DLSW.sh
 RUNDL=run_DL.sh
+CPLS=CopyLuciSetting.sh
 
 killall -9 $FWUPDATE
 sleep 1
@@ -51,6 +52,10 @@ cp $UPDATE_DIR/$FWUPDATE /usr/home/
 chmod 755 /usr/home/$FWUPDATE
 cp $UPDATE_DIR/$RUNDL /etc/init.d/
 chmod 755 /etc/init.d/$RUNDL
+#modify boot script
+mv /etc/init.d/AutoRun.sh /etc
+cp $UPDATE_DIR/$CPLS /etc/init.d/
+chmod 755 /etc/init.d/$CPLS
 
 rm /tmp/luci-indexcache
 rm /tmp/luci-modulecache/*

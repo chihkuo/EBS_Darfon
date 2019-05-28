@@ -16,7 +16,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.4.1"
+#define VERSION             "2.4.2"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -790,10 +790,12 @@ int main(int argc, char* argv[])
     int counter, run_processs_min, syslog_count;
     struct stat st;
     int doUpdDLSWStatus = 0;
-    int reboot_min = 0;
+    int reboot_day = 0, reboot_count = 0;
 
     current_time = time(NULL);
     st_time = localtime(&current_time);
+    //set reboot_day
+    reboot_day = st_time->tm_mday;
 
     // when boot to run once first
     init();
@@ -836,18 +838,19 @@ int main(int argc, char* argv[])
             }
 
             // check reboot time
-            reboot_min++;
-            printf("reboot_min = %d\n", reboot_min);
             if ( reboot_time > 0 ) {
-                if ( reboot_min > (reboot_time * 24 * 60) ) {
-                    if ( st_time->tm_hour == 0 ) {
-                        SaveLog("SWupdate main() : Reboot time's up!", st_time);
-                        CloseLog();
-                        printf("SWupdate main() : Reboot now!\n");
-                        system("sync; sync; sync;");
-                        system("reboot");
-                        usleep(2000000);
-                    }
+                if ( reboot_day != st_time->tm_mday ) {
+                    reboot_day = st_time->tm_mday;
+                    reboot_count++;
+                    printf("reboot_count = %d\n", reboot_count);
+                }
+                if ( reboot_count == reboot_time ) {
+                    SaveLog("SWupdate main() : Reboot time's up!", st_time);
+                    CloseLog();
+                    printf("SWupdate main() : Reboot now!\n");
+                    system("sync; sync; sync;");
+                    system("reboot");
+                    usleep(2000000);
                 }
             }
         }

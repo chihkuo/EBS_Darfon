@@ -863,6 +863,9 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                         if ( m_st_time->tm_min == 0 )
                             return -1;
 
+                    // set m_loopflag not 0, ignore power data
+                    if ( m_loopflag == 0 )
+                        m_loopflag = 10;
                     WriteLogXML(i);
                     if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
                         (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
