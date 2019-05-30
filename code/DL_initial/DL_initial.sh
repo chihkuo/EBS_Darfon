@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# V2.4.1
+# V2.4.2
 # initial package dir
 USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial
@@ -29,8 +29,9 @@ ST=dlsetting
 # boot script
 RDL=run_DL.sh
 RDLSW=run_DLSW.sh
+CPLS=CopyLuciSetting.sh
 
-echo "DL initial V2.4.1 script start~"
+echo "DL initial V2.4.2 script start~"
 
 echo "Stop running progame"
 /etc/init.d/run_DL.sh stop
@@ -94,6 +95,10 @@ cp $PACKAGE/$RDL /etc/init.d/
 chmod 755 /etc/init.d/$RDL
 cp $PACKAGE/$RDLSW /usr/home/
 chmod 755 /usr/home/$RDLSW
+#modify boot script
+mv /etc/init.d/AutoRun.sh /etc
+cp $PACKAGE/$CPLS /etc/init.d/
+chmod 755 /etc/init.d/$CPLS
 
 #echo "boot script enable"
 # boot script enable
@@ -109,5 +114,5 @@ sync
 echo "network restart ok"
 
 
-echo "DL initial V2.4.1 script finished."
+echo "DL initial V2.4.2 script finished."
 
