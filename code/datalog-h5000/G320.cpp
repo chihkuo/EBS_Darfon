@@ -23,7 +23,8 @@
 #define WL_CHANGED_PATH "/tmp/WL_Changed"
 
 #define TIMEZONE_URL    "http://ip-api.com/json"
-#define TIME_OFFSET_URL "http://svn.fonosfera.org/fon-ng/trunk/luci/modules/admin-fon/root/etc/timezones.db"
+//#define TIME_OFFSET_URL "http://svn.fonosfera.org/fon-ng/trunk/luci/modules/admin-fon/root/etc/timezones.db"
+#define TIME_OFFSET_URL "https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/luasrc/sys/zoneinfo/tzdata.lua"
 //#define KEY             "O10936IZHJTQ"
 #define TIME_SERVER_URL "https://www.worldtimeserver.com/handlers/GetData.ashx?action=GCTData"
 
@@ -164,6 +165,17 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
     GetMAC();
     GetDLConfig();
 
+    // get time zone
+    if ( first ) {
+        GetTimezone();
+        usleep(1000000);
+    }
+
+    // set save file path
+    GetLocalTime();
+    SetPath();
+    OpenLog(m_dl_path.m_syslog_path, m_st_time);
+
     if ( open_com ) {
         port = szPort[com-1]; // COM1~4 <==> /dev/ttyS0~3 or ttyUSB0~3
         sprintf(szbuf,"port = %s \n",port);
@@ -177,24 +189,17 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
             inverter_parity = 'N';
 
         m_busfd = MyModbusDrvInit(port, m_dl_config.m_inverter_baud, m_dl_config.m_inverter_data_bits, inverter_parity, m_dl_config.m_inverter_stop_bits);
-        if ( m_busfd < 0 )
+        if ( m_busfd < 0 ) {
             ret = -1;
-        else
+            SaveLog((char *)"DataLogger Init() : MyModbusDrvInit() fail", m_st_time);
+        } else {
             ret = m_busfd;
+            sprintf(buf, "DataLogger Init() : MyModbusDrvInit() get fd %d", ret);
+            SaveLog(buf, m_st_time);
+        }
     } else {
         m_busfd = busfd;
     }
-
-    // get time zone
-    if ( first ) {
-        GetTimezone();
-        usleep(1000000);
-    }
-
-    // set save file path
-    GetLocalTime();
-    SetPath();
-    OpenLog(m_dl_path.m_syslog_path, m_st_time);
 
 /*    unsigned char testbuf_tmp[] = {
                                 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0FE,
@@ -5520,7 +5525,7 @@ bool CG320::GetTimezone()
         return false;
 
     // get time offset
-    sprintf(buf, "curl %s --max-time 30 | grep -i %s | awk '{print $2}' > /tmp/time_offset", TIME_OFFSET_URL, timezone);
+    sprintf(buf, "curl %s --max-time 30 | grep -i %s | awk '{print $3}' > /tmp/time_offset", TIME_OFFSET_URL, timezone);
     //printf("cmd = %s\n", buf);
     system(buf);
     pFile = fopen("/tmp/time_offset", "rb");

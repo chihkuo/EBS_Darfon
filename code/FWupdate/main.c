@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.1.2"
+#define VERSION             "1.1.3"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -3009,6 +3009,7 @@ int DoUpdate(char *list_path)
         printf("remove sn list.\n");
         sprintf(buf, "rm %s; sync; sync", list_path);
         system(buf);
+        ModbusDrvDeinit(gcomportfd);
         return 0;
     }
 
@@ -3168,6 +3169,8 @@ int DoUpdate(char *list_path)
     // list not exist, delete fw file
 
     printf("##################################\n");
+
+    ModbusDrvDeinit(gcomportfd);
 
     return 0;
 }

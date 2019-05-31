@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# V2.4.2
+# V2.4.3
 # initial package dir
 USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial
@@ -31,7 +31,7 @@ RDL=run_DL.sh
 RDLSW=run_DLSW.sh
 CPLS=CopyLuciSetting.sh
 
-echo "DL initial V2.4.2 script start~"
+echo "DL initial V2.4.3 script start~"
 
 echo "Stop running progame"
 /etc/init.d/run_DL.sh stop
@@ -114,5 +114,5 @@ sync
 echo "network restart ok"
 
 
-echo "DL initial V2.4.2 script finished."
+echo "DL initial V2.4.3 script finished."
 

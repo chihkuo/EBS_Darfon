@@ -16,7 +16,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.4.2"
+#define VERSION             "2.4.3"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -691,6 +691,11 @@ int UpdDLSWStatus()
             printf("======================= UpdDLSWStatus end =======================\n");
             // newSWupdate.sh if exist
             if ( stat("/tmp/newSWupdate.sh", &myst) == 0 ) {
+                // save log
+                CloseLog();
+                system("sync");
+                // end
+
                 system("/tmp/newSWupdate.sh &");
                 printf("Wait update~\n");
                 usleep(10000000); // sleep 10s
