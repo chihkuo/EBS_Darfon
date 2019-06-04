@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.1.3"
+#define VERSION             "1.1.4"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -2662,10 +2662,21 @@ int stopProcess()
 
 int runProcess()
 {
-    printf("run runProcess()\n");
+    //printf("run runProcess()\n");
     // call boot script
-    system("/usr/home/run_DLSW.sh");
+    //system("/usr/home/run_DLSW.sh");
+    //system("sync");
+
+    time_t      current_time;
+    struct tm   *st_time = NULL;
+    current_time = time(NULL);
+    st_time = localtime(&current_time);
+
+    printf("run reboot\n");
+    SaveLog((char *)"FWupdate end, reboot", st_time);
+    CloseLog();
     system("sync");
+    system("reboot");
 
     return 0;
 }
