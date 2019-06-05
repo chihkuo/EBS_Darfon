@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.1.4"
+#define VERSION             "1.1.5"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -1484,17 +1484,23 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
                     printf("Response check error!\n");
                     SaveLog((char *)"FWupdate WriteHBData() : Response check error", st_time);
                     // re-address
+                    SaveLog((char *)"FWupdate WriteHBData() : Do Re-address", st_time);
                     address = (lpdata[2]<<8) + lpdata[3];
                     numofdata = lpdata[5];
                     writesize = numofdata*2;
+                    cnt++;
+                    sprintf(buf, "FWupdate WriteHBData() : write count %d, index 0x%X, size %d already OK", cnt, index, writesize);
+                    SaveLog(buf, st_time);
                     index+=writesize;
                     printf("Re-address 0x%04X, numofdata 0x%02X, index %d\n", address, numofdata, index);
+                    sprintf(buf, "FWupdate WriteHBData() : Re-address 0x%04X, numofdata 0x%02X, index %d", address, numofdata, index);
+                    SaveLog(buf, st_time);
 
                     if ( retry == 0 ) {
                         retry = 1;
                         break;
                     } else {
-                        SaveLog((char *)"FWupdate WriteHBData() : Response check retry error", st_time);
+                        SaveLog((char *)"FWupdate WriteHBData() : Response check retry error, end", st_time);
                         return 5;
                     }
                 }
