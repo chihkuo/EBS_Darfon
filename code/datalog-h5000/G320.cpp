@@ -47,6 +47,7 @@ extern "C" {
     extern int  MyOffLineQuery(int fd, unsigned char addr, unsigned char  buf[], int buf_size);
     //extern int SendForceCoil(byte SlaveID, byte StartAddress, unsigned int Data);
     extern bool have_respond;
+    extern unsigned char respond_buff[];
 }
 
 CG320::CG320()
@@ -3446,15 +3447,26 @@ bool CG320::GetMiIDInfo(int index)
     }
 
     unsigned char szMIIDinfo[]={0x00, 0x03, 0x00, 0x01, 0x00, 0x0A, 0x00, 0x00};
-    szMIIDinfo[0]=arySNobj[index].m_Addr;
-    MakeReadDataCRC(szMIIDinfo,8);
-
-    MClearRX();
-    txsize=8;
-    waitAddr = arySNobj[index].m_Addr;
-    waitFCode = 0x03;
 
     while ( err < 3 ) {
+        // set buf
+        // slave id
+        szMIIDinfo[0]=arySNobj[index].m_Addr;
+        // function code
+        szMIIDinfo[1]=0x03;
+        // start address 2 byte
+        szMIIDinfo[2]=0x00;
+        szMIIDinfo[3]=0x01;
+        // no, of data 2 byte
+        szMIIDinfo[4]=0x00;
+        szMIIDinfo[5]=0x0A;
+        // crc
+        MakeReadDataCRC(szMIIDinfo,8);
+
+        MClearRX();
+        txsize=8;
+        waitAddr = arySNobj[index].m_Addr;
+        waitFCode = 0x03;
         memcpy(txbuffer, szMIIDinfo, 8);
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_1);
@@ -3478,6 +3490,8 @@ bool CG320::GetMiIDInfo(int index)
             else {
                 printf("#### GetMiIDInfo No Response ####\n");
                 SaveLog((char *)"DataLogger GetMiIDInfo() : No Response", log_time);
+                SaveLog((char *)"DataLogger GetMiIDInfo() : run reregister()", log_time);
+                ReRegister(index);
             }
             err++;
         }
@@ -3624,15 +3638,26 @@ bool CG320::GetMiPowerInfo(int index)
     }
 
     unsigned char szMIPowerinfo[]={0x00, 0x03, 0x02, 0x00, 0x00, 0x21, 0x00, 0x00};
-    szMIPowerinfo[0]=arySNobj[index].m_Addr;
-    MakeReadDataCRC(szMIPowerinfo,8);
-
-    MClearRX();
-    txsize=8;
-    waitAddr = arySNobj[index].m_Addr;
-    waitFCode = 0x03;
 
     while ( err < 3 ) {
+        // set buf
+        // slave id
+        szMIPowerinfo[0]=arySNobj[index].m_Addr;
+        // function code
+        szMIPowerinfo[1]=0x03;
+        // start address 2 byte
+        szMIPowerinfo[2]=0x02;
+        szMIPowerinfo[3]=0x00;
+        // no, of data 2 byte
+        szMIPowerinfo[4]=0x00;
+        szMIPowerinfo[5]=0x21;
+        // crc
+        MakeReadDataCRC(szMIPowerinfo,8);
+
+        MClearRX();
+        txsize=8;
+        waitAddr = arySNobj[index].m_Addr;
+        waitFCode = 0x03;
         memcpy(txbuffer, szMIPowerinfo, 8);
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_1);
@@ -3662,6 +3687,8 @@ bool CG320::GetMiPowerInfo(int index)
                 //SaveLog((char *)"DataLogger GetMiPowerInfo() : No Response", log_time);
                 sprintf(strbuf, "DataLogger GetMiPowerInfo(%d) No Response : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
                 SaveLog(strbuf, log_time);
+                SaveLog((char *)"DataLogger GetMiPowerInfo() : run reregister()", log_time);
+                ReRegister(index);
             }
             err++;
         }
@@ -3846,15 +3873,26 @@ bool CG320::GetHybridIDData(int index)
     }
 
     unsigned char szHBIDdata[]={0x00, 0x03, 0x00, 0x01, 0x00, 0x0E, 0x00, 0x00};
-    szHBIDdata[0]=arySNobj[index].m_Addr;
-    MakeReadDataCRC(szHBIDdata,8);
-
-    MClearRX();
-    txsize=8;
-    waitAddr = arySNobj[index].m_Addr;
-    waitFCode = 0x03;
 
     while ( err < 3 ) {
+        // set buf
+        // slave id
+        szHBIDdata[0]=arySNobj[index].m_Addr;
+        // function code
+        szHBIDdata[1]=0x03;
+        // start address 2 byte
+        szHBIDdata[2]=0x00;
+        szHBIDdata[3]=0x01;
+        // no, of data 2 byte
+        szHBIDdata[4]=0x00;
+        szHBIDdata[5]=0x0E;
+        // crc
+        MakeReadDataCRC(szHBIDdata,8);
+
+        MClearRX();
+        txsize=8;
+        waitAddr = arySNobj[index].m_Addr;
+        waitFCode = 0x03;
         memcpy(txbuffer, szHBIDdata, 8);
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_2);
@@ -3879,6 +3917,8 @@ bool CG320::GetHybridIDData(int index)
             else {
                 printf("#### GetHybridIDData No Response ####\n");
                 SaveLog((char *)"DataLogger GetHybridIDData() : No Response", log_time);
+                SaveLog((char *)"DataLogger GetHybridIDData() : run reregister()", log_time);
+                ReRegister(index);
             }
             err++;
         }
@@ -4192,58 +4232,59 @@ bool CG320::SetHybridRTCData(int index)
     byte *lpdata = NULL;
 
     unsigned char szRTCData[41]={0};
-    szRTCData[0] = arySNobj[index].m_Addr;
-    szRTCData[1] = 0x10; // function code
-    szRTCData[2] = 0x00;
-    szRTCData[3] = 0x40; // star address
-    szRTCData[4] = 0x00;
-    szRTCData[5] = 0x10; // number of data
-    szRTCData[6] = 0x20; // bytes
-    // data 0x40 ~ 0x45
-    szRTCData[7] = 0x00;
-    szRTCData[8] = (unsigned char)m_hb_rtc_data.Second;
-    szRTCData[9] = 0x00;
-    szRTCData[10] = (unsigned char)m_hb_rtc_data.Minute;
-    szRTCData[11] = 0x00;
-    szRTCData[12] = (unsigned char)m_hb_rtc_data.Hour;
-    szRTCData[13] = 0x00;
-    szRTCData[14] = (unsigned char)m_hb_rtc_data.Date;
-    szRTCData[15] = 0x00;
-    szRTCData[16] = (unsigned char)m_hb_rtc_data.Month;
-    szRTCData[17] = (unsigned char)((m_hb_rtc_data.Year >> 8) & 0xFF);
-    szRTCData[18] = (unsigned char)(m_hb_rtc_data.Year & 0xFF);
-    // zero 0x46 ~ 0x4E
-    szRTCData[19] = 0x00;
-    szRTCData[20] = 0x00;
-    szRTCData[21] = 0x00;
-    szRTCData[22] = 0x00;
-    szRTCData[23] = 0x00;
-    szRTCData[24] = 0x00;
-    szRTCData[25] = 0x00;
-    szRTCData[26] = 0x00;
-    szRTCData[27] = 0x00;
-    szRTCData[28] = 0x00;
-    szRTCData[29] = 0x00;
-    szRTCData[30] = 0x00;
-    szRTCData[31] = 0x00;
-    szRTCData[32] = 0x00;
-    szRTCData[33] = 0x00;
-    szRTCData[34] = 0x00;
-    szRTCData[35] = 0x00;
-    szRTCData[36] = 0x00;
-    // data crc 0x4F
-    crc = CalculateCRC(szRTCData+7, 12);
-    szRTCData[37] = (unsigned char) (crc >> 8); // data crc hi
-    szRTCData[38] = (unsigned char) (crc & 0xFF); // data crc lo
-    szRTCData[39] = 0x00; // cmd crc hi
-    szRTCData[40] = 0x00; // cmd crc lo
-    MakeReadDataCRC(szRTCData,41);
-    MClearRX();
-    txsize=41;
-    waitAddr = arySNobj[index].m_Addr;
-    waitFCode = 0x10;
 
     while ( err < 3 ) {
+        // set buf
+        szRTCData[0] = arySNobj[index].m_Addr;
+        szRTCData[1] = 0x10; // function code
+        szRTCData[2] = 0x00;
+        szRTCData[3] = 0x40; // star address
+        szRTCData[4] = 0x00;
+        szRTCData[5] = 0x10; // number of data
+        szRTCData[6] = 0x20; // bytes
+        // data 0x40 ~ 0x45
+        szRTCData[7] = 0x00;
+        szRTCData[8] = (unsigned char)m_hb_rtc_data.Second;
+        szRTCData[9] = 0x00;
+        szRTCData[10] = (unsigned char)m_hb_rtc_data.Minute;
+        szRTCData[11] = 0x00;
+        szRTCData[12] = (unsigned char)m_hb_rtc_data.Hour;
+        szRTCData[13] = 0x00;
+        szRTCData[14] = (unsigned char)m_hb_rtc_data.Date;
+        szRTCData[15] = 0x00;
+        szRTCData[16] = (unsigned char)m_hb_rtc_data.Month;
+        szRTCData[17] = (unsigned char)((m_hb_rtc_data.Year >> 8) & 0xFF);
+        szRTCData[18] = (unsigned char)(m_hb_rtc_data.Year & 0xFF);
+        // zero 0x46 ~ 0x4E
+        szRTCData[19] = 0x00;
+        szRTCData[20] = 0x00;
+        szRTCData[21] = 0x00;
+        szRTCData[22] = 0x00;
+        szRTCData[23] = 0x00;
+        szRTCData[24] = 0x00;
+        szRTCData[25] = 0x00;
+        szRTCData[26] = 0x00;
+        szRTCData[27] = 0x00;
+        szRTCData[28] = 0x00;
+        szRTCData[29] = 0x00;
+        szRTCData[30] = 0x00;
+        szRTCData[31] = 0x00;
+        szRTCData[32] = 0x00;
+        szRTCData[33] = 0x00;
+        szRTCData[34] = 0x00;
+        szRTCData[35] = 0x00;
+        szRTCData[36] = 0x00;
+        // data crc 0x4F
+        crc = CalculateCRC(szRTCData+7, 12);
+        szRTCData[37] = (unsigned char) (crc >> 8); // data crc hi
+        szRTCData[38] = (unsigned char) (crc & 0xFF); // data crc lo
+        szRTCData[39] = 0x00; // cmd crc hi
+        szRTCData[40] = 0x00; // cmd crc lo
+        MakeReadDataCRC(szRTCData,41);
+        MClearRX();
+        txsize=41;
+        waitAddr = arySNobj[index].m_Addr;
+        waitFCode = 0x10;
         memcpy(txbuffer, szRTCData, 41);
         MStartTX(m_busfd);
         //usleep(m_dl_config.m_delay_time_2);
@@ -4265,6 +4306,8 @@ bool CG320::SetHybridRTCData(int index)
         } else {
             printf("#### SetHybridRTCData No Response ####\n");
             SaveLog((char *)"DataLogger SetHybridRTCData() : No Response", st_time);
+            SaveLog((char *)"DataLogger SetHybridRTCData() : run reregister()", st_time);
+            ReRegister(index);
             err++;
         }
 

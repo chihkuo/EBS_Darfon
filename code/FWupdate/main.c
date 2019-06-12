@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.1.5"
+#define VERSION             "1.1.9"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -58,6 +58,7 @@ extern unsigned char    waitAddr, waitFCode;
 #define bool int
 extern bool have_respond;
 extern unsigned char    txbuffer[1544];//MODBUS_TX_BUFFER_SIZE
+extern unsigned char respond_buff[4096];
 
 void getMAC(char *MAC);
 void getConfig();
@@ -787,8 +788,8 @@ int WriteVerV3(char *sn, unsigned char *fwver)
 {
     printf("\n#### WriteVerV3 start ####\n");
 
-    int err = 0, ret = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
-    char buf[256] = {0};
+    int err = 0, ret = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0, i = 0;
+    char buf[256] = {0}, log[1024] = {0};
     unsigned char *lpdata = NULL;
     time_t      current_time = 0;
     struct tm   *st_time = NULL;
@@ -821,6 +822,13 @@ int WriteVerV3(char *sn, unsigned char *fwver)
 
         current_time = time(NULL);
         st_time = localtime(&current_time);
+
+        sprintf(log, "FWupdate WriteVerV3() send :");
+        for (i = 0; i < txsize; i++) {
+            sprintf(buf, " %02X", cmd[i]);
+            strcat(log, buf);
+        }
+        SaveLog(log, st_time);
 
         lpdata = GetRespond(gcomportfd, 14, delay_time_1); // from uci config
         if ( lpdata ) {
@@ -1077,8 +1085,8 @@ int RunRebootSpecify(char *sn)
 {
     printf("\n#### RunRebootSpecify start ####\n");
 
-    int err = 0, ret = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
-    char buf[256] = {0};
+    int err = 0, ret = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0, i = 0;
+    char buf[256] = {0}, log[1024] = {0};
     unsigned char *lpdata = NULL;
     time_t      current_time = 0;
     struct tm   *st_time = NULL;
@@ -1108,6 +1116,16 @@ int RunRebootSpecify(char *sn)
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
 
+        current_time = time(NULL);
+        st_time = localtime(&current_time);
+
+        sprintf(log, "FWupdate RunRebootSpecify() send :");
+        for (i = 0; i < txsize; i++) {
+            sprintf(buf, " %02X", cmd[i]);
+            strcat(log, buf);
+        }
+        SaveLog(log, st_time);
+
         lpdata = GetRespond(gcomportfd, 14, delay_time_1); // from uci config
         if ( lpdata ) {
             printf("#### RunRebootSpecify OK ####\n");
@@ -1135,8 +1153,8 @@ int LBDReregister(char *sn)
 {
     printf("\n#### LBDReregister start ####\n");
 
-    int err = 0, ret = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
-    char buf[256] = {0};
+    int err = 0, ret = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0, i = 0;
+    char buf[256] = {0}, log[1024] = {0};
     unsigned char *lpdata = NULL;
     time_t      current_time = 0;
     struct tm   *st_time = NULL;
@@ -1168,6 +1186,13 @@ int LBDReregister(char *sn)
 
         current_time = time(NULL);
         st_time = localtime(&current_time);
+
+        sprintf(log, "FWupdate LBDReregister() send :");
+        for (i = 0; i < txsize; i++) {
+            sprintf(buf, " %02X", cmd[i]);
+            strcat(log, buf);
+        }
+        SaveLog(log, st_time);
 
         lpdata = GetRespond(gcomportfd, 14, delay_time_1); // from uci config
         if ( lpdata ) {
@@ -1316,7 +1341,7 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
     int i = 0, err = 0, index = 0, numofdata = 0, writesize = 0, address = 0, cnt = 0, end = 0, ret = 0, retry = 0;
     unsigned char addrh = 0, addrl = 0;
     unsigned char *lpdata = NULL;
-    char buf[256] = {0};
+    char buf[256] = {0}, log[1024] = {0};
     time_t      current_time = 0;
     struct tm   *st_time = NULL;
 
@@ -1361,7 +1386,26 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
         current_time = time(NULL);
         st_time = localtime(&current_time);
 
+        sprintf(log, "FWupdate WriteHBData() send :");
+        for (i = 0; i < txsize; i++) {
+            sprintf(buf, " %02X", cmd[i]);
+            strcat(log, buf);
+        }
+        SaveLog(log, st_time);
+
         lpdata = GetRespond(gcomportfd, 8, delay_time_2); // uci setting
+        // save debug log
+        if ( have_respond ) {
+            current_time = time(NULL);
+            st_time = localtime(&current_time);
+
+            sprintf(log, "FWupdate WriteHBData() get :");
+            for (i = 0; i < 8; i++) {
+                sprintf(buf, " %02X", respond_buff[i]);
+                strcat(log, buf);
+            }
+            SaveLog(log, st_time);
+        }
         if ( lpdata ) {
             if ( (lpdata[4] == 0xFF) && (lpdata[5] == 0xF0) ) {
                 // response the same FW data
@@ -1442,13 +1486,31 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
             current_time = time(NULL);
             st_time = localtime(&current_time);
 
+            sprintf(log, "FWupdate WriteHBData() send :");
+            for (i = 0; i < txsize; i++) {
+                sprintf(buf, " %02X", cmd[i]);
+                strcat(log, buf);
+            }
+            SaveLog(log, st_time);
+
             lpdata = GetRespond(gcomportfd, 8, delay_time_2); // uci setting
+            current_time = time(NULL);
+            st_time = localtime(&current_time);
+            // save debug log
+            if ( have_respond ) {
+                sprintf(log, "FWupdate WriteHBData() get :");
+                for (i = 0; i < 8; i++) {
+                    sprintf(buf, " %02X", respond_buff[i]);
+                    strcat(log, buf);
+                }
+                SaveLog(log, st_time);
+            }
             if ( lpdata ) {
                 //lpdata = cmd; // for test
                 if ( (lpdata[2] == addrh) && (lpdata[3] == addrl) && (lpdata[4] == 00) && (lpdata[5] == numofdata) ) {
                     cnt++;
-                    printf("#### WriteHBData data count %d, index 0x%X, size %d OK ####\n", cnt, index, writesize);
-                    sprintf(buf, "FWupdate WriteHBData() : write count %d, index 0x%X, size %d OK", cnt, index, writesize);
+                    printf("#### WriteHBData data count %d, addr 0x%X, index 0x%X, size %d OK ####\n", cnt, address, index, writesize);
+                    sprintf(buf, "FWupdate WriteHBData() : write count %d, addr 0x%X, index 0x%X, size %d OK", cnt, address, index, writesize);
                     SaveLog(buf, st_time);
 
                     index+=writesize;
@@ -1483,17 +1545,24 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
                 } else {
                     printf("Response check error!\n");
                     SaveLog((char *)"FWupdate WriteHBData() : Response check error", st_time);
+                    // save respond
+                    sprintf(log, "FWupdate WriteHBData() get :");
+                    for (i = 0; i < 8; i++) {
+                        sprintf(buf, " %02X", lpdata[i]);
+                        strcat(log, buf);
+                    }
+                    SaveLog(log, st_time);
                     // re-address
                     SaveLog((char *)"FWupdate WriteHBData() : Do Re-address", st_time);
-                    address = (lpdata[2]<<8) + lpdata[3];
                     numofdata = lpdata[5];
                     writesize = numofdata*2;
                     cnt++;
-                    sprintf(buf, "FWupdate WriteHBData() : write count %d, index 0x%X, size %d already OK", cnt, index, writesize);
+                    sprintf(buf, "FWupdate WriteHBData() : write count %d, addr 0x%X, index 0x%X, size %d already OK", cnt, address, index, writesize);
                     SaveLog(buf, st_time);
+                    address = (lpdata[2]<<8) + lpdata[3] + numofdata;
                     index+=writesize;
                     printf("Re-address 0x%04X, numofdata 0x%02X, index %d\n", address, numofdata, index);
-                    sprintf(buf, "FWupdate WriteHBData() : Re-address 0x%04X, numofdata 0x%02X, index %d", address, numofdata, index);
+                    sprintf(buf, "FWupdate WriteHBData() : Re-address 0x%04X, numofdata 0x%02X, index 0x%X", address, numofdata, index);
                     SaveLog(buf, st_time);
 
                     if ( retry == 0 ) {
@@ -1525,10 +1594,13 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
                             writesize = numofdata*2;
                         }
                         printf("set numofdata = 0x%X, writesize = %d\n", numofdata, writesize);
+                        sprintf(log, "FWupdate WriteHBData() set size %d", writesize);
+                        SaveLog(log, st_time);
                         err = 0;
                         break;
                     } else {
                         printf("numofdata = 0x%X, too small so end this loop\n", numofdata);
+                        SaveLog((char *)"FWupdate WriteHBData() : size too small, end", st_time);
                         end = 1;
                         break;
                     }
@@ -1556,7 +1628,7 @@ int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
     int i = 0, err = 0, index = 0, numofdata = MAX_DATA_SIZE/2, writesize = MAX_DATA_SIZE, address = 0, cnt = 0, end = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0;
     unsigned char addrh = 0, addrl = 0;
     unsigned char *lpdata = NULL;
-    char buf[256] = {0};
+    char buf[256] = {0}, log[1024] = {0};
     time_t      current_time = 0;
     struct tm   *st_time = NULL;
 
@@ -1620,7 +1692,25 @@ int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
             current_time = time(NULL);
             st_time = localtime(&current_time);
 
+            sprintf(log, "FWupdate WriteDataV3() send :");
+            for (i = 0; i < txsize; i++) {
+                sprintf(buf, " %02X", cmd[i]);
+                strcat(log, buf);
+            }
+            SaveLog(log, st_time);
+
             lpdata = GetRespond(gcomportfd, 8, delay_time_1); // from uci config
+            current_time = time(NULL);
+            st_time = localtime(&current_time);
+            // save debug log
+            if ( have_respond ) {
+                sprintf(log, "FWupdate WriteDataV3() get :");
+                for (i = 0; i < 8; i++) {
+                    sprintf(buf, " %02X", respond_buff[i]);
+                    strcat(log, buf);
+                }
+                SaveLog(log, st_time);
+            }
             if ( lpdata ) {
                 cnt++;
                 printf("#### WriteDataV3 data count %d, index 0x%X, size %d OK ####\n", cnt, index, writesize);
@@ -1649,10 +1739,13 @@ int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
                         numofdata-=0x08;
                         writesize = numofdata*2;
                         printf("set numofdata = 0x%X, writesize = %d\n", numofdata, writesize);
+                        sprintf(log, "FWupdate WriteDataV3() set size %d", writesize);
+                        SaveLog(log, st_time);
                         err = 0;
                         break;
                     } else {
                         printf("numofdata = 0x%X, too small so end this loop\n", numofdata);
+                        SaveLog((char *)"FWupdate WriteDataV3() : size too small, end", st_time);
                         end = 1;
                         break;
                     }
@@ -1679,8 +1772,8 @@ int ReadV3Ver(char *sn, unsigned char *fwver)
 {
     printf("\n#### ReadV3Ver start ####\n");
 
-    int err = 0, ret = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0, ver1 = 0, ver2 = 0;
-    char buf[256] = {0};
+    int err = 0, ret = 0, tmp1 = 0, tmp2 = 0, tmp3 = 0, tmp4 = 0, tmp5 = 0, ver1 = 0, ver2 = 0, i = 0;
+    char buf[256] = {0}, log[1024] = {0};
     unsigned char *lpdata = NULL, verh = 0, verl = 0;
     time_t      current_time = 0;
     struct tm   *st_time = NULL;
@@ -1719,6 +1812,13 @@ int ReadV3Ver(char *sn, unsigned char *fwver)
         current_time = time(NULL);
         st_time = localtime(&current_time);
 
+        sprintf(log, "FWupdate ReadV3Ver() send :");
+        for (i = 0; i < txsize; i++) {
+            sprintf(buf, " %02X", cmd[i]);
+            strcat(log, buf);
+        }
+        SaveLog(log, st_time);
+
         lpdata = GetRespond(gcomportfd, 13, delay_time_1); // from uci config
         if ( lpdata ) {
             printf("#### ReadV3Ver OK ####\n");
@@ -1730,6 +1830,8 @@ int ReadV3Ver(char *sn, unsigned char *fwver)
             ver1 = (verh<<8) + verl;
             ver2 = fwver[0]*1000 + fwver[1]*100 + fwver[2]*10 + fwver[3];
             printf("ver1 = %d, ver2 = %d\n", ver1, ver2);
+            sprintf(buf, "FWupdate ReadV3Ver() : Get Ver %d", ver1);
+            SaveLog(buf, st_time);
             if ( ver1 == ver2 ) {
                 printf("FW ver match\n");
                 SaveLog((char *)"FWupdate ReadV3Ver() : fw ver match", st_time);
