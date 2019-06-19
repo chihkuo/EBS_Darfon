@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.1.9"
+#define VERSION             "1.2.0"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -1684,7 +1684,7 @@ int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
         waitAddr = cmd[0];
         waitFCode = cmd[1];
 
-        while ( err < 1 ) {
+        while ( err < 3 ) {
             memcpy(txbuffer, cmd, txsize);
             MStartTX(gcomportfd);
             //usleep(10000); // 0.01s
@@ -1725,7 +1725,7 @@ int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
             } else {
                 err++;
                 printf("#### WriteDataV3 GetRespond Error %d ####\n", err);
-                if ( err == 1 ) {
+                if ( err == 3 ) {
                     if ( have_respond ) {
                         printf("#### WriteDataV3 CRC Error ####\n");
                         SaveLog((char *)"FWupdate WriteDataV3() : CRC Error", st_time);
