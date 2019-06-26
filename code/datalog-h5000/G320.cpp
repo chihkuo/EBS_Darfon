@@ -68,6 +68,7 @@ CG320::CG320()
     m_loopstate = 0;
     m_loopflag = 0;
     m_sys_error = 0;
+    m_inverter_state = 0;
     m_do_get_TZ = false;
     m_data_st_time = {0};
     m_st_time = NULL;
@@ -873,7 +874,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     if ( m_loopflag == 0 )
                         m_loopflag = 10;
                     WriteLogXML(i);
-                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 || m_inverter_state ||
                         (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
                         WriteErrorLogXML(i);
                     }
@@ -897,7 +898,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                             return -1;
 
                     WriteLogXML(i);
-                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 || m_inverter_state ||
                         (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
                         WriteErrorLogXML(i);
                     }
@@ -997,7 +998,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                             return -1;
 
                     WriteLogXML(i);
-                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 ||
+                    if ( m_mi_power_info.Error_Code1 || m_mi_power_info.Error_Code2 || m_inverter_state ||
                         (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
                         WriteErrorLogXML(i);
                     }
@@ -1134,7 +1135,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
 
                     WriteLogXML(i);
                     if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ||
-                        (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
+                         m_inverter_state || (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
                         WriteErrorLogXML(i);
                     }
                     dosave = true;
@@ -1610,6 +1611,7 @@ void CG320::CleanParameter()
     m_hb_pvinv_err_cod2 = {0};
     m_hb_dd_err_cod = {0};
     m_hb_icon_info = {0};
+    m_inverter_state = 0;
 
     return;
 }
@@ -5784,8 +5786,12 @@ bool CG320::WriteLogXML(int index)
             } else {
                 if ( m_loopflag == 1 ) {
                     strcat(m_log_buf, "<Status>1</Status>");
+                    m_inverter_state = 1;
+                    m_sys_error |= SYS_0010_Off_Line;
                 } else {
                     strcat(m_log_buf, "<Status>0</Status>");
+                    m_inverter_state = 0;
+                    m_sys_error &= ~SYS_0010_Off_Line;
                 }
             }
 
@@ -5872,8 +5878,12 @@ bool CG320::WriteLogXML(int index)
             } else {
                 if ( m_loopflag == 1 ) {
                     strcat(m_log_buf, "<Status>1</Status>");
+                    m_inverter_state = 1;
+                    m_sys_error |= SYS_0010_Off_Line;
                 } else {
                     strcat(m_log_buf, "<Status>0</Status>");
+                    m_inverter_state = 0;
+                    m_sys_error &= ~SYS_0010_Off_Line;
                 }
             }
 
@@ -5960,8 +5970,12 @@ bool CG320::WriteLogXML(int index)
             } else {
                 if ( m_loopflag == 1 ) {
                     strcat(m_log_buf, "<Status>1</Status>");
+                    m_inverter_state = 1;
+                    m_sys_error |= SYS_0010_Off_Line;
                 } else {
                     strcat(m_log_buf, "<Status>0</Status>");
+                    m_inverter_state = 0;
+                    m_sys_error &= ~SYS_0010_Off_Line;
                 }
             }
         }
@@ -6101,8 +6115,12 @@ bool CG320::WriteLogXML(int index)
         } else {
             if ( m_loopflag == 6 ) {
                 strcat(m_log_buf, "<Status>1</Status>");
+                m_inverter_state = 1;
+                m_sys_error |= SYS_0010_Off_Line;
             } else {
                 strcat(m_log_buf, "<Status>0</Status>");
+                m_inverter_state = 0;
+                m_sys_error &= ~SYS_0010_Off_Line;
             }
         }
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -6693,6 +6711,11 @@ bool CG320::WriteErrorLogXML(int index)
             strcat(m_errlog_buf, "<code>SYS_0004_No_SD</code>");
         if ( m_sys_error & SYS_0008_Save_SD_Fail )
             strcat(m_errlog_buf, "<code>SYS_0008_Save_SD_Fail</code>");
+    }
+
+    // set inverter off line log
+    if ( m_inverter_state ) {
+        strcat(m_errlog_buf, "<code>SYS_0010_Off_Line</code>");
     }
 
     strcat(m_errlog_buf, "</record>");

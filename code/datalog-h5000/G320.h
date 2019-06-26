@@ -177,6 +177,7 @@ protected:
     int     m_loopstate;
     int     m_loopflag;
     int     m_sys_error;
+    int     m_inverter_state;
     bool    m_do_get_TZ;
     struct tm   m_data_st_time;
     struct tm   *m_st_time;
