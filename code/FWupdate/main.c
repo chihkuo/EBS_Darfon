@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.2.0"
+#define VERSION             "1.2.1"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -2980,8 +2980,11 @@ int GetSNList(char *list_path)
         // get sn & file
         printf("set mi unicast list\n");
         while ( fgets(buf, 512, pfile_fd) != NULL ) {
-            sscanf(buf, "%16s %127s", snlist[gsncount].SN, snlist[gsncount].FILE);
-            gsncount++;
+            if ( strlen(buf) > 16 ) {
+                sscanf(buf, "%16s %127s", snlist[gsncount].SN, snlist[gsncount].FILE);
+                gsncount++;
+                memset(buf, 0x00, 512);
+            }
         }
     // mi broadcast
     } else if ( strstr(list_path, MIFW_BLIST) != NULL ) {
@@ -2995,8 +2998,11 @@ int GetSNList(char *list_path)
         // get sn & file
         printf("set hybrid unicast list\n");
         while ( fgets(buf, 512, pfile_fd) != NULL ) {
-            sscanf(buf, "%16s %127s", snlist[gsncount].SN, snlist[gsncount].FILE);
-            gsncount++;
+            if ( strlen(buf) > 16 ) {
+                sscanf(buf, "%16s %127s", snlist[gsncount].SN, snlist[gsncount].FILE);
+                gsncount++;
+                memset(buf, 0x00, 512);
+            }
         }
     // plc
     } else if ( strstr(list_path, PLC_LIST) != NULL ) {
@@ -3021,8 +3027,11 @@ int GetSNList(char *list_path)
     // debug print
     printf("===========================================\n");
     printf("sn list count = %d\n", gsncount);
-    for (i = 0; i < gsncount; i++)
+    for (i = 0; i < gsncount; i++) {
         printf("set sn list %d : sn = %s, file = %s\n", i, snlist[i].SN, snlist[i].FILE);
+        sprintf(buf, "FWupdate GetSNList() : set sn list %d : sn = %s, file = %s", i, snlist[i].SN, snlist[i].FILE);
+        SaveLog(buf, st_time);
+    }
     printf("===========================================\n");
 
     sprintf(buf, "FWupdate GetSNList() : Get sn list count %d", gsncount);
@@ -3079,32 +3088,46 @@ int DoUpdate(char *list_path)
 
     printf("######### run DoUpdate() #########\n");
 
+    while (1)
+    {
+        current_time = time(NULL);
+        st_time = localtime(&current_time);
+        CloseLog();
+        system("sync");
+        OpenLog(g_SYSLOG_PATH, st_time);
+
+        // get milist name
+        printf("Get MIList\n");
+        system("cd /tmp; ls MIList_* > /tmp/MIList");
+
+        pfile_fd = fopen("/tmp/MIList", "rb");
+        if ( pfile_fd == NULL ) {
+            printf("#### Open /tmp/MIList Fail ####\n");
+            printf("wait 1 min.\n");
+            SaveLog((char *)"FWupdate DoUpdate() : Open /tmp/MIList Fail, wait 1 min.", st_time);
+            usleep(60000000); // 60s;
+            continue;
+        }
+        // get file name
+        memset(buf, 0, 512);
+        fgets(buf, 64, pfile_fd);
+        fclose(pfile_fd);
+
+        if ( strlen(buf) ) {
+            buf[strlen(buf)-1] = 0; // set '\n' to 0
+            sprintf(FILENAME, "/tmp/%s", buf);
+            printf("FILENAME = %s\n", FILENAME);
+            break;
+        } else {
+            printf("Empty file! Plese wait 1 min. to create MIList!\n");
+            SaveLog((char *)"FWupdate DoUpdate() : MIList not found, wait 1 min.", st_time);
+            usleep(60000000); // 60s;
+            continue;
+        }
+    }
+
     // stop process
     stopProcess();
-
-    // get milist name
-    printf("Get MIList\n");
-    system("cd /tmp; ls MIList_* > /tmp/MIList");
-
-    pfile_fd = fopen("/tmp/MIList", "rb");
-    if ( pfile_fd == NULL ) {
-        printf("#### Open /tmp/MIList Fail ####\n");
-        SaveLog((char *)"FWupdate DoUpdate() : Open /tmp/MIList Fail", st_time);
-        return 1;
-    }
-    // get file name
-    memset(buf, 0, 512);
-    fgets(buf, 64, pfile_fd);
-    fclose(pfile_fd);
-    if ( strlen(buf) )
-        buf[strlen(buf)-1] = 0; // set '\n' to 0
-    else {
-        printf("Empty file! Plese check MIList exist!\n");
-        SaveLog((char *)"FWupdate DoUpdate() : MIList not found", st_time);
-        return 2;
-    }
-    sprintf(FILENAME, "/tmp/%s", buf);
-    printf("FILENAME = %s\n", FILENAME);
 
     // get Darfon use com port
     comport = GetPort(FILENAME);
@@ -3112,6 +3135,9 @@ int DoUpdate(char *list_path)
     GetMIList(FILENAME);
     // get sn list
     GetSNList(list_path);
+
+    current_time = time(NULL);
+    st_time = localtime(&current_time);
 
     // open com port
     if ( gcomportfd == 0 ) {
@@ -3463,6 +3489,8 @@ int main(int argc, char* argv[])
 
     ModbusDrvDeinit(3);
     ModbusDrvDeinit(4);
+    ModbusDrvDeinit(5);
+    ModbusDrvDeinit(6);
     printf("Do init\n");
     initenv((char *)"/usr/home/G320.ini");
 
