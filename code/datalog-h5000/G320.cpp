@@ -5729,39 +5729,47 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
                 strcat(m_log_buf, buf);
 
+                // set total KWH, in range 0 ~ 999999999999999.999 KWH, max 0xFFFFFFFF => ‭‭6553599.99?, anyway must in range
                 sprintf(buf, "<total_KWH>%05.3f</total_KWH>", m_mi_power_info.Ch2_EacH*100 + ((float)m_mi_power_info.Ch2_EacL)*0.01);
                 strcat(m_log_buf, buf);
 
+                // set ac power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 6.5535 KW, must in range
                 sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Total_Pac)/10000);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Total_Pac)/10000);
                 strcat(m_log_buf, buf);
 
+                // set dc voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 6553.5 V, must in range
                 sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
                 strcat(m_log_buf, buf);
 
+                // set dc current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 655.35 A, must in range
                 sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_mi_power_info.Ch1_Ipv)/100);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<dc_current>%04.2f</dc_current>", ((float)m_mi_power_info.Ch1_Ipv)/100);
                 strcat(m_log_buf, buf);
 
+                // set dc power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 6.5535 KW, must in range
                 sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_mi_power_info.Ch1_Ppv)/10000);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_mi_power_info.Ch1_Ppv)/10000);
                 strcat(m_log_buf, buf);
 
+                // set ac voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 6553.5 V, must in range
                 sprintf(buf, "<acv_AN>%03.1f</acv_AN>", ((float)m_mi_power_info.Vac)/10);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_mi_power_info.Vac)/10);
                 strcat(m_log_buf, buf);
 
+                // set ac current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 65.535 A, must in range
                 sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Total_Iac)/1000);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Total_Iac)/1000);
                 strcat(m_log_buf, buf);
 
+                // set frequency, in range 0 ~ 999.99 Hz, max 0xFFFF = 65535 => 655.35 Hz, must in range
                 sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
                 strcat(m_log_buf, buf);
 
@@ -5810,29 +5818,35 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
                 strcat(m_log_buf, buf);
 
+                // set total KWH, in range 0 ~ 999999999999999.999 KWH, max 0xFFFFFFFF => ‭‭6553599.99?, anyway must in range
                 sprintf(buf, "<total_KWH>%05.3f</total_KWH>", m_mi_power_info.Ch1_EacH*100 + ((float)m_mi_power_info.Ch1_EacL)*0.01);
                 strcat(m_log_buf, buf);
 
+                // set ac power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 6.5535 KW, must in range
                 sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Ch1_Pac)/10000);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Ch1_Pac)/10000);
                 strcat(m_log_buf, buf);
 
+                // set dc voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 6553.5 V, must in range
                 sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)m_mi_power_info.Ch1_Vpv)*0.1);
                 strcat(m_log_buf, buf);
 
+                // set dc current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 655.35 A, must in range
                 sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_mi_power_info.Ch1_Ipv)/100);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<dc_current>%04.2f</dc_current>", ((float)m_mi_power_info.Ch1_Ipv)/100);
                 strcat(m_log_buf, buf);
 
+                // set dc power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 6.5535 KW, must in range
                 sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_mi_power_info.Ch1_Ppv)/10000);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_mi_power_info.Ch1_Ppv)/10000);
                 strcat(m_log_buf, buf);
 
+                // set ac voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 6553.5 V, must in range
                 sprintf(buf, "<acv_AN>%03.1f</acv_AN>", ((float)m_mi_power_info.Vac)/10);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_mi_power_info.Vac)/10);
@@ -5848,12 +5862,16 @@ bool CG320::WriteLogXML(int index)
                     sprintf(buf, "<ac_current>0</ac_current>");
                     strcat(m_log_buf, buf);
                 } else {
-                    sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Ch1_Pac)/((float)m_mi_power_info.Vac));
-                    strcat(m_log_buf, buf);
-                    sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Ch1_Pac)/((float)m_mi_power_info.Vac));
-                    strcat(m_log_buf, buf);
+                    // set ac current, in range 0 ~ 9999.99 V
+                    if ( (((float)m_mi_power_info.Ch1_Pac)/((float)m_mi_power_info.Vac)) < 10000 ) {
+                        sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Ch1_Pac)/((float)m_mi_power_info.Vac));
+                        strcat(m_log_buf, buf);
+                        sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Ch1_Pac)/((float)m_mi_power_info.Vac));
+                        strcat(m_log_buf, buf);
+                    }
                 }
 
+                // set frequency, in range 0 ~ 999.99 Hz, max 0xFFFF = 65535 => 655.35 Hz, must in range
                 sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
                 strcat(m_log_buf, buf);
 
@@ -5902,29 +5920,35 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
                 strcat(m_log_buf, buf);
 
+                // set total KWH, in range 0 ~ 999999999999999.999 KWH, max 0xFFFFFFFF => ‭‭6553599.99?, anyway must in range
                 sprintf(buf, "<total_KWH>%05.3f</total_KWH>", m_mi_power_info.Ch2_EacH*100 + ((float)m_mi_power_info.Ch2_EacL)*0.01);
                 strcat(m_log_buf, buf);
 
+                // set ac power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 6.5535 KW, must in range
                 sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_mi_power_info.Ch2_Pac)/10000);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_mi_power_info.Ch2_Pac)/10000);
                 strcat(m_log_buf, buf);
 
+                // set dc voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 6553.5 V, must in range
                 sprintf(buf, "<dcv_1>%03.1f</dcv_1>", ((float)m_mi_power_info.Ch2_Vpv)*0.1);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)m_mi_power_info.Ch2_Vpv)*0.1);
                 strcat(m_log_buf, buf);
 
+                // set dc current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 655.35 A, must in range
                 sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_mi_power_info.Ch2_Ipv)/100);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<dc_current>%04.2f</dc_current>", ((float)m_mi_power_info.Ch2_Ipv)/100);
                 strcat(m_log_buf, buf);
 
+                // set dc power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 6.5535 KW, must in range
                 sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_mi_power_info.Ch2_Ppv)/10000);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_mi_power_info.Ch2_Ppv)/10000);
                 strcat(m_log_buf, buf);
 
+                // set ac voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 6553.5 V, must in range
                 sprintf(buf, "<acv_AN>%03.1f</acv_AN>", ((float)m_mi_power_info.Vac)/10);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<ac_voltage>%03.1f</ac_voltage>", ((float)m_mi_power_info.Vac)/10);
@@ -5940,12 +5964,16 @@ bool CG320::WriteLogXML(int index)
                     sprintf(buf, "<ac_current>0</ac_current>");
                     strcat(m_log_buf, buf);
                 } else {
-                    sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Ch2_Pac)/((float)m_mi_power_info.Vac));
-                    strcat(m_log_buf, buf);
-                    sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Ch2_Pac)/((float)m_mi_power_info.Vac));
-                    strcat(m_log_buf, buf);
+                    // set ac current, in range 0 ~ 9999.99 V
+                    if ( (((float)m_mi_power_info.Ch2_Pac)/((float)m_mi_power_info.Vac)) < 10000 ) {
+                        sprintf(buf, "<aci_A>%05.3f</aci_A>", ((float)m_mi_power_info.Ch2_Pac)/((float)m_mi_power_info.Vac));
+                        strcat(m_log_buf, buf);
+                        sprintf(buf, "<ac_current>%05.3f</ac_current>", ((float)m_mi_power_info.Ch2_Pac)/((float)m_mi_power_info.Vac));
+                        strcat(m_log_buf, buf);
+                    }
                 }
 
+                // set frequency, in range 0 ~ 999.99 Hz, max 0xFFFF = 65535 => 655.35 Hz, must in range
                 sprintf(buf, "<frequency>%04.2f</frequency>", ((float)m_mi_power_info.Fac)/100);
                 strcat(m_log_buf, buf);
 
@@ -5991,6 +6019,7 @@ bool CG320::WriteLogXML(int index)
         if ( m_loopflag == 0 ) {
             // set real time part///////////////////////////////////////////////////////////////////////////////////////////
             // set DC power (KW)
+            // set dc power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 65.535 KW, must in range
             sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_hb_rt_info.PV_Total_Power)/1000);
             strcat(m_log_buf, buf);
             sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_hb_rt_info.PV1_Power)/1000);
@@ -5998,13 +6027,21 @@ bool CG320::WriteLogXML(int index)
             sprintf(buf, "<dc_power_2>%05.3f</dc_power_2>", ((float)m_hb_rt_info.PV2_Power)/1000);
             strcat(m_log_buf, buf);
             // set DC voltage (V)
-            sprintf(buf, "<dcv_1>%d</dcv_1>", m_hb_rt_info.PV1_Voltage);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<dcv_2>%d</dcv_2>", m_hb_rt_info.PV2_Voltage);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)(m_hb_rt_info.PV1_Voltage + m_hb_rt_info.PV2_Voltage))/2);
-            strcat(m_log_buf, buf);
+            // set dc voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 65535 V
+            if ( m_hb_rt_info.PV1_Voltage < 10000 ) {
+                sprintf(buf, "<dcv_1>%d</dcv_1>", m_hb_rt_info.PV1_Voltage);
+                strcat(m_log_buf, buf);
+            }
+            if ( m_hb_rt_info.PV2_Voltage < 10000 ) {
+                sprintf(buf, "<dcv_2>%d</dcv_2>", m_hb_rt_info.PV2_Voltage);
+                strcat(m_log_buf, buf);
+            }
+            if ( ((m_hb_rt_info.PV1_Voltage + m_hb_rt_info.PV2_Voltage)/2) < 10000 ) {
+                sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)(m_hb_rt_info.PV1_Voltage + m_hb_rt_info.PV2_Voltage))/2);
+                strcat(m_log_buf, buf);
+            }
             // set DC current (A)
+            // set dc current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 655.35 A, must in range
             sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_hb_rt_info.PV1_Current)/100);
             strcat(m_log_buf, buf);
             sprintf(buf, "<dci_2>%04.2f</dci_2>", ((float)m_hb_rt_info.PV2_Current)/100);
@@ -6013,28 +6050,37 @@ bool CG320::WriteLogXML(int index)
             strcat(m_log_buf, buf);
 
             // set AC power (KW)
+            // set ac power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 65.535 KW, must in range
             sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_hb_rt_info.Load_Power)/1000);
             strcat(m_log_buf, buf);
             sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_hb_rt_info.Load_Power)/1000);
             strcat(m_log_buf, buf);
             // set AC voltage (V)
-            sprintf(buf, "<acv_AN>%d</acv_AN>", m_hb_rt_info.Load_Voltage);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<ac_voltage>%d</ac_voltage>", m_hb_rt_info.Load_Voltage);
-            strcat(m_log_buf, buf);
+            // set ac voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 65535 V
+            if ( m_hb_rt_info.Load_Voltage < 10000 ) {
+                sprintf(buf, "<acv_AN>%d</acv_AN>", m_hb_rt_info.Load_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ac_voltage>%d</ac_voltage>", m_hb_rt_info.Load_Voltage);
+                strcat(m_log_buf, buf);
+            }
             // set AC current (A)
+            // set ac current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 655.35 A, must in range
             sprintf(buf, "<aci_A>%04.2f</aci_A>", ((float)m_hb_rt_info.Load_Current)/100);
             strcat(m_log_buf, buf);
             sprintf(buf, "<ac_current>%04.2f</ac_current>", ((float)m_hb_rt_info.Load_Current)/100);
             strcat(m_log_buf, buf);
 
             // set total power
+            // set total KWH, in range 0 ~ 999999999999999.999 KWH, max 0xFFFFFFFF => ‭‭6553599.99?, anyway must in range
             sprintf(buf, "<total_KWH>%04.2f</total_KWH>", m_hb_rt_info.PV_Total_EnergyH*100 + ((float)m_hb_rt_info.PV_Total_EnergyL)*0.01);
             strcat(m_log_buf, buf);
 
             // set battery SOC
-            sprintf(buf, "<soc>%d</soc>", m_hb_rt_info.Battery_SOC);
-            strcat(m_log_buf, buf);
+            // set soc, in range 0 ~ 9999.99 %, max 0xFFFF = > 65535
+            if ( m_hb_rt_info.Battery_SOC < 10000 ) {
+                sprintf(buf, "<soc>%d</soc>", m_hb_rt_info.Battery_SOC);
+                strcat(m_log_buf, buf);
+            }
 
             // set temperature
             sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_hb_rt_info.Inv_Temp)/10);
@@ -6101,12 +6147,16 @@ bool CG320::WriteLogXML(int index)
             sprintf(buf, "<Error_Code>%d</Error_Code>", m_hb_rt_info.Error_Code);
             strcat(m_log_buf, buf);
 
-            // set frequency
-            sprintf(buf, "<Inverterfrequency>%03.1f</Inverterfrequency>", ((float)m_hb_rt_info.Invert_Frequency)/10);
-            strcat(m_log_buf, buf);
-
-            sprintf(buf, "<frequency>%03.1f</frequency>", ((float)m_hb_rt_info.Grid_Frequency)/10);
-            strcat(m_log_buf, buf);
+            // set frequency, in range 0 ~ 999.9 Hz, max 0xFFFF = 65535 => 6553.5 Hz
+            if ( m_hb_rt_info.Invert_Frequency < 10000 ) {
+                sprintf(buf, "<Inverterfrequency>%03.1f</Inverterfrequency>", ((float)m_hb_rt_info.Invert_Frequency)/10);
+                strcat(m_log_buf, buf);
+            }
+            // set frequency, in range 0 ~ 999.99 Hz, max 0xFFFF = 65535 => 6553.5 Hz
+            if ( m_hb_rt_info.Grid_Frequency < 10000 ) {
+                sprintf(buf, "<frequency>%03.1f</frequency>", ((float)m_hb_rt_info.Grid_Frequency)/10);
+                strcat(m_log_buf, buf);
+            }
         }
 
         // set status
