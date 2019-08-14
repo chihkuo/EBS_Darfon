@@ -5528,9 +5528,10 @@ bool CG320::SetBMSFile(int index, int module)
 bool CG320::GetTimezone()
 {
     char buf[1024] = {0};
-    char tmp[64]= {0};
-    char timezone[64] = {0};
-    char time_offset[64] = {0};
+    char tmp[128]= {0};
+    char timezone[128] = {0};
+    char zonename[128] = {0};
+    char time_offset[128] = {0};
     char *index = NULL;
     FILE *pFile = NULL;
     int i = 0, j = 0;
@@ -5547,7 +5548,7 @@ bool CG320::GetTimezone()
         return false;
     }
     fread(buf, 1024, 1, pFile);
-    //printf("Debug : buf[] = %s\n", buf);
+    printf("Debug : /tmp/timezone = %s\n", buf);
     fclose(pFile);
 
     // find timezone
@@ -5556,21 +5557,39 @@ bool CG320::GetTimezone()
         printf("timezone not found!\n");
         return false;
     }
-    strncpy(tmp, index+11, 63); // copy start at Z, example "timezone":"ZZZ/YYY", get ZZZ/YYY, end  of "
-    for (i = 0; i < 63; i++) {
-        if ( tmp[i] == '"' ) {
-            timezone[j] = 0; // stop at "
+    strncpy(tmp, index+11, 127); // copy start at Z, example "timezone":"ZZZ/YYY", get ZZZ/YYY, end  of "
+    for (i = 0; i < 127; i++) {
+        if ( tmp[i] == '"' ) { // stop at "
+            timezone[j] = 0;
             break;
+        } else if ( (('A' <= tmp[i]) && (tmp[i] <= 'Z')) || (('a' <= tmp[i]) && (tmp[i] <= 'z')) ) { // A ~ Z or a ~ z, copy
+            timezone[j] = tmp[i];
+            j++;
+        } else if (('0' <= tmp[i]) && (tmp[i] <= '9')) { // 0 ~ 9, copy
+            timezone[j] = tmp[i];
+            j++;
+        } else if ( tmp[i] == '/' ) { // /, copy
+            timezone[j] = tmp[i];
+            j++;
+        } else if ( (tmp[i] == '+') || (tmp[i] == '-') ) { // + or -
+            if ( ('0' <= tmp[i+1]) && (tmp[i+1] <= '9') ) { // next byte is number 0 ~ 9, copy
+                timezone[j] = tmp[i];
+                j++;
+            } else { // next byte not number, set .
+                timezone[j] = '.';
+                j++;
+            }
+        } else { // other, all set .
+            timezone[j] = '.';
+            j++;
         }
-        timezone[j] = tmp[i];
-        j++;
     }
     printf("Debug : timezone[] = %s\n", timezone);
     if ( strlen(timezone) == 0 )
         return false;
 
-    // get time offset
-    sprintf(buf, "curl %s --max-time 30 | grep -i %s | awk '{print $3}' > /tmp/time_offset", TIME_OFFSET_URL, timezone);
+    // get time offset from openwrt if match timezone
+    sprintf(buf, "curl %s --max-time 30 | grep -i \"%s\" > /tmp/time_offset", TIME_OFFSET_URL, timezone);
     //printf("cmd = %s\n", buf);
     system(buf);
     pFile = fopen("/tmp/time_offset", "rb");
@@ -5578,14 +5597,42 @@ bool CG320::GetTimezone()
         printf("Open /tmp/time_offset fail!\n");
         return false;
     }
-    fgets(time_offset, 64, pFile);
-    time_offset[strlen(time_offset)-1] = 0; // remove \n
-    printf("Debug : time_offset[] = %s\n", time_offset);
+    memset(buf, 0x00, 1024);
+    fread(buf, 1024, 1, pFile);
+    printf("Debug : /tmp/time_offset = %s\n", buf);
     fclose(pFile);
-    if ( strlen(time_offset) == 0 )
+    if ( strlen(buf) == 0 )
         return false;
 
-    SetTimezone(timezone, time_offset);
+    // parser timezone & offset from /tmp/time_offset
+    index = NULL;
+    index = strchr(buf, '\''); // find first "'"
+    if ( index == NULL ) {
+        printf("start index ' not found!\n");
+        return false;
+    }
+    index++; // set to next char
+    // set zonename
+    i = 0;
+    while ( (*index != '\'') && (*index != NULL) && (i < 128) ) {
+        zonename[i] = *index;
+        index++;
+        i++;
+    }
+    printf("Debug : zonename[] = %s\n", zonename);
+    index++; // set to next char
+    index = strchr(index, '\''); // find third "'"
+    index++; // set to next char
+    // set time_offset
+    i = 0;
+    while ( (*index != '\'') && (*index != NULL) && (i < 128) ) {
+        time_offset[i] = *index;
+        index++;
+        i++;
+    }
+    printf("Debug : time_offset[] = %s\n", time_offset);
+
+    SetTimezone(zonename, time_offset);
     m_do_get_TZ = false;
 
     usleep(1000000);
