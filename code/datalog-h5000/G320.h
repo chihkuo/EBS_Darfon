@@ -129,9 +129,12 @@ protected:
     bool    SetHybridRRSInfo(int index);
     bool    GetHybridRTInfo(int index);
     void    DumpHybridRTInfo(unsigned char *buf);
+    void    DumpHybridRTInfo2(unsigned char *buf);
     void    ParserHybridPVInvErrCOD1(int COD1);
     void    ParserHybridPVInvErrCOD2(int COD2);
+    void    ParserHybridPVInvErrCOD3(int COD3);
     void    ParserHybridDDErrCOD(int COD);
+    void    ParserHybridDDErrCOD2(int COD2);
     void    ParserHybridIconInfo(int Icon_L, int Icon_H);
     bool    GetHybridBMSInfo(int index);
     void    DumpHybridBMSInfo(unsigned char *buf);
@@ -200,7 +203,9 @@ protected:
     HB_RT_INFO      m_hb_rt_info;
     HB_PVINV_ERR_COD1   m_hb_pvinv_err_cod1;
     HB_PVINV_ERR_COD2   m_hb_pvinv_err_cod2;
+    HB_PVINV_ERR_COD3   m_hb_pvinv_err_cod3;
     HB_DD_ERR_COD   m_hb_dd_err_cod;
+    HB_DD_ERR_COD2  m_hb_dd_err_cod2;
     HB_ICON_INFO    m_hb_icon_info;
     HB_BMS_INFO     m_hb_bms_info;
 

@@ -90,7 +90,9 @@ CG320::CG320()
     m_hb_bms_info = {0};
     m_hb_pvinv_err_cod1 = {0};
     m_hb_pvinv_err_cod2 = {0};
+    m_hb_pvinv_err_cod3 = {0};
     m_hb_dd_err_cod = {0};
+    m_hb_dd_err_cod2 = {0};
     m_hb_icon_info = {0};
     m_dl_cmd = {0};
     m_dl_config = {0};
@@ -1134,8 +1136,9 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                             return -1;
 
                     WriteLogXML(i);
-                    if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.DD_Error_COD_Record ||
-                         m_inverter_state || (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
+                    if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.PV_Inv_Error_COD3_Record ||
+                         m_hb_rt_info.DD_Error_COD_Record || m_hb_rt_info.DD_Error_COD2_Record || m_inverter_state ||
+                        (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
                         WriteErrorLogXML(i);
                     }
                     dosave = true;
@@ -1609,7 +1612,9 @@ void CG320::CleanParameter()
     m_hb_bms_info = {0};
     m_hb_pvinv_err_cod1 = {0};
     m_hb_pvinv_err_cod2 = {0};
+    m_hb_pvinv_err_cod3 = {0};
     m_hb_dd_err_cod = {0};
+    m_hb_dd_err_cod2 = {0};
     m_hb_icon_info = {0};
     m_inverter_state = 0;
 
@@ -1711,7 +1716,8 @@ bool CG320::RunTODOList()
                         {
                             case 0x01:
                                 m_hb_id_data.Grid_Voltage = m_dl_cmd.m_data[0];
-                                m_hb_id_data.Model = m_dl_cmd.m_data[1];
+                                m_hb_id_data.Model = m_dl_cmd.m_data[1] & 0x00FF;
+                                m_hb_id_data.HW_Ver = (m_dl_cmd.m_data[1] >> 8) & 0xFF;
                                 m_hb_id_data.SN_Hi = m_dl_cmd.m_data[2];
                                 m_hb_id_data.SN_Lo = m_dl_cmd.m_data[3];
                                 m_hb_id_data.Year = m_dl_cmd.m_data[4];
@@ -1720,6 +1726,7 @@ bool CG320::RunTODOList()
                                 m_hb_id_data.Inverter_Ver = m_dl_cmd.m_data[7];
                                 m_hb_id_data.DD_Ver = m_dl_cmd.m_data[8];
                                 m_hb_id_data.EEPROM_Ver = m_dl_cmd.m_data[9];
+                                m_hb_id_data.Display_Ver = m_dl_cmd.m_data[10];
                                 m_hb_id_data.Flags1 = m_dl_cmd.m_data[12];
                                 m_hb_id_data.Flags2 = m_dl_cmd.m_data[13];
                                 SaveLog((char *)"DataLogger RunTODOList() : run SetHybridIDData()", m_st_time);
@@ -1737,7 +1744,7 @@ bool CG320::RunTODOList()
                                 m_hb_rs_info.BatteryShutdownVoltage = m_dl_cmd.m_data[8];
                                 m_hb_rs_info.BatteryFloatingVoltage = m_dl_cmd.m_data[9];
                                 m_hb_rs_info.BatteryReservePercentage = m_dl_cmd.m_data[10];
-                                m_hb_rs_info.Volt_VAr = m_dl_cmd.m_data[11];
+                                m_hb_rs_info.PeakShavingPower = m_dl_cmd.m_data[11];
                                 m_hb_rs_info.StartFrequency = m_dl_cmd.m_data[12];
                                 m_hb_rs_info.EndFrequency = m_dl_cmd.m_data[13];
                                 m_hb_rs_info.FeedinPower = m_dl_cmd.m_data[14];
@@ -1751,7 +1758,7 @@ bool CG320::RunTODOList()
                                 m_hb_rrs_info.DischargePower = m_dl_cmd.m_data[2];
                                 m_hb_rrs_info.RampRatePercentage = m_dl_cmd.m_data[3];
                                 m_hb_rrs_info.DegreeLeadLag = m_dl_cmd.m_data[4];
-                                m_hb_rrs_info.PeakShavingPower = m_dl_cmd.m_data[5];
+                                m_hb_rrs_info.Volt_VAr = m_dl_cmd.m_data[5];
                                 SaveLog((char *)"DataLogger RunTODOList() : run SetHybridRRSInfo()", m_st_time);
                                 SetHybridRRSInfo(i);
                                 break;
@@ -3932,7 +3939,9 @@ bool CG320::GetHybridIDData(int index)
 void CG320::DumpHybridIDData(unsigned char *buf)
 {
     m_hb_id_data.Grid_Voltage = (*(buf) << 8) + *(buf+1);
-    m_hb_id_data.Model = (*(buf+2) << 8) + *(buf+3);
+    m_hb_id_data.HW_Ver = *(buf+2);
+    m_hb_id_data.Model = *(buf+3);
+    //m_hb_id_data.Model = (*(buf+2) << 8) + *(buf+3);
     m_hb_id_data.SN_Hi = (*(buf+4) << 8) + *(buf+5);
     m_hb_id_data.SN_Lo = (*(buf+6) << 8) + *(buf+7);
     m_hb_id_data.Year = (*(buf+8) << 8) + *(buf+9);
@@ -3941,10 +3950,11 @@ void CG320::DumpHybridIDData(unsigned char *buf)
     m_hb_id_data.Inverter_Ver = (*(buf+14) << 8) + *(buf+15);
     m_hb_id_data.DD_Ver = (*(buf+16) << 8) + *(buf+17);
     m_hb_id_data.EEPROM_Ver = (*(buf+18) << 8) + *(buf+19);
+    m_hb_id_data.Display_Ver = (*(buf+20) << 8) + *(buf+21);
     m_hb_id_data.Flags1 = (*(buf+24) << 8) + *(buf+25);
     m_hb_id_data.Flags2 = (*(buf+26) << 8) + *(buf+27);
 
-/*    printf("#### Dump Hybrid ID Data ####\n");
+    printf("#### Dump Hybrid ID Data ####\n");
     printf("Grid_Voltage = %d ==> ", m_hb_id_data.Grid_Voltage);
     switch (m_hb_id_data.Grid_Voltage)
     {
@@ -3979,7 +3989,19 @@ void CG320::DumpHybridIDData(unsigned char *buf)
         case 4:
             printf("HB51\n");
             break;
+        case 5:
+            printf("H5000 for P\n");
+            break;
+        case 6:
+            printf("H5001 for P\n");
+            break;
+        case 7:
+            printf("H5001 Stacking\n");
+            break;
+        default:
+            printf("Other\n");
     }
+    printf("HW_Ver       = 0x%02X\n", m_hb_id_data.HW_Ver);
     printf("SN_Hi        = 0x%04X\n", m_hb_id_data.SN_Hi);
     printf("SN_Lo        = 0x%04X\n", m_hb_id_data.SN_Lo);
     printf("Year         = %d\n", m_hb_id_data.Year);
@@ -3992,9 +4014,10 @@ void CG320::DumpHybridIDData(unsigned char *buf)
         printf("Hybrid\n");
     printf("DD_Ver       = %d\n", m_hb_id_data.DD_Ver);
     printf("EEPROM_Ver   = %d\n", m_hb_id_data.EEPROM_Ver);
+    printf("Display_Ver  = %d\n", m_hb_id_data.Display_Ver);
     printf("Flags1        = 0x%02X ==> \n", m_hb_id_data.Flags1);
     printf("Flags2        = 0x%02X ==> \n", m_hb_id_data.Flags2);
-    printf("#############################\n");*/
+    printf("#############################\n");
 }
 
 bool CG320::SetHybridIDData(int index)
@@ -4013,10 +4036,10 @@ bool CG320::SetHybridIDData(int index)
     szIDData[4] = 0x00;
     szIDData[5] = 0x0F; // number of data
     szIDData[6] = 0x1E; // bytes
-    // data 0x01 ~ 0x0A, & flags at 0x0E
+    // data 0x01 ~ 0x0B, & flags at 0x0D, 0x0E
     szIDData[7] = 0x00;
     szIDData[8] = (unsigned char)m_hb_id_data.Grid_Voltage;
-    szIDData[9] = 0x00;
+    szIDData[9] = (unsigned char)m_hb_id_data.HW_Ver;
     szIDData[10] = (unsigned char)m_hb_id_data.Model;
     szIDData[11] = (unsigned char)((m_hb_id_data.SN_Hi >> 8) & 0x00FF);
     szIDData[12] = (unsigned char)(m_hb_id_data.SN_Hi & 0x00FF);
@@ -4034,15 +4057,15 @@ bool CG320::SetHybridIDData(int index)
     szIDData[24] = (unsigned char)(m_hb_id_data.DD_Ver & 0xFF);
     szIDData[25] = (unsigned char)((m_hb_id_data.EEPROM_Ver >> 8) & 0x00FF);
     szIDData[26] = (unsigned char)(m_hb_id_data.EEPROM_Ver & 0xFF);
-    // zero 0x0B ~ 0x0D
-    szIDData[27] = 0x00;
-    szIDData[28] = 0x00;
+    szIDData[27] = (unsigned char)((m_hb_id_data.Display_Ver >> 8) & 0x00FF);
+    szIDData[28] = (unsigned char)(m_hb_id_data.Display_Ver & 0xFF);
+    // zero 0x0C
     szIDData[29] = 0x00;
     szIDData[30] = 0x00;
-    // flags1
+    // flags1 0x0D
     szIDData[31] = (unsigned char)((m_hb_id_data.Flags1 >> 8) & 0x00FF);
     szIDData[32] = (unsigned char)(m_hb_id_data.Flags1 & 0xFF);
-    // flags2
+    // flags2 0x0E
     szIDData[33] = (unsigned char)((m_hb_id_data.Flags2 >> 8) & 0x00FF);
     szIDData[34] = (unsigned char)(m_hb_id_data.Flags2 & 0xFF);
     // data crc 0x0F
@@ -4095,9 +4118,9 @@ void CG320::ParserHybridIDFlags1(int flags)
     m_hb_id_flags1.B0B1_External_Sensor = tmp & 0x03;
     //tmp>>=2;
 
-/*    printf("#### Parser Hybrid ID Flags1 ####\n");
+    printf("#### Parser Hybrid ID Flags1 ####\n");
     printf("Bit0Bit1 : External Sensor = %d\n", m_hb_id_flags1.B0B1_External_Sensor);
-    printf("################################\n");*/
+    printf("################################\n");
 }
 
 void CG320::ParserHybridIDFlags2(int flags)
@@ -4119,17 +4142,29 @@ void CG320::ParserHybridIDFlags2(int flags)
     m_hb_id_flags2.B6_FreControl = tmp & 0x01;
     tmp>>=1;
     m_hb_id_flags2.B7_ArcDetection = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B8_PREPA = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B9_Self_Supply = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B10_Charge_only_from_PV = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B11_Dominion = tmp & 0x01;
 
-/*    printf("#### Parser Hybrid ID Flags2 ####\n");
-    printf("Bit0 : Rule21        = %d\n", m_hb_id_flags2.B0_Rule21);
-    printf("Bit1 : PV Parallel   = %d\n", m_hb_id_flags2.B1_PVParallel);
-    printf("Bit2 : PV Off Grid   = %d\n", m_hb_id_flags2.B2_PVOffGrid);
-    printf("Bit3 : Heco1         = %d\n", m_hb_id_flags2.B3_Heco1);
-    printf("Bit4 : Heco2         = %d\n", m_hb_id_flags2.B4_Heco2);
-    printf("Bit5 : AC Coupling   = %d\n", m_hb_id_flags2.B5_ACCoupling);
-    printf("Bit6 : Fre Control   = %d\n", m_hb_id_flags2.B6_FreControl);
-    printf("Bit7 : Arc Detection = %d\n", m_hb_id_flags2.B7_ArcDetection);
-    printf("################################\n");*/
+    printf("#### Parser Hybrid ID Flags2 ####\n");
+    printf("Bit0 : Rule21              = %d\n", m_hb_id_flags2.B0_Rule21);
+    printf("Bit1 : PV Parallel         = %d\n", m_hb_id_flags2.B1_PVParallel);
+    printf("Bit2 : PV Off Grid         = %d\n", m_hb_id_flags2.B2_PVOffGrid);
+    printf("Bit3 : Heco1               = %d\n", m_hb_id_flags2.B3_Heco1);
+    printf("Bit4 : Heco2               = %d\n", m_hb_id_flags2.B4_Heco2);
+    printf("Bit5 : AC Coupling         = %d\n", m_hb_id_flags2.B5_ACCoupling);
+    printf("Bit6 : Fre Control         = %d\n", m_hb_id_flags2.B6_FreControl);
+    printf("Bit7 : Arc Detection       = %d\n", m_hb_id_flags2.B7_ArcDetection);
+    printf("Bit8 : PREPA               = %d\n", m_hb_id_flags2.B8_PREPA);
+    printf("Bit9 : Self Supply         = %d\n", m_hb_id_flags2.B9_Self_Supply);
+    printf("Bit10: Charge only from PV = %d\n", m_hb_id_flags2.B10_Charge_only_from_PV);
+    printf("Bit11: Dominion            = %d\n", m_hb_id_flags2.B11_Dominion);
+    printf("################################\n");
 }
 
 bool CG320::GetHybridRTCData(int index)
@@ -4190,7 +4225,7 @@ void CG320::DumpHybridRTCData(unsigned char *buf)
     m_hb_rtc_data.Month = (*(buf+8) << 8) + *(buf+9);
     m_hb_rtc_data.Year = (*(buf+10) << 8) + *(buf+11);
 
-/*    printf("#### Dump Hybrid RTC Data ####\n");
+    printf("#### Dump Hybrid RTC Data ####\n");
     printf("Second = %d\n", m_hb_rtc_data.Second);
     printf("Minute = %d\n", m_hb_rtc_data.Minute);
     printf("Hour   = %d\n", m_hb_rtc_data.Hour);
@@ -4200,7 +4235,7 @@ void CG320::DumpHybridRTCData(unsigned char *buf)
     printf("##############################\n");
     printf("rtc time : %4d/%02d/%02d ", m_hb_rtc_data.Year, m_hb_rtc_data.Month, m_hb_rtc_data.Date);
     printf("%02d:%02d:%02d\n", m_hb_rtc_data.Hour, m_hb_rtc_data.Minute, m_hb_rtc_data.Second);
-    printf("##############################\n");*/
+    printf("##############################\n");
 }
 
 bool CG320::SetHybridRTCData(int index)
@@ -4381,12 +4416,12 @@ void CG320::DumpHybridRSInfo(unsigned char *buf)
     m_hb_rs_info.BatteryShutdownVoltage = (*(buf+16) << 8) + *(buf+17);
     m_hb_rs_info.BatteryFloatingVoltage = (*(buf+18) << 8) + *(buf+19);
     m_hb_rs_info.BatteryReservePercentage = (*(buf+20) << 8) + *(buf+21);
-    m_hb_rs_info.Volt_VAr = (*(buf+22) << 8) + *(buf+23);
+    m_hb_rs_info.PeakShavingPower = (*(buf+22) << 8) + *(buf+23);
     m_hb_rs_info.StartFrequency = (*(buf+24) << 8) + *(buf+25);
     m_hb_rs_info.EndFrequency = (*(buf+26) << 8) + *(buf+27);
     m_hb_rs_info.FeedinPower = (*(buf+28) << 8) + *(buf+29);
 
-/*    printf("#### Dump Hybrid RS Info ####\n");
+    printf("#### Dump Hybrid RS Info ####\n");
     printf("Mode = %d ==> ", m_hb_rs_info.Mode);
     switch (m_hb_rs_info.Mode)
     {
@@ -4455,27 +4490,11 @@ void CG320::DumpHybridRSInfo(unsigned char *buf)
     printf("Battery Shutdown Voltage = %03.1f V\n", ((float)m_hb_rs_info.BatteryShutdownVoltage)/10);
     printf("Battery Floating Voltage = %03.1f V\n", ((float)m_hb_rs_info.BatteryFloatingVoltage)/10);
     printf("Battery Reserve Percentage = %d%%\n", m_hb_rs_info.BatteryReservePercentage);
-    printf("Volt/VAr Q(V) = %d ==> ", m_hb_rs_info.Volt_VAr);
-    switch (m_hb_rs_info.Volt_VAr)
-    {
-        case 0:
-            printf("Specified Power Factor(SPF)\n");
-            break;
-        case 1:
-            printf("Most aggressive\n");
-            break;
-        case 2:
-            printf("Average\n");
-            break;
-        case 3:
-            printf("Least aggressive\n");
-            break;
-    }
+    printf("Peak Shaving Power = %d W\n", m_hb_rs_info.PeakShavingPower*100);
     printf("Start Frequency = %03.1f Hz\n", (float)m_hb_rs_info.StartFrequency);
     printf("End Frequency = %03.1f Hz\n", (float)m_hb_rs_info.EndFrequency);
-    printf("Feed-in Power = %d W\n", m_hb_rs_info.FeedinPower);
-
-    printf("#############################\n");*/
+    printf("Feed-in Power = %d W\n", m_hb_rs_info.FeedinPower*100);
+    printf("#############################\n");
 }
 
 bool CG320::SetHybridRSInfo(int index)
@@ -4494,7 +4513,7 @@ bool CG320::SetHybridRSInfo(int index)
     szRSInfo[4] = 0x00;
     szRSInfo[5] = 0x10; // number of data
     szRSInfo[6] = 0x20; // bytes
-    // data 0x40 ~ 0x46
+    // data 0x90 ~ 0x9E
     szRSInfo[7] = 0x00;
     szRSInfo[8] = (unsigned char)m_hb_rs_info.Mode;
     szRSInfo[9] = 0x00;
@@ -4517,15 +4536,15 @@ bool CG320::SetHybridRSInfo(int index)
     szRSInfo[26] = (unsigned char)(m_hb_rs_info.BatteryFloatingVoltage & 0xFF);
     szRSInfo[27] = 0x00;
     szRSInfo[28] = (unsigned char)m_hb_rs_info.BatteryReservePercentage;
-    szRSInfo[29] = 0x00;
-    szRSInfo[30] = (unsigned char)m_hb_rs_info.Volt_VAr;
+    szRSInfo[29] = (unsigned char)((m_hb_rs_info.PeakShavingPower >> 8) & 0xFF);
+    szRSInfo[30] = (unsigned char)(m_hb_rs_info.PeakShavingPower & 0xFF);
     szRSInfo[31] = (unsigned char)((m_hb_rs_info.StartFrequency >> 8) & 0xFF);
     szRSInfo[32] = (unsigned char)(m_hb_rs_info.StartFrequency & 0xFF);
     szRSInfo[33] = (unsigned char)((m_hb_rs_info.EndFrequency >> 8) & 0xFF);
     szRSInfo[34] = (unsigned char)(m_hb_rs_info.EndFrequency & 0xFF);
     szRSInfo[35] = (unsigned char)((m_hb_rs_info.FeedinPower >> 8) & 0xFF);
     szRSInfo[36] = (unsigned char)(m_hb_rs_info.FeedinPower & 0xFF);
-    // data crc 0x4F
+    // data crc 0x9F
     crc = CalculateCRC(szRSInfo+7, 30);
     szRSInfo[37] = (unsigned char) (crc >> 8); // data crc hi
     szRSInfo[38] = (unsigned char) (crc & 0xFF); // data crc lo
@@ -4577,7 +4596,7 @@ bool CG320::GetHybridRRSInfo(int index)
     time_t current_time;
 	struct tm *log_time;
 
-    unsigned char szHBRSinfo[]={0x00, 0x03, 0x00, 0xA0, 0x00, 0x06, 0x00, 0x00};
+    unsigned char szHBRSinfo[]={0x00, 0x03, 0x00, 0xA0, 0x00, 0x07, 0x00, 0x00};
     szHBRSinfo[0]=arySNobj[index].m_Addr;
     MakeReadDataCRC(szHBRSinfo,8);
 
@@ -4594,7 +4613,7 @@ bool CG320::GetHybridRRSInfo(int index)
         current_time = time(NULL);
 		log_time = localtime(&current_time);
 
-        lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time_2);
+        lpdata = GetRespond(m_busfd, 19, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRRSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", log_time);
@@ -4624,9 +4643,10 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
     m_hb_rrs_info.DischargePower = (*(buf+4) << 8) + *(buf+5);
     m_hb_rrs_info.RampRatePercentage = (*(buf+6) << 8) + *(buf+7);
     m_hb_rrs_info.DegreeLeadLag = (*(buf+8) << 8) + *(buf+9);
-    m_hb_rrs_info.PeakShavingPower = (*(buf+10) << 8) + *(buf+11);
+    m_hb_rrs_info.Volt_VAr = (*(buf+10) << 8) + *(buf+11);
+    m_hb_rrs_info.AC_Coupling_Power = (*(buf+12) << 8) + *(buf+13);
 
-/*    printf("#### Dump Hybrid RRS Info ####\n");
+    printf("#### Dump Hybrid RRS Info ####\n");
     printf("Charge = %d ==> ", m_hb_rrs_info.ChargeSetting);
     switch (m_hb_rrs_info.ChargeSetting)
     {
@@ -4637,8 +4657,8 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
             printf("Discharge\n");
             break;
     }
-    printf("Charge Power = %d W\n", m_hb_rrs_info.ChargePower);
-    printf("Discharge Power = %d W\n", m_hb_rrs_info.DischargePower);
+    printf("Charge Power = %d W\n", m_hb_rrs_info.ChargePower*100);
+    printf("Discharge Power = %d W\n", m_hb_rrs_info.DischargePower*100);
     printf("Ramp Rate Percentage = %d %%\n", m_hb_rrs_info.RampRatePercentage);
     printf("Degree Lead/Lag = %d\n ==> A = ", m_hb_rrs_info.DegreeLeadLag);
     switch (m_hb_rrs_info.DegreeLeadLag/100)
@@ -4654,8 +4674,26 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
             break;
     }
     printf("\n ==> B = %02d\n", m_hb_rrs_info.DegreeLeadLag%100);
-    printf("Peak Shaving Power = %d W\n", m_hb_rrs_info.PeakShavingPower);
-    printf("##############################\n");*/
+    printf("Volt/VAr Q(V) = %d ==>", m_hb_rrs_info.Volt_VAr);
+    switch (m_hb_rrs_info.Volt_VAr)
+    {
+        case 0:
+            printf("Specified Power Factor(SPF)\n");
+            break;
+        case 1:
+            printf("Most aggressive\n");
+            break;
+        case 2:
+            printf("Average\n");
+            break;
+        case 3:
+            printf("Least aggressive\n");
+            break;
+        default:
+            printf("Other\n");
+    }
+    printf("AC Coupling Power = %d *100W\n", m_hb_rrs_info.AC_Coupling_Power);
+    printf("##############################\n");
 }
 
 bool CG320::SetHybridRRSInfo(int index)
@@ -4674,7 +4712,7 @@ bool CG320::SetHybridRRSInfo(int index)
     szRRSInfo[4] = 0x00;
     szRRSInfo[5] = 0x10; // number of data
     szRRSInfo[6] = 0x20; // bytes
-    // data 0xA0 ~ 0xA5
+    // data 0xA0 ~ 0xA6
     szRRSInfo[7] = 0x00;
     szRRSInfo[8] = (unsigned char)m_hb_rrs_info.ChargeSetting;
     szRRSInfo[9] = (unsigned char)((m_hb_rrs_info.ChargePower >> 8) & 0xFF);
@@ -4685,11 +4723,11 @@ bool CG320::SetHybridRRSInfo(int index)
     szRRSInfo[14] = (unsigned char)m_hb_rrs_info.RampRatePercentage;
     szRRSInfo[15] = (unsigned char)((m_hb_rrs_info.DegreeLeadLag >> 8) & 0xFF);
     szRRSInfo[16] = (unsigned char)(m_hb_rrs_info.DegreeLeadLag & 0xFF);
-    szRRSInfo[17] = (unsigned char)((m_hb_rrs_info.PeakShavingPower >> 8) & 0xFF);
-    szRRSInfo[18] = (unsigned char)(m_hb_rrs_info.PeakShavingPower & 0xFF);
-    // zero 0xA6 ~ 0xAE
-    szRRSInfo[19] = 0x00;
-    szRRSInfo[20] = 0x00;
+    szRRSInfo[17] = (unsigned char)((m_hb_rrs_info.Volt_VAr >> 8) & 0xFF);
+    szRRSInfo[18] = (unsigned char)(m_hb_rrs_info.Volt_VAr & 0xFF);
+    szRRSInfo[19] = (unsigned char)((m_hb_rrs_info.AC_Coupling_Power >> 8) & 0xFF);
+    szRRSInfo[20] = (unsigned char)(m_hb_rrs_info.AC_Coupling_Power & 0xFF);
+    // zero 0xA7 ~ 0xAE
     szRRSInfo[21] = 0x00;
     szRRSInfo[22] = 0x00;
     szRRSInfo[23] = 0x00;
@@ -4754,6 +4792,7 @@ bool CG320::GetHybridRTInfo(int index)
     printf("#### GetHybridRTInfo start ####\n");
 
     int err = 0;
+    int flag = 0;
     byte *lpdata = NULL;
     time_t current_time;
 	struct tm *log_time;
@@ -4782,13 +4821,15 @@ bool CG320::GetHybridRTInfo(int index)
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRTInfo(lpdata+3);
             ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1_Record);
-            ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1);
+            //ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1);
             ParserHybridPVInvErrCOD2(m_hb_rt_info.PV_Inv_Error_COD2_Record);
-            ParserHybridPVInvErrCOD2(m_hb_rt_info.PV_Inv_Error_COD2);
+            //ParserHybridPVInvErrCOD2(m_hb_rt_info.PV_Inv_Error_COD2);
             ParserHybridDDErrCOD(m_hb_rt_info.DD_Error_COD_Record);
-            ParserHybridDDErrCOD(m_hb_rt_info.DD_Error_COD);
+            //ParserHybridDDErrCOD(m_hb_rt_info.DD_Error_COD);
             ParserHybridIconInfo(m_hb_rt_info.Hybrid_IconL, m_hb_rt_info.Hybrid_IconH);
-            return true;
+            flag = 1;
+            break;
+            //return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetHybridRTInfo CRC Error ####\n");
@@ -4797,6 +4838,49 @@ bool CG320::GetHybridRTInfo(int index)
             else {
                 printf("#### GetHybridRTInfo No Response ####\n");
                 SaveLog((char *)"DataLogger GetHybridRTInfo() : No Response", log_time);
+            }
+            err++;
+        }
+    }
+
+    if ( flag == 0 )
+        return false;
+
+    //szHBRTinfo[]={0x00, 0x03, 0x00, 0xB0, 0x00, 0x30, 0x00, 0x00};
+    szHBRTinfo[3] = 0xF0; // addr
+    szHBRTinfo[5] = 0x02; // no. of data
+    MakeReadDataCRC(szHBRTinfo,8);
+
+    MClearRX();
+    txsize=8;
+    waitAddr = arySNobj[index].m_Addr;
+    waitFCode = 0x03;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, szHBRTinfo, 8);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
+        lpdata = GetRespond(m_busfd, 9, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            printf("#### GetHybridRTInfo2 OK ####\n");
+            SaveLog((char *)"DataLogger GetHybridRTInfo2() : OK", log_time);
+            arySNobj[index].m_ok_time = time(NULL);
+            DumpHybridRTInfo2(lpdata+3);
+            ParserHybridPVInvErrCOD3(m_hb_rt_info.PV_Inv_Error_COD3_Record);
+            ParserHybridDDErrCOD2(m_hb_rt_info.DD_Error_COD2_Record);
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### GetHybridRTInfo2 CRC Error ####\n");
+                SaveLog((char *)"DataLogger GetHybridRTInfo2() : CRC Error", log_time);
+            }
+            else {
+                printf("#### GetHybridRTInfo2 No Response ####\n");
+                SaveLog((char *)"DataLogger GetHybridRTInfo2() : No Response", log_time);
             }
             err++;
         }
@@ -4840,7 +4924,7 @@ void CG320::DumpHybridRTInfo(unsigned char *buf)
     m_hb_rt_info.GridFeed_TotalL = (*(buf+60) << 8) + *(buf+61);
     m_hb_rt_info.GridCharge_TotalH = (*(buf+62) << 8) + *(buf+63);
     m_hb_rt_info.GridCharge_TotalL = (*(buf+64) << 8) + *(buf+65);
-    m_hb_rt_info.OnGrid_Mode = (*(buf+66) << 8) + *(buf+67);
+    m_hb_rt_info.External_Power = (*(buf+66) << 8) + *(buf+67);
     m_hb_rt_info.Sys_State = (*(buf+68) << 8) + *(buf+69);
     m_hb_rt_info.PV_Inv_Error_COD1_Record = (*(buf+70) << 8) + *(buf+71);
     m_hb_rt_info.PV_Inv_Error_COD2_Record = (*(buf+72) << 8) + *(buf+73);
@@ -4856,7 +4940,7 @@ void CG320::DumpHybridRTInfo(unsigned char *buf)
     m_hb_rt_info.Grid_Frequency = (*(buf+92) << 8) + *(buf+93);
     m_hb_rt_info.PBat = (*(buf+94) << 8) + *(buf+95);
 
-/*    printf("#### Dump Hybrid RT Info ####\n");
+    printf("#### Dump Hybrid RT Info ####\n");
     printf("Inv_Temp = %03.1f C\n", ((float)m_hb_rt_info.Inv_Temp)/10);
     printf("PV1_Temp = %03.1f C\n", ((float)m_hb_rt_info.PV1_Temp)/10);
     printf("PV2_Temp = %03.1f C\n", ((float)m_hb_rt_info.PV2_Temp)/10);
@@ -4896,7 +4980,7 @@ void CG320::DumpHybridRTInfo(unsigned char *buf)
     printf("GridCharge_TotalH = %d\n", m_hb_rt_info.GridCharge_TotalH);
     printf("GridCharge_TotalL = %d\n", m_hb_rt_info.GridCharge_TotalL);
     printf("GridCharge_Total = %04.2f kWHr\n", m_hb_rt_info.GridCharge_TotalH*100 + ((float)m_hb_rt_info.GridCharge_TotalL)*0.01);
-    printf("OnGrid_Mode = %x\n", m_hb_rt_info.OnGrid_Mode);
+    printf("External_Power = %d W\n", m_hb_rt_info.External_Power*100);
     printf("Sys_State = %x\n", m_hb_rt_info.Sys_State);
     printf("PV_Inv_Error_COD1_Record = 0x%04X\n", m_hb_rt_info.PV_Inv_Error_COD1_Record);
     printf("PV_Inv_Error_COD2_Record = 0x%04X\n", m_hb_rt_info.PV_Inv_Error_COD2_Record);
@@ -4911,7 +4995,18 @@ void CG320::DumpHybridRTInfo(unsigned char *buf)
     printf("Invert Frequency = %03.1f Hz\n", ((float)m_hb_rt_info.Invert_Frequency)/10);
     printf("Grid Frequency = %03.1f Hz\n", ((float)m_hb_rt_info.Grid_Frequency)/10);
     printf("PBat = %d W\n", m_hb_rt_info.PBat);
-    printf("#############################\n");*/
+    printf("#############################\n");
+}
+
+void CG320::DumpHybridRTInfo2(unsigned char *buf)
+{
+    m_hb_rt_info.PV_Inv_Error_COD3_Record = (*(buf) << 8) + *(buf+1);
+    m_hb_rt_info.DD_Error_COD2_Record = (*(buf+2) << 8) + *(buf+3);
+
+    printf("#### Dump Hybrid RT Info ####\n");
+    printf("PV_Inv_Error_COD3_Record = 0x%04X\n", m_hb_rt_info.PV_Inv_Error_COD3_Record);
+    printf("DD_Error_COD2_Record = 0x%04X\n", m_hb_rt_info.DD_Error_COD2_Record);
+    printf("#############################\n");
 }
 
 void CG320::ParserHybridPVInvErrCOD1(int COD1)
@@ -4919,7 +5014,7 @@ void CG320::ParserHybridPVInvErrCOD1(int COD1)
     int tmp = COD1;
     m_hb_pvinv_err_cod1.B0_Fac_HL = tmp & 0x0001;
     tmp>>=1;
-    m_hb_pvinv_err_cod1.B1_PV_Low = tmp & 0x0001;
+    m_hb_pvinv_err_cod1.B1_CanBus_Fault = tmp & 0x0001;
     tmp>>=1;
     m_hb_pvinv_err_cod1.B2_Islanding = tmp & 0x0001;
     tmp>>=1;
@@ -4939,7 +5034,7 @@ void CG320::ParserHybridPVInvErrCOD1(int COD1)
     tmp>>=1;
     m_hb_pvinv_err_cod1.B10_Vac_LL = tmp & 0x0001;
     tmp>>=1;
-    m_hb_pvinv_err_cod1.B11_GFDI = tmp & 0x0001;
+    m_hb_pvinv_err_cod1.B11_OPP = tmp & 0x0001;
     tmp>>=1;
     m_hb_pvinv_err_cod1.B12_Iac_H = tmp & 0x0001;
     tmp>>=1;
@@ -4949,9 +5044,9 @@ void CG320::ParserHybridPVInvErrCOD1(int COD1)
     tmp>>=1;
     m_hb_pvinv_err_cod1.B15_Vbus_H = tmp & 0x0001;
 
-/*    printf("#### Parser Hybrid PV Inverter Error Code 1 ####\n");
+    printf("#### Parser Hybrid PV Inverter Error Code 1 ####\n");
     printf("Bit0  : Fac_HL = %d\n", m_hb_pvinv_err_cod1.B0_Fac_HL);
-    printf("Bit1  : PV_Low = %d\n", m_hb_pvinv_err_cod1.B1_PV_Low);
+    printf("Bit1  : CanBus_Fault = %d\n", m_hb_pvinv_err_cod1.B1_CanBus_Fault);
     printf("Bit2  : Islanding = %d\n", m_hb_pvinv_err_cod1.B2_Islanding);
     printf("Bit3  : Vac_H = %d\n", m_hb_pvinv_err_cod1.B3_Vac_H);
     printf("Bit4  : Vac_L = %d\n", m_hb_pvinv_err_cod1.B4_Vac_L);
@@ -4961,12 +5056,12 @@ void CG320::ParserHybridPVInvErrCOD1(int COD1)
     printf("Bit8  : Vac_OCP = %d\n", m_hb_pvinv_err_cod1.B8_Vac_OCP);
     printf("Bit9  : Vac_HL = %d\n", m_hb_pvinv_err_cod1.B9_Vac_HL);
     printf("Bit10 : Vac_LL = %d\n", m_hb_pvinv_err_cod1.B10_Vac_LL);
-    printf("Bit11 : GFDI = %d\n", m_hb_pvinv_err_cod1.B11_GFDI);
+    printf("Bit11 : OPP = %d\n", m_hb_pvinv_err_cod1.B11_OPP);
     printf("Bit12 : Iac_H = %d\n", m_hb_pvinv_err_cod1.B12_Iac_H);
     printf("Bit13 : Ipv_H = %d\n", m_hb_pvinv_err_cod1.B13_Ipv_H);
     printf("Bit14 : ADCINT_OVF = %d\n", m_hb_pvinv_err_cod1.B14_ADCINT_OVF);
     printf("Bit15 : Vbus_H = %d\n", m_hb_pvinv_err_cod1.B15_Vbus_H);
-    printf("################################################\n");*/
+    printf("################################################\n");
 }
 
 void CG320::ParserHybridPVInvErrCOD2(int COD2)
@@ -5004,7 +5099,7 @@ void CG320::ParserHybridPVInvErrCOD2(int COD2)
     tmp>>=1;
     m_hb_pvinv_err_cod2.B15_Vac_LM = tmp & 0x0001;
 
-/*    printf("#### Parser Hybrid PV Inverter Error Code 2 ####\n");
+    printf("#### Parser Hybrid PV Inverter Error Code 2 ####\n");
     printf("Bit0  : Arc = %d\n", m_hb_pvinv_err_cod2.B0_Arc);
     printf("Bit1  : Vac_Relay_Fault = %d\n", m_hb_pvinv_err_cod2.B1_Vac_Relay_Fault);
     printf("Bit2  : Ipv1_Short = %d\n", m_hb_pvinv_err_cod2.B2_Ipv1_Short);
@@ -5021,7 +5116,17 @@ void CG320::ParserHybridPVInvErrCOD2(int COD2)
     printf("Bit13 : RCMU_300 = %d\n", m_hb_pvinv_err_cod2.B13_RCMU_300);
     printf("Bit14 : RCMU_Test_Fault = %d\n", m_hb_pvinv_err_cod2.B14_RCMU_Test_Fault);
     printf("Bit15 : Vac_LM = %d\n", m_hb_pvinv_err_cod2.B15_Vac_LM);
-    printf("################################################\n");*/
+    printf("################################################\n");
+}
+
+void CG320::ParserHybridPVInvErrCOD3(int COD3)
+{
+    int tmp = COD3;
+    m_hb_pvinv_err_cod3.B0_External_PV_OPP = tmp & 0x0001;
+
+    printf("#### Parser Hybrid PV Inverter Error Code 3 ####\n");
+    printf("Bit0  : External_PV_OPP = %d\n", m_hb_pvinv_err_cod3.B0_External_PV_OPP);
+    printf("################################################\n");
 }
 
 void CG320::ParserHybridDDErrCOD(int COD)
@@ -5043,7 +5148,7 @@ void CG320::ParserHybridDDErrCOD(int COD)
     tmp>>=1;
     m_hb_dd_err_cod.B7_Code = tmp & 0x0001;
     tmp>>=1;
-    m_hb_dd_err_cod.B8_VBL = tmp & 0x0001;
+    m_hb_dd_err_cod.B8_Vbat_Drop = tmp & 0x0001;
     tmp>>=1;
     m_hb_dd_err_cod.B9_INV_Fault = tmp & 0x0001;
     tmp>>=1;
@@ -5059,7 +5164,7 @@ void CG320::ParserHybridDDErrCOD(int COD)
     tmp>>=1;
     m_hb_dd_err_cod.B15_Bat_Setting_Fault = tmp & 0x0001;
 
-/*    printf("#### Parser Hybrid DD Error Code ####\n");
+    printf("#### Parser Hybrid DD Error Code ####\n");
     printf("Bit0  : Vbat_H = %d\n", m_hb_dd_err_cod.B0_Vbat_H);
     printf("Bit1  : Vbat_L = %d\n", m_hb_dd_err_cod.B1_Vbat_L);
     printf("Bit2  : Vbus_H = %d\n", m_hb_dd_err_cod.B2_Vbus_H);
@@ -5068,7 +5173,7 @@ void CG320::ParserHybridDDErrCOD(int COD)
     printf("Bit5  : Ibat_H = %d\n", m_hb_dd_err_cod.B5_Ibat_H);
     printf("Bit6  : Charger_T = %d\n", m_hb_dd_err_cod.B6_Charger_T);
     printf("Bit7  : Code = %d\n", m_hb_dd_err_cod.B7_Code);
-    printf("Bit8  : VBL = %d\n", m_hb_dd_err_cod.B8_VBL);
+    printf("Bit8  : Vbat_Drop = %d\n", m_hb_dd_err_cod.B8_Vbat_Drop);
     printf("Bit9  : INV_Fault = %d\n", m_hb_dd_err_cod.B9_INV_Fault);
     printf("Bit10 : GND_Fault = %d\n", m_hb_dd_err_cod.B10_GND_Fault);
     printf("Bit11 : No_bat = %d\n", m_hb_dd_err_cod.B11_No_bat);
@@ -5076,7 +5181,29 @@ void CG320::ParserHybridDDErrCOD(int COD)
     printf("Bit13 : BMS_Over_Current = %d\n", m_hb_dd_err_cod.B13_BMS_Over_Current);
     printf("Bit14 : Restart = %d\n", m_hb_dd_err_cod.B14_Restart);
     printf("Bit15 : Bat_Setting_Fault = %d\n", m_hb_dd_err_cod.B15_Bat_Setting_Fault);
-    printf("#####################################\n");*/
+    printf("#####################################\n");
+}
+
+void CG320::ParserHybridDDErrCOD2(int COD2)
+{
+    int tmp = COD2;
+    m_hb_dd_err_cod2.B0_EEProm_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B1_Communi_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B2_OT_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B3_Fan_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B4_Low_Battery = tmp & 0x0001;
+
+    printf("#### Parser Hybrid DD Error Code 2 ####\n");
+    printf("Bit0  : EEProm_Fault = %d\n", m_hb_dd_err_cod2.B0_EEProm_Fault);
+    printf("Bit1  : Communi_Fault = %d\n", m_hb_dd_err_cod2.B1_Communi_Fault);
+    printf("Bit2  : OT_Fault = %d\n", m_hb_dd_err_cod2.B2_OT_Fault);
+    printf("Bit3  : Fan_Fault = %d\n", m_hb_dd_err_cod2.B3_Fan_Fault);
+    printf("Bit4  : Low_Battery = %d\n", m_hb_dd_err_cod2.B4_Low_Battery);
+    printf("#####################################\n");
 }
 
 void CG320::ParserHybridIconInfo(int Icon_L, int Icon_H)
@@ -5115,15 +5242,11 @@ void CG320::ParserHybridIconInfo(int Icon_L, int Icon_H)
     m_hb_icon_info.B15_GridDischarge = tmp & 0x0001;
 
     tmp = Icon_H;
-    m_hb_icon_info.B16_CommStation = tmp & 0x0001;
+    m_hb_icon_info.B16_18_INVFlag = tmp & 0x0007;
+    tmp>>=3;
+    m_hb_icon_info.B19_GeneratorMode = tmp & 0x0001;
     tmp>>=1;
-    m_hb_icon_info.B17_Residential = tmp & 0x0001;
-    tmp>>=1;
-    m_hb_icon_info.B18_CommStationNoGrid = tmp & 0x0001;
-    tmp>>=1;
-    m_hb_icon_info.B19_ResidentialNoGrid = tmp & 0x0001;
-    tmp>>=1;
-    m_hb_icon_info.B20_PowerShiftApplication = tmp & 0x0001;
+    m_hb_icon_info.B20_Master_Slave = tmp & 0x0001;
     tmp>>=1;
     m_hb_icon_info.B21_SettingOK = tmp & 0x0001;
     tmp>>=1;
@@ -5138,7 +5261,7 @@ void CG320::ParserHybridIconInfo(int Icon_L, int Icon_H)
     m_hb_icon_info.B29_30_LeadLag = tmp & 0x0003;
     tmp>>=2;
 
-/*    printf("#### Parser Hybrid Icon ####\n");
+    printf("#### Parser Hybrid Icon ####\n");
     printf("Bit0     : PV = %d\n", m_hb_icon_info.B0_PV);
     printf("Bit1     : MPPT = %d\n", m_hb_icon_info.B1_MPPT);
     printf("Bit2     : Battery = %d\n", m_hb_icon_info.B2_Battery);
@@ -5155,18 +5278,16 @@ void CG320::ParserHybridIconInfo(int Icon_L, int Icon_H)
     printf("Bit13    : PFC Mode = %d\n", m_hb_icon_info.B13_PFCMode);
     printf("Bit14    : Grid Charge = %d\n", m_hb_icon_info.B14_GridCharge);
     printf("Bit15    : Grid Discharge = %d\n", m_hb_icon_info.B15_GridDischarge);
-    printf("Bit16    : Comm Station = %d\n", m_hb_icon_info.B16_CommStation);
-    printf("Bit17    : Residential = %d\n", m_hb_icon_info.B17_Residential);
-    printf("Bit18    : Comm Station No Grid = %d\n", m_hb_icon_info.B18_CommStationNoGrid);
-    printf("Bit19    : Residential No Grid = %d\n", m_hb_icon_info.B19_ResidentialNoGrid);
-    printf("Bit20    : PowerShift Application = %d\n", m_hb_icon_info.B20_PowerShiftApplication);
+    printf("Bit16-18 : INV Flag = %d\n", m_hb_icon_info.B16_18_INVFlag);
+    printf("Bit19    : Generator Mode = %d\n", m_hb_icon_info.B19_GeneratorMode);
+    printf("Bit20    : Master Slave = %d\n", m_hb_icon_info.B20_Master_Slave);
     printf("Bit21    : Setting OK = %d\n", m_hb_icon_info.B21_SettingOK);
     printf("Bit22-24 : Bat Type = %d\n", m_hb_icon_info.B22_24_BatType);
     printf("Bit25-26 : Multi-INV = %d\n", m_hb_icon_info.B25_26_MultiINV);
     printf("Bit27    : Load Charge = %d\n", m_hb_icon_info.B27_LoadCharge);
     printf("Bit28    : Load Discharge = %d\n", m_hb_icon_info.B28_LoadDischarge);
     printf("Bit29-30 : Lead Lag = %d\n", m_hb_icon_info.B29_30_LeadLag);
-    printf("############################\n");*/
+    printf("############################\n");
 }
 
 bool CG320::GetHybridBMSInfo(int index)
@@ -5178,7 +5299,7 @@ bool CG320::GetHybridBMSInfo(int index)
     time_t current_time;
 	struct tm *log_time;
 
-    unsigned char szHBBMSinfo[]={0x00, 0x03, 0x02, 0x00, 0x00, 0x0B, 0x00, 0x00};
+    unsigned char szHBBMSinfo[]={0x00, 0x03, 0x02, 0x00, 0x00, 0x0C, 0x00, 0x00};
     szHBBMSinfo[0]=arySNobj[index].m_Addr;
     MakeReadDataCRC(szHBBMSinfo,8);
 
@@ -5195,7 +5316,7 @@ bool CG320::GetHybridBMSInfo(int index)
         current_time = time(NULL);
 		log_time = localtime(&current_time);
 
-        lpdata = GetRespond(m_busfd, 27, m_dl_config.m_delay_time_2);
+        lpdata = GetRespond(m_busfd, 29, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridBMSInfo OK ####\n");
             SaveLog((char *)"DataLogger GetHybridBMSInfo() : OK", log_time);
@@ -5231,8 +5352,9 @@ void CG320::DumpHybridBMSInfo(unsigned char *buf)
     m_hb_bms_info.BMS_Info = (*(buf+16) << 8) + *(buf+17);
     m_hb_bms_info.BMS_Max_Cell = (*(buf+18) << 8) + *(buf+19);
     m_hb_bms_info.BMS_Min_Cell = (*(buf+20) << 8) + *(buf+21);
+    m_hb_bms_info.BMS_BaudRate = (*(buf+22) << 8) + *(buf+23);
 
-/*    printf("#### Dump Hybrid BMS Info ####\n");
+    printf("#### Dump Hybrid BMS Info ####\n");
     printf("Voltage           = %d mV\n", m_hb_bms_info.Voltage*10);
     printf("Current           = %d mA\n", m_hb_bms_info.Current*10);
     printf("SOC               = %d %%\n", m_hb_bms_info.SOC);
@@ -5244,7 +5366,8 @@ void CG320::DumpHybridBMSInfo(unsigned char *buf)
     printf("BMS Info          = %d\n", m_hb_bms_info.BMS_Info);
     printf("BMS Max Cell      = %d mV\n", m_hb_bms_info.BMS_Max_Cell);
     printf("BMS Min Cell      = %d mV\n", m_hb_bms_info.BMS_Min_Cell);
-    printf("##############################\n");*/
+    printf("BMS BaudRate      = %d bps\n", m_hb_bms_info.BMS_BaudRate);
+    printf("##############################\n");
 }
 
 bool CG320::SetHybridBMSModule(int index)
@@ -6178,8 +6301,8 @@ bool CG320::WriteLogXML(int index)
             sprintf(buf, "<GridCharge_Total>%04.2f</GridCharge_Total>", m_hb_rt_info.GridCharge_TotalH*100 + ((float)m_hb_rt_info.GridCharge_TotalL)*0.01);
             strcat(m_log_buf, buf);
 
-            // set on grid mode
-            sprintf(buf, "<On_grid_Mode>%d</On_grid_Mode>", m_hb_rt_info.OnGrid_Mode);
+            // set external power
+            sprintf(buf, "<ExtPower>%05.3f</ExtPower>", ((float)m_hb_rt_info.External_Power)/10);
             strcat(m_log_buf, buf);
 
             // set system state
@@ -6207,7 +6330,8 @@ bool CG320::WriteLogXML(int index)
         }
 
         // set status
-        if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1 || m_hb_rt_info.PV_Inv_Error_COD2 || m_hb_rt_info.DD_Error_COD ) {
+        if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.PV_Inv_Error_COD3_Record ||
+            m_hb_rt_info.DD_Error_COD_Record || m_hb_rt_info.DD_Error_COD2_Record ) {
             strcat(m_log_buf, "<Status>2</Status>");
         } else {
             if ( m_loopflag == 6 ) {
@@ -6242,9 +6366,11 @@ bool CG320::WriteLogXML(int index)
             strcat(m_log_buf, buf);
             sprintf(buf, "<BMS_Info>%d</BMS_Info>", m_hb_bms_info.BMS_Info);
             strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_MaxCell>%05.3f</BMS_MaxCell>", ((float)m_hb_bms_info.Voltage/1000));
+            sprintf(buf, "<BMS_MaxCell>%05.3f</BMS_MaxCell>", ((float)m_hb_bms_info.BMS_Max_Cell/1000));
             strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_MinCell>%05.3f</BMS_MinCell>", ((float)m_hb_bms_info.Current/1000));
+            sprintf(buf, "<BMS_MinCell>%05.3f</BMS_MinCell>", ((float)m_hb_bms_info.BMS_Min_Cell/1000));
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<BMS_BaudRate>%d</BMS_BaudRate>", m_hb_bms_info.BMS_BaudRate);
             strcat(m_log_buf, buf);
 
             // set remote setting
@@ -6270,13 +6396,13 @@ bool CG320::WriteLogXML(int index)
             strcat(m_log_buf, buf);
             sprintf(buf, "<BatReservePercent>%d</BatReservePercent>", m_hb_rs_info.BatteryReservePercentage);
             strcat(m_log_buf, buf);
-            sprintf(buf, "<Q_Value>%d</Q_Value>", m_hb_rs_info.Volt_VAr);
+            sprintf(buf, "<Q_Value>%d</Q_Value>", m_hb_rrs_info.Volt_VAr);
             strcat(m_log_buf, buf);
             sprintf(buf, "<StartFrequency>%03.1f</StartFrequency>", ((float)m_hb_rs_info.StartFrequency)/10);
             strcat(m_log_buf, buf);
             sprintf(buf, "<EndFrequency>%03.1f</EndFrequency>", ((float)m_hb_rs_info.EndFrequency)/10);
             strcat(m_log_buf, buf);
-            sprintf(buf, "<FeedInPower>%05.3f</FeedInPower>", ((float)m_hb_rs_info.FeedinPower)/1000);
+            sprintf(buf, "<FeedInPower>%05.3f</FeedInPower>", ((float)m_hb_rs_info.FeedinPower)/10);
             strcat(m_log_buf, buf);
 
             // set ID part
@@ -6285,6 +6411,9 @@ bool CG320::WriteLogXML(int index)
             strcat(m_log_buf, buf);
             // set model
             sprintf(buf, "<Model>%d</Model>", m_hb_id_data.Model);
+            strcat(m_log_buf, buf);
+            // set hw ver
+            sprintf(buf, "<HWver>%d</HWver>", m_hb_id_data.HW_Ver);
             strcat(m_log_buf, buf);
             // set date
             sprintf(buf, "<Product_Y>%04d</Product_Y>", m_hb_id_data.Year);
@@ -6300,6 +6429,8 @@ bool CG320::WriteLogXML(int index)
             strcat(m_log_buf, buf);
             sprintf(buf, "<Ver_EE>%d</Ver_EE>", m_hb_id_data.EEPROM_Ver);
             strcat(m_log_buf, buf);
+            sprintf(buf, "<DisplayVer>%d</DisplayVer>", m_hb_id_data.Display_Ver);
+            strcat(m_log_buf, buf);
             // set flags1
             sprintf(buf, "<SystemFlag>%d</SystemFlag>", m_hb_id_data.Flags1);
             strcat(m_log_buf, buf);
@@ -6310,16 +6441,19 @@ bool CG320::WriteLogXML(int index)
             // set remote real time setting
             sprintf(buf, "<ChargeSetting>%d</ChargeSetting>", m_hb_rrs_info.ChargeSetting);
             strcat(m_log_buf, buf);
-            sprintf(buf, "<ChargePower>%05.3f</ChargePower>", ((float)m_hb_rrs_info.ChargePower)/1000);
+            sprintf(buf, "<ChargePower>%05.3f</ChargePower>", ((float)m_hb_rrs_info.ChargePower)/10);
             strcat(m_log_buf, buf);
-            sprintf(buf, "<DischargePower>%05.3f</DischargePower>", ((float)m_hb_rrs_info.DischargePower)/1000);
+            sprintf(buf, "<DischargePower>%05.3f</DischargePower>", ((float)m_hb_rrs_info.DischargePower)/10);
             strcat(m_log_buf, buf);
             // charge discharge power undefine in web server
             sprintf(buf, "<RampRate>%d</RampRate>", m_hb_rrs_info.RampRatePercentage);
             strcat(m_log_buf, buf);
             sprintf(buf, "<Degree>%d</Degree>", m_hb_rrs_info.DegreeLeadLag);
             strcat(m_log_buf, buf);
-            sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb_rrs_info.PeakShavingPower)/1000);
+            // AC_Coupling_Power
+            sprintf(buf, "<AC_Coupling_Power>%d</AC_Coupling_Power>", m_hb_rrs_info.AC_Coupling_Power);
+            strcat(m_log_buf, buf);
+            sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb_rs_info.PeakShavingPower)/10);
             strcat(m_log_buf, buf);
         }
     }
@@ -6697,11 +6831,11 @@ bool CG320::WriteErrorLogXML(int index)
             sprintf(buf, "<code>%d</code>", m_hb_rt_info.Error_Code);
             strcat(m_errlog_buf, buf);
         }
-        // PV_Inv_Error_COD1_Record
+        // PV_Inv_Error_COD1_Record 0xD3
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0001 )
             strcat(m_errlog_buf, "<code>COD1_0001_Fac_HL</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0002 )
-            strcat(m_errlog_buf, "<code>COD1_0002_PV_low</code>");
+            strcat(m_errlog_buf, "<code>COD1_0002_CanBus_Fault</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0004 )
             strcat(m_errlog_buf, "<code>COD1_0004_Islanding</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0008 )
@@ -6721,7 +6855,7 @@ bool CG320::WriteErrorLogXML(int index)
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0400 )
             strcat(m_errlog_buf, "<code>COD1_0400_Vac_LL</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x0800 )
-            strcat(m_errlog_buf, "<code>COD1_0800_GFDI</code>");
+            strcat(m_errlog_buf, "<code>COD1_0800_OPP</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x1000 )
             strcat(m_errlog_buf, "<code>COD1_1000_Iac_H</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x2000 )
@@ -6730,7 +6864,7 @@ bool CG320::WriteErrorLogXML(int index)
             strcat(m_errlog_buf, "<code>COD1_4000_ADCINT_OVF</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD1_Record & 0x8000 )
             strcat(m_errlog_buf, "<code>COD1_8000_Vbus_H</code>");
-        // PV_Inv_Error_COD2_Record
+        // PV_Inv_Error_COD2_Record 0xD4
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0001 )
             strcat(m_errlog_buf, "<code>COD2_0001_Arc</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0002 )
@@ -6763,7 +6897,7 @@ bool CG320::WriteErrorLogXML(int index)
             strcat(m_errlog_buf, "<code>COD2_4000_RCMUtest_Fault</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x8000 )
             strcat(m_errlog_buf, "<code>COD2_8000_Vac_LM</code>");
-        // DD_Error_COD_Record
+        // DD_Error_COD_Record 0xD5
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0001 )
             strcat(m_errlog_buf, "<code>COD3_0001_Vbat_H</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0002 )
@@ -6781,7 +6915,7 @@ bool CG320::WriteErrorLogXML(int index)
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0080 )
             strcat(m_errlog_buf, "<code>COD3_0080_Code</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0100 )
-            strcat(m_errlog_buf, "<code>COD3_0100_VBL</code>");
+            strcat(m_errlog_buf, "<code>COD3_0100_Vbat_Drop</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0200 )
             strcat(m_errlog_buf, "<code>COD3_0200_INV_fault</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x0400 )
@@ -6796,6 +6930,20 @@ bool CG320::WriteErrorLogXML(int index)
             strcat(m_errlog_buf, "<code>COD3_4000_Restart</code>");
         if ( m_hb_rt_info.DD_Error_COD_Record & 0x8000 )
             strcat(m_errlog_buf, "<code>COD3_8000_Bat_Setting_fault</code>");
+        // PV_Inv_Error_COD3_Record 0xF0
+        if ( m_hb_rt_info.PV_Inv_Error_COD3_Record & 0x0001 )
+            strcat(m_errlog_buf, "<code>COD4_0001_External_PV_OPP</code>");
+        // DD_Error_COD2_Record 0xF1
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0001 )
+            strcat(m_errlog_buf, "<code>COD5_0001_EEProm_Fault</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0002 )
+            strcat(m_errlog_buf, "<code>COD5_0002_Communi_Fault</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0004 )
+            strcat(m_errlog_buf, "<code>COD5_0004_OT_Fault</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0008 )
+            strcat(m_errlog_buf, "<code>COD5_0008_Fan_Fault</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0010 )
+            strcat(m_errlog_buf, "<code>COD5_0010_Low_Battery</code>");
     }
 
     // set system error log
@@ -7242,7 +7390,7 @@ bool CG320::WriteMIListXML()
             fputs("\t\t<Manufacturer>DARFON</Manufacturer>\n", pFile);
 
             model = 0;
-            sscanf(arySNobj[i].m_Sn+4, "%04d", &model); // get 5-8 digit
+            sscanf(arySNobj[i].m_Sn+6, "%02x", &model); // get 7-8 digit
             sprintf(buf, "\t\t<Model>%d</Model>\n", model);
             //printf("%s", buf);
             fputs(buf, pFile);

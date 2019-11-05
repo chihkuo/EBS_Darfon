@@ -100,6 +100,7 @@ typedef struct stMi_Power_Info {
 typedef struct stHybrid_ID_Data {
     int Grid_Voltage;
     int Model;
+    int HW_Ver;
     int SN_Hi;
     int SN_Lo;
     int Year;
@@ -108,6 +109,7 @@ typedef struct stHybrid_ID_Data {
     int Inverter_Ver;
     int DD_Ver;
     int EEPROM_Ver;
+    int Display_Ver;
     int Flags1;
     int Flags2;
 }HB_ID_DATA;
@@ -125,6 +127,10 @@ typedef struct stHybrid_ID_Flags2 {
     char B5_ACCoupling;
     char B6_FreControl;
     char B7_ArcDetection;
+    char B8_PREPA;
+    char B9_Self_Supply;
+    char B10_Charge_only_from_PV;
+    char B11_Dominion;
 }HB_ID_FLAGS2;
 
 typedef struct stHybrid_RTC_Data {
@@ -148,7 +154,7 @@ typedef struct stHybrid_Remote_Setting_Info {
     int BatteryShutdownVoltage;
     int BatteryFloatingVoltage;
     int BatteryReservePercentage;
-    int Volt_VAr;
+    int PeakShavingPower; // Volt_VAr
     int StartFrequency;
     int EndFrequency;
     int FeedinPower;
@@ -160,7 +166,8 @@ typedef struct stHybrid_Remote_Realtime_Setting_Info {
     int DischargePower;
     int RampRatePercentage;
     int DegreeLeadLag;
-    int PeakShavingPower;
+    int Volt_VAr; // PeakShavingPower
+    int AC_Coupling_Power;
 }HB_RRS_INFO;
 
 typedef struct stHybrid_Realtime_Info {
@@ -197,7 +204,7 @@ typedef struct stHybrid_Realtime_Info {
     int GridFeed_TotalL;
     int GridCharge_TotalH;
     int GridCharge_TotalL;
-    int OnGrid_Mode;
+    int External_Power; // OnGrid_Mode
     int Sys_State;
     int PV_Inv_Error_COD1_Record;
     int PV_Inv_Error_COD2_Record;
@@ -212,11 +219,13 @@ typedef struct stHybrid_Realtime_Info {
     int Invert_Frequency;
     int Grid_Frequency;
     short PBat; //+-
+    int PV_Inv_Error_COD3_Record;
+    int DD_Error_COD2_Record;
 }HB_RT_INFO;
 
 typedef struct stHybrid_PV_Inv_Error_COD1 {
     char B0_Fac_HL;
-    char B1_PV_Low;
+    char B1_CanBus_Fault;
     char B2_Islanding;
     char B3_Vac_H;
     char B4_Vac_L;
@@ -226,7 +235,7 @@ typedef struct stHybrid_PV_Inv_Error_COD1 {
     char B8_Vac_OCP;
     char B9_Vac_HL;
     char B10_Vac_LL;
-    char B11_GFDI;
+    char B11_OPP;
     char B12_Iac_H;
     char B13_Ipv_H;
     char B14_ADCINT_OVF;
@@ -252,6 +261,10 @@ typedef struct stHybrid_PV_Inv_Error_COD2 {
     char B15_Vac_LM;
 }HB_PVINV_ERR_COD2;
 
+typedef struct stHybrid_PV_Inv_Error_COD3 {
+    char B0_External_PV_OPP;
+}HB_PVINV_ERR_COD3;
+
 typedef struct stHybrid_DD_Error_COD {
     char B0_Vbat_H;
     char B1_Vbat_L;
@@ -261,7 +274,7 @@ typedef struct stHybrid_DD_Error_COD {
     char B5_Ibat_H;
     char B6_Charger_T;
     char B7_Code;
-    char B8_VBL;
+    char B8_Vbat_Drop;
     char B9_INV_Fault;
     char B10_GND_Fault;
     char B11_No_bat;
@@ -270,6 +283,14 @@ typedef struct stHybrid_DD_Error_COD {
     char B14_Restart;
     char B15_Bat_Setting_Fault;
 }HB_DD_ERR_COD;
+
+typedef struct stHybrid_DD_Error_COD2 {
+    char B0_EEProm_Fault;
+    char B1_Communi_Fault;
+    char B2_OT_Fault;
+    char B3_Fan_Fault;
+    char B4_Low_Battery;
+}HB_DD_ERR_COD2;
 
 typedef struct stHybrid_Icon_Info {
     char B0_PV;
@@ -288,11 +309,9 @@ typedef struct stHybrid_Icon_Info {
     char B13_PFCMode;
     char B14_GridCharge;
     char B15_GridDischarge;
-    char B16_CommStation;
-    char B17_Residential;
-    char B18_CommStationNoGrid;
-    char B19_ResidentialNoGrid;
-    char B20_PowerShiftApplication;
+    char B16_18_INVFlag;
+    char B19_GeneratorMode;
+    char B20_Master_Slave;
     char B21_SettingOK;
     char B22_24_BatType;
     char B25_26_MultiINV;
@@ -313,6 +332,7 @@ typedef struct stHybrid_BMS_Info {
     int BMS_Info;
     int BMS_Max_Cell;
     int BMS_Min_Cell;
+    int BMS_BaudRate;
 }HB_BMS_INFO;
 
 typedef struct stDL_CMD {
