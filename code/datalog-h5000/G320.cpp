@@ -1759,6 +1759,7 @@ bool CG320::RunTODOList()
                                 m_hb_rrs_info.RampRatePercentage = m_dl_cmd.m_data[3];
                                 m_hb_rrs_info.DegreeLeadLag = m_dl_cmd.m_data[4];
                                 m_hb_rrs_info.Volt_VAr = m_dl_cmd.m_data[5];
+                                m_hb_rrs_info.AC_Coupling_Power = m_dl_cmd.m_data[6];
                                 SaveLog((char *)"DataLogger RunTODOList() : run SetHybridRRSInfo()", m_st_time);
                                 SetHybridRRSInfo(i);
                                 break;
