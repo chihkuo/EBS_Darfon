@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# V2.5.4
+# V2.5.5
 # initial package dir
 USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial
@@ -31,7 +31,7 @@ RDL=run_DL.sh
 RDLSW=run_DLSW.sh
 CPLS=CopyLuciSetting.sh
 
-echo "DL initial V2.5.4 script start~"
+echo "DL initial V2.5.5 script start~"
 
 echo "Stop running progame"
 /etc/init.d/run_DL.sh stop
@@ -108,11 +108,19 @@ sleep 1
 echo "change essid"
 sed -i 's/SBC700_/DL300_/g' /etc/config/wireless
 sync
-/etc/init.d/network restart
-sleep 10
+#/etc/init.d/network restart
+#sleep 10
+#sync
+#echo "network restart ok"
+
+
+echo "DL initial V2.5.5 script finished."
+
+echo "set ipv6 server disabled & reboot"
+# disabled uci dhcp ipv6 server & reboot
+uci set dhcp.lan.dhcpv6='disabled'
+uci commit dhcp
 sync
-echo "network restart ok"
-
-
-echo "DL initial V2.5.4 script finished."
+sleep 1
+reboot
 
