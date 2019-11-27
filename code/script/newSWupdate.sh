@@ -15,6 +15,12 @@ rm /tmp/newSWupdate.sh
 rm /tmp/SWupdate.exe
 sync
 
+sleep 1
+echo "change essid"
+sed -i 's/SBC700_/DL300_/g' /etc/config/wireless
+sync
+
+sleep 1
 #/usr/home/SWupdate.exe &
 # disable uci dhcp ipv6 server & reboot
 uci set dhcp.lan.dhcpv6='disabled'
