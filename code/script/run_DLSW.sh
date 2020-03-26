@@ -9,6 +9,17 @@ mkdir -p /tmp/test/SYSLOG
 # wait network OK
 sleep 30
 
+ps | grep DLsocket.exe | grep -v grep
+if [ $? != 0 ]
+then
+	echo "run DLsocket.exe"
+	/usr/home/DLsocket.exe &
+else
+	echo "DLsocket.exe alive"
+fi
+
+sleep 1
+
 ps | grep dlg320.exe | grep -v grep
 if [ $? != 0 ]
 then

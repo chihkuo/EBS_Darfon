@@ -157,6 +157,12 @@ luci.sys.call(str)
 value = luci.sys.exec("/usr/home/DataProgram.exe -v")
 str = string.format("uci set dlsetting.@swver[0].dpver=%s", value)
 luci.sys.call(str)
+value = luci.sys.exec("/usr/home/FWupdate.exe -v")
+str = string.format("uci set dlsetting.@swver[0].fuver=%s", value)
+luci.sys.call(str)
+value = luci.sys.exec("/usr/home/DLsocket.exe -v")
+str = string.format("uci set dlsetting.@swver[0].dsver=%s", value)
+luci.sys.call(str)
 luci.sys.call("uci commit")
 
 local swver = map:section(TypedSection, "swver", "SW VER")
@@ -165,6 +171,7 @@ swver.anonymous = true
 local dlver = swver:option(DummyValue, "dlver", translate("Data Logger VER"))
 local dpver = swver:option(DummyValue, "dpver", translate("Data Program VER"))
 local fuver = swver:option(DummyValue, "fuver", translate("FW Update VER"))
+local fuver = swver:option(DummyValue, "dsver", translate("DL Socket VER"))
 
 -- Add button part
 local cleanreset = map:section(TypedSection, "button", "Clean and Reset")

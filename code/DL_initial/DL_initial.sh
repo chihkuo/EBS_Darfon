@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# V2.5.7
+# V2.5.8
 # initial package dir
 USB_PATH=/mnt
 PACKAGE=$USB_PATH/DL_initial
@@ -10,6 +10,7 @@ DATALOG=dlg320.exe
 DATAPRG=DataProgram.exe
 DATASWU=SWupdate.exe
 DATAFWU=FWupdate.exe
+DATADSK=DLsocket.exe
 
 # lua script
 #SYSTEM=system.lua
@@ -31,7 +32,7 @@ RDL=run_DL.sh
 RDLSW=run_DLSW.sh
 CPLS=CopyLuciSetting.sh
 
-echo "DL initial V2.5.7 script start~"
+echo "DL initial V2.5.8 script start~"
 
 echo "Stop running progame"
 /etc/init.d/run_DL.sh stop
@@ -50,6 +51,8 @@ cp $PACKAGE/$DATASWU /usr/home/
 chmod 755 /usr/home/$DATASWU
 cp $PACKAGE/$DATAFWU /usr/home/
 chmod 755 /usr/home/$DATAFWU
+cp $PACKAGE/$DATADSK /usr/home/
+chmod 755 /usr/home/$DATADSK
 
 
 echo "copy lua script"
@@ -114,7 +117,7 @@ sync
 #echo "network restart ok"
 
 
-echo "DL initial V2.5.7 script finished."
+echo "DL initial V2.5.8 script finished."
 
 echo "set ipv6 server disabled & reboot"
 # disabled uci dhcp ipv6 server & reboot

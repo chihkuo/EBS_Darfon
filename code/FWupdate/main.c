@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.2.2"
+#define VERSION             "1.2.3"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -2777,6 +2777,8 @@ int stopProcess()
     system("killall -9 dlg320.exe");
     system("sleep 1; sync;");
     system("killall -9 DataProgram.exe");
+    system("sleep 1; sync;");
+    system("killall -9 DLsocket.exe");
     system("sleep 1; sync;");
     printf("stopProcess() end\n");
 

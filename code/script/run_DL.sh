@@ -12,6 +12,6 @@ start()
 stop()
 {
 	echo "call run_SL.sh stop"
-	killall -9 FWupdate.exe SWupdate.exe DataProgram.exe dlg320.exe
+	killall -9 FWupdate.exe SWupdate.exe DataProgram.exe dlg320.exe DLsocket.exe
 }
 

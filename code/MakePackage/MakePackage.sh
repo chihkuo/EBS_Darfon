@@ -6,6 +6,7 @@ function copy() {
 	cp ../datalog-h5000/dlg320.exe ./update/
 	cp ../DataProgram/DataProgram.exe ./update/
 	cp ../FWupdate/FWupdate.exe ./update/
+	cp ../dlsocket/DLsocket.exe ./update/
 #	cp ../SWupdate/SWupdate.exe ./update/
 #	cp ../script/newSWupdate.sh ./update/
 #	cp ../script/dldevice.lua ./update/

@@ -10,6 +10,7 @@ ST=dlsetting
 DLIST=dllist
 MLIST=ModelList
 FWUPDATE=FWupdate.exe
+DLSOCKET=DLsocket.exe
 
 STAT=status.lua
 INDEX=index.lua
@@ -19,6 +20,7 @@ RUNDL=run_DL.sh
 CPLS=CopyLuciSetting.sh
 
 killall -9 $FWUPDATE
+killall -9 $DLSOCKET
 sleep 1
 sync
 
@@ -50,6 +52,8 @@ cp $UPDATE_DIR/$RUNDLSW /usr/home/
 chmod 755 /usr/home/$RUNDLSW
 cp $UPDATE_DIR/$FWUPDATE /usr/home/
 chmod 755 /usr/home/$FWUPDATE
+cp $UPDATE_DIR/$DLSOCKET /usr/home/
+chmod 755 /usr/home/$DLSOCKET
 cp $UPDATE_DIR/$RUNDL /etc/init.d/
 chmod 755 /etc/init.d/$RUNDL
 #modify boot script
@@ -63,6 +67,7 @@ sync
 
 sleep 1
 
+/usr/home/$DLSOCKET &
 /usr/home/$FWUPDATE &
 
 
