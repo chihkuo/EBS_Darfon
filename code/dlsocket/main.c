@@ -2752,7 +2752,7 @@ int main(int argc , char *argv[])
                     send(forClientSockfd, ret_buf, 8, 0);
                     break;
 
-                case 5:
+                case 0x05:
                     printf("cmd 05 ok. get current data.\n");
                     get_current_data();
                     ret = stat(HYBRID_TMP_DATA_PATH, &st);
@@ -2783,10 +2783,32 @@ int main(int argc , char *argv[])
                         ret_buf[3] = 0x00;
                         ret_buf[4] = 0x00;
                         ret_buf[5] = 0x00;
-                        ret_buf[6] = 0xFB;
+                        ret_buf[6] = 0xFF;
                         ret_buf[7] = 0xAF;
                         printf("send size 0\n");
                         send(forClientSockfd, ret_buf, 8, 0);
+                    }
+                    break;
+
+                case 0x99:
+                    printf("cmd 99 ok. end.\n");
+
+                    ret_buf[0] = 0xFA;
+                    ret_buf[1] = 0x99;
+                    ret_buf[2] = 0x00;
+                    ret_buf[3] = 0x00;
+                    ret_buf[4] = 0x00;
+                    ret_buf[5] = 0x00;
+                    ret_buf[6] = 0x93;
+                    ret_buf[7] = 0xAF;
+                    printf("send 0\n");
+                    send(forClientSockfd, ret_buf, 8, 0);
+
+                    if ( com_fd > 0 ) {
+                        ModbusDrvDeinit(com_fd);
+                        com_fd = 0;
+                        // run other program
+                        start_process();
                     }
                     break;
 
@@ -2864,6 +2886,19 @@ int main(int argc , char *argv[])
                     printf("cmd 5 error\n");
                     ret_buf[0] = 0xFA;
                     ret_buf[1] = 0x05;
+                    ret_buf[2] = 0xFF;
+                    ret_buf[3] = 0xFF;
+                    ret_buf[4] = 0xFF;
+                    ret_buf[5] = 0xFF;
+                    ret_buf[6] = ret_buf[0] + ret_buf[1] + ret_buf[2] + ret_buf[3] + ret_buf[4] + ret_buf[5];
+                    ret_buf[7] = 0xAF;
+                    printf("send size 0xFFFFFFFF\n");
+                    send(forClientSockfd, ret_buf, 8, 0);
+                    break;
+                case 0x099:
+                    printf("cmd 99 error\n");
+                    ret_buf[0] = 0xFA;
+                    ret_buf[1] = 0x99;
                     ret_buf[2] = 0xFF;
                     ret_buf[3] = 0xFF;
                     ret_buf[4] = 0xFF;
