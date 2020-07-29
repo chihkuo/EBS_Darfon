@@ -464,7 +464,7 @@ void CG320::Start()
     bool    dosave = true;
 
     //GetLocalTime();
-    SaveLog((char *)"DataLogger Start() : start", m_st_time);
+    //SaveLog((char *)"DataLogger Start() : start", m_st_time);
     printf("\n================================\n");
     printf("StartRegisterProcess() Start!\n");
     printf("================================\n");
@@ -472,7 +472,7 @@ void CG320::Start()
     if ( idc ) {
         printf("StartRegisterProcess success find %d new invert\n", idc);
         sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", idc);
-        SaveLog(buf, m_st_time);
+        //SaveLog(buf, m_st_time);
         //SaveWhiteList();
     }
     printf("================================\n");
@@ -631,7 +631,7 @@ void CG320::Start()
             if ( m_loopstate == 0 ) { // init : device get OK
                 m_loopstate = 1;
                 if ( m_snCount > 0 ) { // MI or Hybrid checked : save white list
-                    SaveLog((char *)"DataLogger Start() : run WriteMIListXML()", m_st_time);
+                    //SaveLog((char *)"DataLogger Start() : run WriteMIListXML()", m_st_time);
                     //WriteMIListXML();
                 }
             }
@@ -639,7 +639,7 @@ void CG320::Start()
                 m_loopstate = 2;
                 // find new device
                 if ( m_wl_count < m_snCount ) {
-                    SaveLog((char *)"DataLogger Start() : run SaveWhiteList()", m_st_time);
+                    //SaveLog((char *)"DataLogger Start() : run SaveWhiteList()", m_st_time);
                     //SaveWhiteList();
                 }
             } else { // m_loopstate > 2 to do other thing, undefined
@@ -712,7 +712,7 @@ void CG320::Start()
             if ( idc ) {
                 printf("Add %d new device to list\n", idc);
                 sprintf(buf, "DataLogger Start() : StartRegisterProcess() return %d", idc);
-                SaveLog(buf, m_st_time);
+                //SaveLog(buf, m_st_time);
                 for (i = 1; i <= idc; i++)
                     GetDevice(m_snCount-i);
                 //SaveWhiteList();
@@ -1023,9 +1023,9 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     current_time = time(NULL);
                     m_st_time = localtime(&current_time);
                     // get data time not 0 min. current time is 0 min.
-                    if ( m_data_st_time.tm_min != 0 )
-                        if ( m_st_time->tm_min == 0 )
-                            return -1;
+                    //if ( m_data_st_time.tm_min != 0 )
+                    //    if ( m_st_time->tm_min == 0 )
+                    //        return -1;
 
                     // get power data
                     if ( GetHybridIDData(i) )
@@ -1040,25 +1040,25 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     current_time = time(NULL);
                     m_st_time = localtime(&current_time);
                     // get data time not 0 min. current time is 0 min.
-                    if ( m_data_st_time.tm_min != 0 )
-                        if ( m_st_time->tm_min == 0 )
-                            return -1;
+                    //if ( m_data_st_time.tm_min != 0 )
+                    //    if ( m_st_time->tm_min == 0 )
+                    //        return -1;
 
-                    if ( GetHybridRTCData(i) )
+                    /*if ( GetHybridRTCData(i) )
                         arySNobj[i].m_Err = 0;
                     else {
                         if ( m_loopflag == 0 )
                             arySNobj[i].m_Err++;
                         m_loopflag++;
-                    }
+                    }*/
 
                     // get time
                     current_time = time(NULL);
                     m_st_time = localtime(&current_time);
                     // get data time not 0 min. current time is 0 min.
-                    if ( m_data_st_time.tm_min != 0 )
-                        if ( m_st_time->tm_min == 0 )
-                            return -1;
+                    //if ( m_data_st_time.tm_min != 0 )
+                    //    if ( m_st_time->tm_min == 0 )
+                    //        return -1;
 
                     if ( GetHybridRSInfo(i) )
                         arySNobj[i].m_Err = 0;
@@ -1072,9 +1072,9 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     current_time = time(NULL);
                     m_st_time = localtime(&current_time);
                     // get data time not 0 min. current time is 0 min.
-                    if ( m_data_st_time.tm_min != 0 )
-                        if ( m_st_time->tm_min == 0 )
-                            return -1;
+                    //if ( m_data_st_time.tm_min != 0 )
+                    //    if ( m_st_time->tm_min == 0 )
+                    //        return -1;
 
                     if ( GetHybridRRSInfo(i) )
                         arySNobj[i].m_Err = 0;
@@ -1088,9 +1088,9 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     current_time = time(NULL);
                     m_st_time = localtime(&current_time);
                     // get data time not 0 min. current time is 0 min.
-                    if ( m_data_st_time.tm_min != 0 )
-                        if ( m_st_time->tm_min == 0 )
-                            return -1;
+                    //if ( m_data_st_time.tm_min != 0 )
+                    //    if ( m_st_time->tm_min == 0 )
+                    //        return -1;
 
                     if ( GetHybridRTInfo(i) )
                         arySNobj[i].m_Err = 0;
@@ -1104,23 +1104,23 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     current_time = time(NULL);
                     m_st_time = localtime(&current_time);
                     // get data time not 0 min. current time is 0 min.
-                    if ( m_data_st_time.tm_min != 0 )
-                        if ( m_st_time->tm_min == 0 )
-                            return -1;
+                    //if ( m_data_st_time.tm_min != 0 )
+                    //    if ( m_st_time->tm_min == 0 )
+                    //        return -1;
 
                     SetBMSPath(i);
                     if ( GetHybridBMSInfo(i) ) {
                         // get time
-                        current_time = time(NULL);
-                        m_st_time = localtime(&current_time);
+                        //current_time = time(NULL);
+                        //m_st_time = localtime(&current_time);
                         // get data time not 0 min. current time is 0 min.
-                        if ( m_data_st_time.tm_min != 0 )
-                            if ( m_st_time->tm_min == 0 )
-                                return -1;
+                        //if ( m_data_st_time.tm_min != 0 )
+                        //    if ( m_st_time->tm_min == 0 )
+                        //        return -1;
 
                         arySNobj[i].m_Err = 0;
-                        SetHybridBMSModule(i);
-                        SaveBMS();
+                        //SetHybridBMSModule(i);
+                        //SaveBMS();
                     } else {
                         if ( m_loopflag == 0 )
                             arySNobj[i].m_Err++;
@@ -1131,9 +1131,9 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     current_time = time(NULL);
                     m_st_time = localtime(&current_time);
                     // get data time not 0 min. current time is 0 min.
-                    if ( m_data_st_time.tm_min != 0 )
-                        if ( m_st_time->tm_min == 0 )
-                            return -1;
+                    //if ( m_data_st_time.tm_min != 0 )
+                    //    if ( m_st_time->tm_min == 0 )
+                    //        return -1;
 
                     WriteLogXML(i);
                     if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.PV_Inv_Error_COD3_Record ||
@@ -1199,7 +1199,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
     }
 
     if ( m_snCount > 0 ) {
-        SaveLog((char *)"DataLogger GetData() : run WriteMIListXML()", m_st_time);
+        //SaveLog((char *)"DataLogger GetData() : run WriteMIListXML()", m_st_time);
         WriteMIListXML();
         SaveWhiteList();
     }
@@ -1210,7 +1210,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
     }
 
     //CloseLog(); // cancel, move to main loop execute at loop end
-    system("sync");
+    //system("sync");
 
     // get timezone if before not succss
     if ( m_do_get_TZ )
@@ -1280,7 +1280,7 @@ bool CG320::GetDLConfig()
     printf("SMS Port = %d\n", m_dl_config.m_sms_port);
 
     // get sample_time
-    pFile = popen("uci get dlsetting.@sms[0].sample_time", "r");
+    /*pFile = popen("uci get dlsetting.@sms[0].sample_time", "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
@@ -1288,7 +1288,7 @@ bool CG320::GetDLConfig()
     fgets(buf, 32, pFile);
     pclose(pFile);
     sscanf(buf, "%d", &m_dl_config.m_sample_time);
-    printf("Sample time (Min.) = %d\n", m_dl_config.m_sample_time);
+    printf("Sample time (Min.) = %d\n", m_dl_config.m_sample_time);*/
     // get MI mi_delay_time
     pFile = popen("uci get dlsetting.@sms[0].delay_time_1", "r");
     if ( pFile == NULL ) {
@@ -2704,7 +2704,7 @@ bool CG320::SaveWhiteList()
 
     printf("#### SaveWhiteList OK ####\n");
 
-    SaveLog((char *)"DataLogger SaveWhiteList() : OK", m_st_time);
+    //SaveLog((char *)"DataLogger SaveWhiteList() : OK", m_st_time);
 
     return true;
 }
@@ -2815,11 +2815,11 @@ bool CG320::SaveDeviceList(bool first, bool last)
     if ( last ) {
         sprintf(buf, "cp -f %s %s", DEVICELIST_TMP, DEVICELIST_PATH);
         system(buf);
-        system("sync");
+        //system("sync");
     }
 
     printf("#### SaveDeviceList OK ####\n");
-    SaveLog((char *)"DataLogger SaveDeviceList() : OK", m_st_time);
+    //SaveLog((char *)"DataLogger SaveDeviceList() : OK", m_st_time);
 
     return true;
 }
@@ -3488,7 +3488,7 @@ bool CG320::GetMiIDInfo(int index)
         lpdata = GetRespond(m_busfd, 25, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetMiIDInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetMiIDInfo() : OK", log_time);
+            //SaveLog((char *)"DataLogger GetMiIDInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpMiIDInfo(index, lpdata+3);
             return true;
@@ -3553,7 +3553,7 @@ bool CG320::GetMiIDInfoV3(int index)
         lpdata = GetRespond(m_busfd, 31, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetMiIDInfoV3 OK ####\n");
-            SaveLog((char *)"DataLogger GetMiIDInfoV3() : OK", log_time);
+            //SaveLog((char *)"DataLogger GetMiIDInfoV3() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             arySNobj[index].m_state = 1; // online
             DumpMiIDInfo(index, lpdata+9);
@@ -3681,7 +3681,7 @@ bool CG320::GetMiPowerInfo(int index)
             printf("#### GetMiPowerInfo(%d) OK : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
             //SaveLog((char *)"DataLogger GetMiPowerInfo() : OK", log_time);
             sprintf(strbuf, "DataLogger GetMiPowerInfo(%d) OK : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-            SaveLog(strbuf, log_time);
+            //SaveLog(strbuf, log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpMiPowerInfo(lpdata+3);
             return true;
@@ -3742,7 +3742,7 @@ bool CG320::GetMiPowerInfoV3(int index)
 	sprintf(strbuf, "GetMiPowerInfoV3(%d) send : 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X",
 		index, szMIPowerinfoV3[0], szMIPowerinfoV3[1], szMIPowerinfoV3[2], szMIPowerinfoV3[3], szMIPowerinfoV3[4], szMIPowerinfoV3[5], szMIPowerinfoV3[6],
 		szMIPowerinfoV3[7], szMIPowerinfoV3[8], szMIPowerinfoV3[9], szMIPowerinfoV3[10], szMIPowerinfoV3[11], szMIPowerinfoV3[12], szMIPowerinfoV3[13]);
-	SaveLog(strbuf, log_time);
+	//SaveLog(strbuf, log_time);
 
     MClearRX();
     txsize=14;
@@ -3762,7 +3762,7 @@ bool CG320::GetMiPowerInfoV3(int index)
             printf("#### GetMiPowerInfoV3(%d) OK : Address = %d, SN = %s ####\n", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
             //SaveLog((char *)"DataLogger GetMiPowerInfoV3() : OK", log_time);
             sprintf(strbuf, "DataLogger GetMiPowerInfoV3(%d) OK : Address = %d, SN = %s", index, arySNobj[index].m_Addr, arySNobj[index].m_Sn);
-            SaveLog(strbuf, log_time);
+            //SaveLog(strbuf, log_time);
             arySNobj[index].m_ok_time = time(NULL);
             arySNobj[index].m_state = 1; // online
 
@@ -3773,7 +3773,7 @@ bool CG320::GetMiPowerInfoV3(int index)
                 sprintf(datatmp, "0x%02X, ", lpdata[i]);
                 strcat(strbuf, datatmp);
             }
-            SaveLog(strbuf, log_time);
+            //SaveLog(strbuf, log_time);
 
             DumpMiPowerInfo(lpdata+9);
             return true;
@@ -3913,7 +3913,7 @@ bool CG320::GetHybridIDData(int index)
         lpdata = GetRespond(m_busfd, 33, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridIDData OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridIDData() : OK", log_time);
+            //SaveLog((char *)"DataLogger GetHybridIDData() : OK", log_time);
             DumpHybridIDData(lpdata+3);
             arySNobj[index].m_ok_time = time(NULL);
             ParserHybridIDFlags1(m_hb_id_data.Flags1);
@@ -3955,7 +3955,7 @@ void CG320::DumpHybridIDData(unsigned char *buf)
     m_hb_id_data.Flags1 = (*(buf+24) << 8) + *(buf+25);
     m_hb_id_data.Flags2 = (*(buf+26) << 8) + *(buf+27);
 
-    printf("#### Dump Hybrid ID Data ####\n");
+/*    printf("#### Dump Hybrid ID Data ####\n");
     printf("Grid_Voltage = %d ==> ", m_hb_id_data.Grid_Voltage);
     switch (m_hb_id_data.Grid_Voltage)
     {
@@ -4018,7 +4018,7 @@ void CG320::DumpHybridIDData(unsigned char *buf)
     printf("Display_Ver  = %d\n", m_hb_id_data.Display_Ver);
     printf("Flags1        = 0x%02X ==> \n", m_hb_id_data.Flags1);
     printf("Flags2        = 0x%02X ==> \n", m_hb_id_data.Flags2);
-    printf("#############################\n");
+    printf("#############################\n");*/
 }
 
 bool CG320::SetHybridIDData(int index)
@@ -4070,7 +4070,7 @@ bool CG320::SetHybridIDData(int index)
     szIDData[33] = (unsigned char)((m_hb_id_data.Flags2 >> 8) & 0x00FF);
     szIDData[34] = (unsigned char)(m_hb_id_data.Flags2 & 0xFF);
     // data crc 0x0F
-    crc = CalculateCRC(szIDData+7, 20);
+    crc = CalculateCRC(szIDData+7, 28);
     szIDData[35] = (unsigned char) (crc >> 8); // data crc hi
     szIDData[36] = (unsigned char) (crc & 0xFF); // data crc lo
     szIDData[37] = 0x00; // cmd crc hi
@@ -4119,9 +4119,9 @@ void CG320::ParserHybridIDFlags1(int flags)
     m_hb_id_flags1.B0B1_External_Sensor = tmp & 0x03;
     //tmp>>=2;
 
-    printf("#### Parser Hybrid ID Flags1 ####\n");
+/*    printf("#### Parser Hybrid ID Flags1 ####\n");
     printf("Bit0Bit1 : External Sensor = %d\n", m_hb_id_flags1.B0B1_External_Sensor);
-    printf("################################\n");
+    printf("################################\n");*/
 }
 
 void CG320::ParserHybridIDFlags2(int flags)
@@ -4152,7 +4152,7 @@ void CG320::ParserHybridIDFlags2(int flags)
     tmp>>=1;
     m_hb_id_flags2.B11_Dominion = tmp & 0x01;
 
-    printf("#### Parser Hybrid ID Flags2 ####\n");
+/*    printf("#### Parser Hybrid ID Flags2 ####\n");
     printf("Bit0 : Rule21              = %d\n", m_hb_id_flags2.B0_Rule21);
     printf("Bit1 : PV Parallel         = %d\n", m_hb_id_flags2.B1_PVParallel);
     printf("Bit2 : PV Off Grid         = %d\n", m_hb_id_flags2.B2_PVOffGrid);
@@ -4165,7 +4165,7 @@ void CG320::ParserHybridIDFlags2(int flags)
     printf("Bit9 : Self Supply         = %d\n", m_hb_id_flags2.B9_Self_Supply);
     printf("Bit10: Charge only from PV = %d\n", m_hb_id_flags2.B10_Charge_only_from_PV);
     printf("Bit11: Dominion            = %d\n", m_hb_id_flags2.B11_Dominion);
-    printf("################################\n");
+    printf("################################\n");*/
 }
 
 bool CG320::GetHybridRTCData(int index)
@@ -4197,7 +4197,7 @@ bool CG320::GetHybridRTCData(int index)
         lpdata = GetRespond(m_busfd, 17, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRTCData OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridRTCData() : OK", log_time);
+            //SaveLog((char *)"DataLogger GetHybridRTCData() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRTCData(lpdata+3);
             return true;
@@ -4226,7 +4226,7 @@ void CG320::DumpHybridRTCData(unsigned char *buf)
     m_hb_rtc_data.Month = (*(buf+8) << 8) + *(buf+9);
     m_hb_rtc_data.Year = (*(buf+10) << 8) + *(buf+11);
 
-    printf("#### Dump Hybrid RTC Data ####\n");
+/*    printf("#### Dump Hybrid RTC Data ####\n");
     printf("Second = %d\n", m_hb_rtc_data.Second);
     printf("Minute = %d\n", m_hb_rtc_data.Minute);
     printf("Hour   = %d\n", m_hb_rtc_data.Hour);
@@ -4236,7 +4236,7 @@ void CG320::DumpHybridRTCData(unsigned char *buf)
     printf("##############################\n");
     printf("rtc time : %4d/%02d/%02d ", m_hb_rtc_data.Year, m_hb_rtc_data.Month, m_hb_rtc_data.Date);
     printf("%02d:%02d:%02d\n", m_hb_rtc_data.Hour, m_hb_rtc_data.Minute, m_hb_rtc_data.Second);
-    printf("##############################\n");
+    printf("##############################\n");*/
 }
 
 bool CG320::SetHybridRTCData(int index)
@@ -4313,7 +4313,7 @@ bool CG320::SetHybridRTCData(int index)
         szRTCData[35] = 0x00;
         szRTCData[36] = 0x00;
         // data crc 0x4F
-        crc = CalculateCRC(szRTCData+7, 12);
+        crc = CalculateCRC(szRTCData+7, 30);
         szRTCData[37] = (unsigned char) (crc >> 8); // data crc hi
         szRTCData[38] = (unsigned char) (crc & 0xFF); // data crc lo
         szRTCData[39] = 0x00; // cmd crc hi
@@ -4384,7 +4384,7 @@ bool CG320::GetHybridRSInfo(int index)
         lpdata = GetRespond(m_busfd, 35, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRSInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridRSInfo() : OK", log_time);
+            //SaveLog((char *)"DataLogger GetHybridRSInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRSInfo(lpdata+3);
             return true;
@@ -4422,7 +4422,7 @@ void CG320::DumpHybridRSInfo(unsigned char *buf)
     m_hb_rs_info.EndFrequency = (*(buf+26) << 8) + *(buf+27);
     m_hb_rs_info.FeedinPower = (*(buf+28) << 8) + *(buf+29);
 
-    printf("#### Dump Hybrid RS Info ####\n");
+/*    printf("#### Dump Hybrid RS Info ####\n");
     printf("Mode = %d ==> ", m_hb_rs_info.Mode);
     switch (m_hb_rs_info.Mode)
     {
@@ -4495,7 +4495,7 @@ void CG320::DumpHybridRSInfo(unsigned char *buf)
     printf("Start Frequency = %03.1f Hz\n", (float)m_hb_rs_info.StartFrequency);
     printf("End Frequency = %03.1f Hz\n", (float)m_hb_rs_info.EndFrequency);
     printf("Feed-in Power = %d W\n", m_hb_rs_info.FeedinPower*100);
-    printf("#############################\n");
+    printf("#############################\n");*/
 }
 
 bool CG320::SetHybridRSInfo(int index)
@@ -4617,7 +4617,7 @@ bool CG320::GetHybridRRSInfo(int index)
         lpdata = GetRespond(m_busfd, 19, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRRSInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", log_time);
+            //SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRRSInfo(lpdata+3);
             return true;
@@ -4647,7 +4647,7 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
     m_hb_rrs_info.Volt_VAr = (*(buf+10) << 8) + *(buf+11);
     m_hb_rrs_info.AC_Coupling_Power = (*(buf+12) << 8) + *(buf+13);
 
-    printf("#### Dump Hybrid RRS Info ####\n");
+/*    printf("#### Dump Hybrid RRS Info ####\n");
     printf("Charge = %d ==> ", m_hb_rrs_info.ChargeSetting);
     switch (m_hb_rrs_info.ChargeSetting)
     {
@@ -4694,7 +4694,7 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
             printf("Other\n");
     }
     printf("AC Coupling Power = %d *100W\n", m_hb_rrs_info.AC_Coupling_Power);
-    printf("##############################\n");
+    printf("##############################\n");*/
 }
 
 bool CG320::SetHybridRRSInfo(int index)
@@ -4746,7 +4746,7 @@ bool CG320::SetHybridRRSInfo(int index)
     szRRSInfo[35] = 0x00;
     szRRSInfo[36] = 0x00;
     // data crc 0xAF
-    crc = CalculateCRC(szRRSInfo+7, 10);
+    crc = CalculateCRC(szRRSInfo+7, 30);
     szRRSInfo[37] = (unsigned char) (crc >> 8); // data crc hi
     szRRSInfo[38] = (unsigned char) (crc & 0xff); // data crc lo
     szRRSInfo[39] = 0x00; // cmd crc hi
@@ -4818,7 +4818,7 @@ bool CG320::GetHybridRTInfo(int index)
         lpdata = GetRespond(m_busfd, 101, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRTInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridRTInfo() : OK", log_time);
+            //SaveLog((char *)"DataLogger GetHybridRTInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRTInfo(lpdata+3);
             ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1_Record);
@@ -4868,7 +4868,7 @@ bool CG320::GetHybridRTInfo(int index)
         lpdata = GetRespond(m_busfd, 9, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRTInfo2 OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridRTInfo2() : OK", log_time);
+            //SaveLog((char *)"DataLogger GetHybridRTInfo2() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridRTInfo2(lpdata+3);
             ParserHybridPVInvErrCOD3(m_hb_rt_info.PV_Inv_Error_COD3_Record);
@@ -4941,7 +4941,7 @@ void CG320::DumpHybridRTInfo(unsigned char *buf)
     m_hb_rt_info.Grid_Frequency = (*(buf+92) << 8) + *(buf+93);
     m_hb_rt_info.PBat = (*(buf+94) << 8) + *(buf+95);
 
-    printf("#### Dump Hybrid RT Info ####\n");
+/*    printf("#### Dump Hybrid RT Info ####\n");
     printf("Inv_Temp = %03.1f C\n", ((float)m_hb_rt_info.Inv_Temp)/10);
     printf("PV1_Temp = %03.1f C\n", ((float)m_hb_rt_info.PV1_Temp)/10);
     printf("PV2_Temp = %03.1f C\n", ((float)m_hb_rt_info.PV2_Temp)/10);
@@ -4996,7 +4996,7 @@ void CG320::DumpHybridRTInfo(unsigned char *buf)
     printf("Invert Frequency = %03.1f Hz\n", ((float)m_hb_rt_info.Invert_Frequency)/10);
     printf("Grid Frequency = %03.1f Hz\n", ((float)m_hb_rt_info.Grid_Frequency)/10);
     printf("PBat = %d W\n", m_hb_rt_info.PBat);
-    printf("#############################\n");
+    printf("#############################\n");*/
 }
 
 void CG320::DumpHybridRTInfo2(unsigned char *buf)
@@ -5004,10 +5004,10 @@ void CG320::DumpHybridRTInfo2(unsigned char *buf)
     m_hb_rt_info.PV_Inv_Error_COD3_Record = (*(buf) << 8) + *(buf+1);
     m_hb_rt_info.DD_Error_COD2_Record = (*(buf+2) << 8) + *(buf+3);
 
-    printf("#### Dump Hybrid RT Info ####\n");
+/*    printf("#### Dump Hybrid RT Info ####\n");
     printf("PV_Inv_Error_COD3_Record = 0x%04X\n", m_hb_rt_info.PV_Inv_Error_COD3_Record);
     printf("DD_Error_COD2_Record = 0x%04X\n", m_hb_rt_info.DD_Error_COD2_Record);
-    printf("#############################\n");
+    printf("#############################\n");*/
 }
 
 void CG320::ParserHybridPVInvErrCOD1(int COD1)
@@ -5045,7 +5045,7 @@ void CG320::ParserHybridPVInvErrCOD1(int COD1)
     tmp>>=1;
     m_hb_pvinv_err_cod1.B15_Vbus_H = tmp & 0x0001;
 
-    printf("#### Parser Hybrid PV Inverter Error Code 1 ####\n");
+/*    printf("#### Parser Hybrid PV Inverter Error Code 1 ####\n");
     printf("Bit0  : Fac_HL = %d\n", m_hb_pvinv_err_cod1.B0_Fac_HL);
     printf("Bit1  : CanBus_Fault = %d\n", m_hb_pvinv_err_cod1.B1_CanBus_Fault);
     printf("Bit2  : Islanding = %d\n", m_hb_pvinv_err_cod1.B2_Islanding);
@@ -5062,7 +5062,7 @@ void CG320::ParserHybridPVInvErrCOD1(int COD1)
     printf("Bit13 : Ipv_H = %d\n", m_hb_pvinv_err_cod1.B13_Ipv_H);
     printf("Bit14 : ADCINT_OVF = %d\n", m_hb_pvinv_err_cod1.B14_ADCINT_OVF);
     printf("Bit15 : Vbus_H = %d\n", m_hb_pvinv_err_cod1.B15_Vbus_H);
-    printf("################################################\n");
+    printf("################################################\n");*/
 }
 
 void CG320::ParserHybridPVInvErrCOD2(int COD2)
@@ -5100,7 +5100,7 @@ void CG320::ParserHybridPVInvErrCOD2(int COD2)
     tmp>>=1;
     m_hb_pvinv_err_cod2.B15_Vac_LM = tmp & 0x0001;
 
-    printf("#### Parser Hybrid PV Inverter Error Code 2 ####\n");
+/*    printf("#### Parser Hybrid PV Inverter Error Code 2 ####\n");
     printf("Bit0  : Arc = %d\n", m_hb_pvinv_err_cod2.B0_Arc);
     printf("Bit1  : Vac_Relay_Fault = %d\n", m_hb_pvinv_err_cod2.B1_Vac_Relay_Fault);
     printf("Bit2  : Ipv1_Short = %d\n", m_hb_pvinv_err_cod2.B2_Ipv1_Short);
@@ -5117,7 +5117,7 @@ void CG320::ParserHybridPVInvErrCOD2(int COD2)
     printf("Bit13 : RCMU_300 = %d\n", m_hb_pvinv_err_cod2.B13_RCMU_300);
     printf("Bit14 : RCMU_Test_Fault = %d\n", m_hb_pvinv_err_cod2.B14_RCMU_Test_Fault);
     printf("Bit15 : Vac_LM = %d\n", m_hb_pvinv_err_cod2.B15_Vac_LM);
-    printf("################################################\n");
+    printf("################################################\n");*/
 }
 
 void CG320::ParserHybridPVInvErrCOD3(int COD3)
@@ -5125,9 +5125,9 @@ void CG320::ParserHybridPVInvErrCOD3(int COD3)
     int tmp = COD3;
     m_hb_pvinv_err_cod3.B0_External_PV_OPP = tmp & 0x0001;
 
-    printf("#### Parser Hybrid PV Inverter Error Code 3 ####\n");
+/*    printf("#### Parser Hybrid PV Inverter Error Code 3 ####\n");
     printf("Bit0  : External_PV_OPP = %d\n", m_hb_pvinv_err_cod3.B0_External_PV_OPP);
-    printf("################################################\n");
+    printf("################################################\n");*/
 }
 
 void CG320::ParserHybridDDErrCOD(int COD)
@@ -5165,7 +5165,7 @@ void CG320::ParserHybridDDErrCOD(int COD)
     tmp>>=1;
     m_hb_dd_err_cod.B15_Bat_Setting_Fault = tmp & 0x0001;
 
-    printf("#### Parser Hybrid DD Error Code ####\n");
+/*    printf("#### Parser Hybrid DD Error Code ####\n");
     printf("Bit0  : Vbat_H = %d\n", m_hb_dd_err_cod.B0_Vbat_H);
     printf("Bit1  : Vbat_L = %d\n", m_hb_dd_err_cod.B1_Vbat_L);
     printf("Bit2  : Vbus_H = %d\n", m_hb_dd_err_cod.B2_Vbus_H);
@@ -5182,7 +5182,7 @@ void CG320::ParserHybridDDErrCOD(int COD)
     printf("Bit13 : BMS_Over_Current = %d\n", m_hb_dd_err_cod.B13_BMS_Over_Current);
     printf("Bit14 : Restart = %d\n", m_hb_dd_err_cod.B14_Restart);
     printf("Bit15 : Bat_Setting_Fault = %d\n", m_hb_dd_err_cod.B15_Bat_Setting_Fault);
-    printf("#####################################\n");
+    printf("#####################################\n");*/
 }
 
 void CG320::ParserHybridDDErrCOD2(int COD2)
@@ -5198,13 +5198,13 @@ void CG320::ParserHybridDDErrCOD2(int COD2)
     tmp>>=1;
     m_hb_dd_err_cod2.B4_Low_Battery = tmp & 0x0001;
 
-    printf("#### Parser Hybrid DD Error Code 2 ####\n");
+/*    printf("#### Parser Hybrid DD Error Code 2 ####\n");
     printf("Bit0  : EEProm_Fault = %d\n", m_hb_dd_err_cod2.B0_EEProm_Fault);
     printf("Bit1  : Communi_Fault = %d\n", m_hb_dd_err_cod2.B1_Communi_Fault);
     printf("Bit2  : OT_Fault = %d\n", m_hb_dd_err_cod2.B2_OT_Fault);
     printf("Bit3  : Fan_Fault = %d\n", m_hb_dd_err_cod2.B3_Fan_Fault);
     printf("Bit4  : Low_Battery = %d\n", m_hb_dd_err_cod2.B4_Low_Battery);
-    printf("#####################################\n");
+    printf("#####################################\n");*/
 }
 
 void CG320::ParserHybridIconInfo(int Icon_L, int Icon_H)
@@ -5262,7 +5262,7 @@ void CG320::ParserHybridIconInfo(int Icon_L, int Icon_H)
     m_hb_icon_info.B29_30_LeadLag = tmp & 0x0003;
     tmp>>=2;
 
-    printf("#### Parser Hybrid Icon ####\n");
+/*    printf("#### Parser Hybrid Icon ####\n");
     printf("Bit0     : PV = %d\n", m_hb_icon_info.B0_PV);
     printf("Bit1     : MPPT = %d\n", m_hb_icon_info.B1_MPPT);
     printf("Bit2     : Battery = %d\n", m_hb_icon_info.B2_Battery);
@@ -5288,7 +5288,7 @@ void CG320::ParserHybridIconInfo(int Icon_L, int Icon_H)
     printf("Bit27    : Load Charge = %d\n", m_hb_icon_info.B27_LoadCharge);
     printf("Bit28    : Load Discharge = %d\n", m_hb_icon_info.B28_LoadDischarge);
     printf("Bit29-30 : Lead Lag = %d\n", m_hb_icon_info.B29_30_LeadLag);
-    printf("############################\n");
+    printf("############################\n");*/
 }
 
 bool CG320::GetHybridBMSInfo(int index)
@@ -5320,7 +5320,7 @@ bool CG320::GetHybridBMSInfo(int index)
         lpdata = GetRespond(m_busfd, 29, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridBMSInfo OK ####\n");
-            SaveLog((char *)"DataLogger GetHybridBMSInfo() : OK", log_time);
+            //SaveLog((char *)"DataLogger GetHybridBMSInfo() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
             DumpHybridBMSInfo(lpdata+3);
             return true;
@@ -5355,7 +5355,7 @@ void CG320::DumpHybridBMSInfo(unsigned char *buf)
     m_hb_bms_info.BMS_Min_Cell = (*(buf+20) << 8) + *(buf+21);
     m_hb_bms_info.BMS_BaudRate = (*(buf+22) << 8) + *(buf+23);
 
-    printf("#### Dump Hybrid BMS Info ####\n");
+/*    printf("#### Dump Hybrid BMS Info ####\n");
     printf("Voltage           = %d mV\n", m_hb_bms_info.Voltage*10);
     printf("Current           = %d mA\n", m_hb_bms_info.Current*10);
     printf("SOC               = %d %%\n", m_hb_bms_info.SOC);
@@ -5368,7 +5368,7 @@ void CG320::DumpHybridBMSInfo(unsigned char *buf)
     printf("BMS Max Cell      = %d mV\n", m_hb_bms_info.BMS_Max_Cell);
     printf("BMS Min Cell      = %d mV\n", m_hb_bms_info.BMS_Min_Cell);
     printf("BMS BaudRate      = %d bps\n", m_hb_bms_info.BMS_BaudRate);
-    printf("##############################\n");
+    printf("##############################\n");*/
 }
 
 bool CG320::SetHybridBMSModule(int index)
@@ -5860,7 +5860,7 @@ void CG320::GetNTPTime()
 
 void CG320::SetLogXML()
 {
-    sprintf(m_log_filename, "%s/%02d%02d", m_dl_path.m_log_path, m_data_st_time.tm_hour, m_data_st_time.tm_min);
+    sprintf(m_log_filename, "%s/%02d%02d%02d", m_dl_path.m_log_path, m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec);
     //printf("log path = %s\n", m_log_filename);
     return;
 }
@@ -5873,12 +5873,12 @@ bool CG320::WriteLogXML(int index)
     int error_tmp = 0;
     int model = 0;
 
-    time_t current_time;
-    struct tm *log_time;
-    current_time = time(NULL);
-    log_time = localtime(&current_time);
+    //time_t current_time;
+    //struct tm *log_time;
+    //current_time = time(NULL);
+    //log_time = localtime(&current_time);
 
-    SaveLog((char *)"DataLogger WriteLogXML() : run", log_time);
+    //SaveLog((char *)"DataLogger WriteLogXML() : run", log_time);
     printf("==================== Set Log XML start ====================\n");
     //if ( first && (strlen(m_log_buf) == 0) ) // empty, new file, add header <records>
     //    strcpy(m_log_buf, "<records>");
@@ -5891,9 +5891,9 @@ bool CG320::WriteLogXML(int index)
         if ( model < 3 ) {
             // G240/300, G320, G321 single channel
             sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:%02d\" sn=\"%s\">", dev_id,
                     1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn);
             strcat(m_log_buf, buf);
 
             if ( m_loopflag == 0 ) {
@@ -5980,9 +5980,9 @@ bool CG320::WriteLogXML(int index)
             idtmp[0] = 'A';
             strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"A%s\">", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:%02d\" sn=\"A%s\">", dev_id,
                     1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn+1);
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn+1);
             strcat(m_log_buf, buf);
 
             if ( m_loopflag == 0 ) {
@@ -6082,9 +6082,9 @@ bool CG320::WriteLogXML(int index)
             idtmp[0] = 'B';
             //strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"B%s\">", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:%02d\" sn=\"B%s\">", dev_id,
                     1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn+1);
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn+1);
             strcat(m_log_buf, buf);
 
             if ( m_loopflag == 0 ) {
@@ -6182,9 +6182,9 @@ bool CG320::WriteLogXML(int index)
         // Hybrid part
         // set slave ID, date time, SN
         sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
-        sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+        sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:%02d\" sn=\"%s\">", dev_id,
                 1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-                m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
+                m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn);
         strcat(m_log_buf, buf);
 
         if ( m_loopflag == 0 ) {
@@ -6550,7 +6550,7 @@ bool CG320::SaveLogXML(bool first, bool last)
 
 void CG320::SetErrorLogXML()
 {
-    sprintf(m_errlog_filename, "%s/%02d%02d", m_dl_path.m_errlog_path, m_data_st_time.tm_hour, m_data_st_time.tm_min);
+    sprintf(m_errlog_filename, "%s/%02d%02d%02d", m_dl_path.m_errlog_path, m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec);
     //printf("errlog path = %s\n", m_errlog_filename);
     return;
 }
@@ -6562,12 +6562,12 @@ bool CG320::WriteErrorLogXML(int index)
     unsigned long long int dev_id = 0;
     int model = 0;
 
-    time_t current_time;
-    struct tm *log_time;
-    current_time = time(NULL);
-    log_time = localtime(&current_time);
+    //time_t current_time;
+    //struct tm *log_time;
+    //current_time = time(NULL);
+    //log_time = localtime(&current_time);
 
-    SaveLog((char *)"DataLogger WriteErrorLogXML() : run", log_time);
+    //SaveLog((char *)"DataLogger WriteErrorLogXML() : run", log_time);
     printf("==================== Set Error Log XML start ====================\n");
     //if ( strlen(m_errlog_buf) == 0 ) // empty, new file, add header <records>
     //    strcpy(m_errlog_buf, "<records>");
@@ -6580,9 +6580,9 @@ bool CG320::WriteErrorLogXML(int index)
         if ( model < 3 ) {
             // G240/300, G320, G321 single channel
             sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:%02d\" sn=\"%s\">", dev_id,
                 1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-                m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
+                m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn);
             strcat(m_errlog_buf, buf);
 
             // Error_Code1
@@ -6657,9 +6657,9 @@ bool CG320::WriteErrorLogXML(int index)
             idtmp[0] = 'A';
             strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:%02d\" sn=\"%s\">", dev_id,
                     1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn);
             strcat(m_errlog_buf, buf);
 
             // Error_Code1
@@ -6747,9 +6747,9 @@ bool CG320::WriteErrorLogXML(int index)
             idtmp[0] = 'B';
             //strcpy(idtmp+1, arySNobj[index].m_Sn+5);
             sscanf(idtmp, "%012llX", &dev_id); // get last 12 digit
-            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+            sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:%02d\" sn=\"%s\">", dev_id,
                     1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-                    m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
+                    m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn);
             strcat(m_errlog_buf, buf);
 
             // Error_Code1
@@ -6822,9 +6822,9 @@ bool CG320::WriteErrorLogXML(int index)
     } else {
         // Hybrid part
         sscanf(arySNobj[index].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
-        sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:00\" sn=\"%s\">", dev_id,
+        sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:%02d\" sn=\"%s\">", dev_id,
             1900+m_data_st_time.tm_year, 1+m_data_st_time.tm_mon, m_data_st_time.tm_mday,
-            m_data_st_time.tm_hour, m_data_st_time.tm_min, arySNobj[index].m_Sn);
+            m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn);
         strcat(m_errlog_buf, buf);
 
         // 0xDB : error code
@@ -7058,7 +7058,7 @@ bool CG320::SaveErrorLogXML(bool first, bool last)
 void CG320::SetEnvXML()
 {
     sprintf(m_env_filename, "%s/%02d%02d", m_dl_path.m_env_path, m_data_st_time.tm_hour, m_data_st_time.tm_min);
-    printf("env path = %s\n", m_env_filename);
+    //printf("env path = %s\n", m_env_filename);
     return;
 }
 
@@ -7449,7 +7449,7 @@ bool CG320::WriteMIListXML()
     fclose(pFile);
 
     if ( m_last ) {
-        system("sync");
+        //system("sync");
         stat("/tmp/tmpMIList", &filest);
         listsize = filest.st_size;
         //printf("listsize = %d\n", listsize);
@@ -7466,7 +7466,7 @@ bool CG320::WriteMIListXML()
         }
     }
 
-    SaveLog((char *)"DataLogger WriteMIListXML() : OK", m_st_time);
+    //SaveLog((char *)"DataLogger WriteMIListXML() : OK", m_st_time);
 
     return true;
 }

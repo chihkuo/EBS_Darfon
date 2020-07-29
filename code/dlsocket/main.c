@@ -21,6 +21,10 @@ int data_bits = 0;
 char parity[8] = {0};
 int stop_bits = 0;
 int com_fd = 0;
+int update_interval = 0;
+int inverter_state = 0;
+int no_usb = 0;
+time_t save_time = 0;
 
 // for register
 unsigned char query_buf[QUERY_SIZE];
@@ -101,6 +105,8 @@ void get_config()
     char cmd[128] = {0};
     char *cptr = NULL;
     FILE *fd = NULL;
+    int tmp_interval = 0;
+    struct stat st;
 
     initenv((char *)"/usr/home/G320.ini");
 
@@ -193,6 +199,31 @@ void get_config()
     pclose(fd);
     sscanf(buf, "%d", &stop_bits);
     printf("Stop bits = %d\n", stop_bits);
+
+    // get upload interval
+    fd = popen("uci get dlsetting.@sms[0].upload_time", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+        return;
+    }
+    fgets(buf, 128, fd);
+    pclose(fd);
+    sscanf(buf, "%d", &tmp_interval);
+    if ( update_interval == tmp_interval ) {
+        printf("same update interval %d\n", update_interval);
+    } else {
+        update_interval = tmp_interval;
+        printf("set update interval %d\n", update_interval);
+    }
+
+    // check usb device exist
+    if ( stat(USB_DEV, &st) == 0 ) {
+        // exist
+        no_usb = 0;
+    } else {
+        // none
+        no_usb = 1;
+    }
 
     return;
 }
@@ -563,10 +594,11 @@ int write_Hybrid_list()
 
 int get_current_data()
 {
-    int i = 0, flag = 0, ret = 0, miss = 0;
+    int i = 0, flag = 0, flag_err = 0, ret = 0, miss = 0;
     unsigned long long int dev_id = 0;
     char buf[256] = {0};
-    FILE *pFile = NULL;
+    FILE *pFile = NULL, *pFile_err = NULL;
+    struct stat st;
 
     time_t current_time;
     struct tm *st_time;
@@ -582,6 +614,8 @@ int get_current_data()
 	//st_time.tm_sec
 
 	sprintf(buf, "rm %s; sync", HYBRID_TMP_DATA_PATH);
+    system(buf);
+    sprintf(buf, "rm %s; sync", HYBRID_TMP_ERROR_PATH);
     system(buf);
 
     loop_err_cnt = 0;
@@ -928,16 +962,166 @@ int get_current_data()
                 } else {
                     if ( loop_err_cnt == 5 ) {
                         fputs("<Status>1</Status>", pFile);
-                        //m_inverter_state = 1;
+                        inverter_state = 1;
                         //m_sys_error |= SYS_0010_Off_Line;
                     } else {
                         fputs("<Status>0</Status>", pFile);
-                        //m_inverter_state = 0;
+                        inverter_state = 0;
                         //m_sys_error &= ~SYS_0010_Off_Line;
                     }
                 }
 
                 fputs("</record>", pFile);
+
+
+                if ( rt_info.Error_Code || rt_info.PV_Inv_Error_COD1_Record || rt_info.PV_Inv_Error_COD2_Record || rt_info.PV_Inv_Error_COD3_Record ||
+                         rt_info.DD_Error_COD_Record || rt_info.DD_Error_COD2_Record || inverter_state || no_usb ) {
+                    // set err xml part
+                    // find first device, set start xml item
+                    if ( flag_err == 0 ) {
+                        pFile_err = fopen(HYBRID_TMP_ERROR_PATH, "wb");
+                        if ( pFile_err == NULL ) {
+                            printf("open %s fail\n", HYBRID_TMP_ERROR_PATH);
+                            return -1;
+                        }
+                        printf("==================== Set Hybrid Tmp Error start ====================\n");
+                        fputs("<records>", pFile_err);
+                        flag_err = 1;
+                    }
+                    // set header
+                    sscanf(dev_list[i].m_Sn+4, "%012llX", &dev_id); // get last 12 digit
+                    sprintf(buf, "<record dev_id=\"%lld\" date=\"%04d-%02d-%02d %02d:%02d:%02d\" sn=\"%s\">", dev_id,
+                            1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday,
+                            st_time->tm_hour, st_time->tm_min, st_time->tm_sec, dev_list[i].m_Sn);
+                    fputs(buf, pFile_err);
+
+                    // 0xDB : error code
+                    if ( rt_info.Error_Code ) {
+                        sprintf(buf, "<code>%d</code>", rt_info.Error_Code);
+                        fputs(buf, pFile_err);
+                    }
+                    // PV_Inv_Error_COD1_Record 0xD3
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0001 )
+                        fputs("<code>COD1_0001_Fac_HL</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0002 )
+                        fputs("<code>COD1_0002_CanBus_Fault</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0004 )
+                        fputs("<code>COD1_0004_Islanding</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0008 )
+                        fputs("<code>COD1_0008_Vac_H</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0010 )
+                        fputs("<code>COD1_0010_Vac_L</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0020 )
+                        fputs("<code>COD1_0020_Fac_H</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0040 )
+                        fputs("<code>COD1_0040_Fac_L</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0080 )
+                        fputs("<code>COD1_0080_Fac_LL</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0100 )
+                        fputs("<code>COD1_0100_Vac_OCP</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0200 )
+                        fputs("<code>COD1_0200_Vac_HL</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0400 )
+                        fputs("<code>COD1_0400_Vac_LL</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x0800 )
+                        fputs("<code>COD1_0800_OPP</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x1000 )
+                        fputs("<code>COD1_1000_Iac_H</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x2000 )
+                        fputs("<code>COD1_2000_Ipv_H</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x4000 )
+                        fputs("<code>COD1_4000_ADCINT_OVF</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD1_Record & 0x8000 )
+                        fputs("<code>COD1_8000_Vbus_H</code>", pFile_err);
+                    // PV_Inv_Error_COD2_Record 0xD4
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0001 )
+                        fputs("<code>COD2_0001_Arc</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0002 )
+                        fputs("<code>COD2_0002_Vac_Relay_fault</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0004 )
+                        fputs("<code>COD2_0004_Ipv1_short</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0008 )
+                        fputs("<code>COD2_0008_Ipv2_short</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0010 )
+                        fputs("<code>COD2_0010_Vac_Short</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0020 )
+                        fputs("<code>COD2_0020_CT_fault</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0040 )
+                        fputs("<code>COD2_0040_PVOverPower</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0080 )
+                        fputs("<code>COD2_0080_NO_GRID</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0100 )
+                        fputs("<code>COD2_0100_PV_Input_High</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0200 )
+                        fputs("<code>COD2_0200_INV_Overload</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0400 )
+                        fputs("<code>COD2_0400_RCMU_30</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x0800 )
+                        fputs("<code>COD2_0800_RCMU_60</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x1000 )
+                        fputs("<code>COD2_1000_RCMU_150</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x2000 )
+                        fputs("<code>COD2_2000_RCMU_300</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x4000 )
+                        fputs("<code>COD2_4000_RCMUtest_Fault</code>", pFile_err);
+                    if ( rt_info.PV_Inv_Error_COD2_Record & 0x8000 )
+                        fputs("<code>COD2_8000_Vac_LM</code>", pFile_err);
+                    // DD_Error_COD_Record 0xD5
+                    if ( rt_info.DD_Error_COD_Record & 0x0001 )
+                        fputs("<code>COD3_0001_Vbat_H</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0002 )
+                        fputs("<code>COD3_0002_Vbat_L_fault</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0004 )
+                        fputs("<code>COD3_0004_Vbus_H</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0008 )
+                        fputs("<code>COD3_0008_Vbus_L</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0010 )
+                        fputs("<code>COD3_0010_Ibus_H</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0020 )
+                        fputs("<code>COD3_0020_Ibat_H</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0040 )
+                        fputs("<code>COD3_0040_Charger_T</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0080 )
+                        fputs("<code>COD3_0080_Code</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0100 )
+                        fputs("<code>COD3_0100_Vbat_Drop</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0200 )
+                        fputs("<code>COD3_0200_INV_fault</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0400 )
+                        fputs("<code>COD3_0400_GND_Fault</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x0800 )
+                        fputs("<code>COD3_0800_No_Bat</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x1000 )
+                        fputs("<code>COD3_1000_BMS_Comute_fault</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x2000 )
+                        fputs("<code>COD3_2000_BMS_Over_Current</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x4000 )
+                        fputs("<code>COD3_4000_Restart</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD_Record & 0x8000 )
+                        fputs("<code>COD3_8000_Bat_Setting_fault</code>", pFile_err);
+                    // PV_Inv_Error_COD3_Record 0xF0
+                    if ( rt_info.PV_Inv_Error_COD3_Record & 0x0001 )
+                        fputs("<code>COD4_0001_External_PV_OPP</code>", pFile_err);
+                    // DD_Error_COD2_Record 0xF1
+                    if ( rt_info.DD_Error_COD2_Record & 0x0001 )
+                        fputs("<code>COD5_0001_EEProm_Fault</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD2_Record & 0x0002 )
+                        fputs("<code>COD5_0002_Communi_Fault</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD2_Record & 0x0004 )
+                        fputs("<code>COD5_0004_OT_Fault</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD2_Record & 0x0008 )
+                        fputs("<code>COD5_0008_Fan_Fault</code>", pFile_err);
+                    if ( rt_info.DD_Error_COD2_Record & 0x0010 )
+                        fputs("<code>COD5_0010_Low_Battery</code>", pFile_err);
+                    // set inverter off line log
+                    if ( inverter_state )
+                        fputs("<code>SYS_0010_Off_Line</code>", pFile_err);
+                    // set no usb
+                    if ( no_usb )
+                        fputs("<code>SYS_0001_No_USB</code>", pFile_err);
+
+                    fputs("</record>", pFile_err);
+                }
 
             } else {
                 printf("Addr %d SN %s Error 3 times, call re_register()\n", dev_list[i].m_Addr, dev_list[i].m_Sn);
@@ -952,11 +1136,72 @@ int get_current_data()
         printf("===================== Set Hybrid Tmp Data end =====================\n");
         fclose(pFile);
     }
+    if ( flag_err ) {
+        fputs("</records>", pFile_err);
+        printf("===================== Set Hybrid Tmp Error end =====================\n");
+        fclose(pFile_err);
+    }
 
     if ( miss )
         return miss;
-    else
+    else {
+        // file exist
+        if ( stat(HYBRID_TMP_DATA_PATH, &st) == 0 ) {
+            // save file if time is up
+            if ( current_time - save_time >= update_interval ) {
+                save_time = current_time;
+                // copy file
+                if ( no_usb ) {
+                    // check dir exist, or make dir
+                    sprintf(buf, "%s/%04d%02d%02d", DEF_LOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday);
+                    if ( stat(buf, &st) != 0 ) {
+                        sprintf(buf, "mkdir -p %s/%04d%02d%02d", DEF_LOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday);
+                        system(buf);
+                    }
+                    sprintf(buf, "cp %s %s/%04d%02d%02d/%02d%02d%02d", HYBRID_TMP_DATA_PATH, DEF_LOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon,
+                        st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
+                    system(buf);
+
+                    // copy error code if exist
+                    if ( stat(HYBRID_TMP_ERROR_PATH, &st) == 0 ) {
+                        // check dir exist, or make dir
+                        sprintf(buf, "%s/%04d%02d%02d", DEF_ERRLOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday);
+                        if ( stat(buf, &st) != 0 ) {
+                            sprintf(buf, "mkdir -p %s/%04d%02d%02d", DEF_ERRLOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday);
+                            system(buf);
+                        }
+                        sprintf(buf, "cp %s %s/%04d%02d%02d/%02d%02d%02d", HYBRID_TMP_ERROR_PATH, DEF_ERRLOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon,
+                            st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
+                        system(buf);
+                    }
+                } else {
+                    // check dir exist, or make dir
+                    sprintf(buf, "%s/%04d%02d%02d", LOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday);
+                    if ( stat(buf, &st) != 0 ) {
+                        sprintf(buf, "mkdir -p %s/%04d%02d%02d", LOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday);
+                        system(buf);
+                    }
+                    sprintf(buf, "cp %s %s/%04d%02d%02d/%02d%02d%02d", HYBRID_TMP_DATA_PATH, LOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon,
+                        st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
+                    system(buf);
+
+                    // copy error code if exist
+                    if ( stat(HYBRID_TMP_ERROR_PATH, &st) == 0 ) {
+                        // check dir exist, or make dir
+                        sprintf(buf, "%s/%04d%02d%02d", ERRLOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday);
+                        if ( stat(buf, &st) != 0 ) {
+                            sprintf(buf, "mkdir -p %s/%04d%02d%02d", ERRLOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon, st_time->tm_mday);
+                            system(buf);
+                        }
+                        sprintf(buf, "cp %s %s/%04d%02d%02d/%02d%02d%02d", HYBRID_TMP_ERROR_PATH, ERRLOG_PATH, 1900+st_time->tm_year, 1+st_time->tm_mon,
+                            st_time->tm_mday, st_time->tm_hour, st_time->tm_min, st_time->tm_sec);
+                        system(buf);
+                    }
+                }
+            }
+        }
         return 0;
+    }
 }
 
 int re_register(int index)
@@ -1426,11 +1671,16 @@ void dump_RS(unsigned char *buf)
             printf("Gloden Crown\n");
             break;
         case 3:
-            printf("Darfon\n");
+            printf("Darfon LNMC\n");
             break;
         case 4:
             printf("Panasonic\n");
             break;
+        case 5:
+            printf("Darfon LFP\n");
+            break;
+        default:
+            printf("other\n");
     }
     printf("Battery Current = %d A\n", rs_info.BatteryCurrent);
     printf("Battery Shutdown Voltage = %03.1f V\n", ((float)rs_info.BatteryShutdownVoltage)/10);
@@ -2253,6 +2503,95 @@ int send_file(int sockfd, char *FILENAME, int filesize)
     return 0;
 }
 
+int write_data(char *sn, int addr, int count, unsigned char *data)
+{
+    printf("#### write_data start ####\n");
+
+    int i = 0, index = 0, err = 0;
+    byte *lpdata = NULL;
+    time_t current_time = 0;
+    unsigned short crc;
+
+    // find index
+    for (i = 0; i < dev_count; i++) {
+        if ( !strncmp(dev_list[i].m_Sn, sn, 16) ) {
+            index = i;
+            break;
+        }
+    }
+
+    current_time = time(NULL);
+    if ( current_time - dev_list[index].m_ok_time >= OFFLINE_SECOND_HB ) {
+        printf("Last m_ok_time more then 180 sec.\n");
+        if ( re_register(index) )
+            return 3;
+    }
+
+    unsigned char write_buf[41];
+    memset(write_buf, 0x00, 41);
+    write_buf[0] = dev_list[index].m_Addr;
+    write_buf[1] = 0x10; // function code
+    write_buf[2] = (unsigned char)((addr>>8)&0x000000FF);
+    write_buf[3] = (unsigned char)(addr&0x000000FF); //start addr
+    write_buf[4] = 0x00;
+    if ( addr == 1 ) {
+        write_buf[5] = 0x0F; // number of data
+        write_buf[6] = 0x1E; // bytes
+    } else {
+        write_buf[5] = 0x10; // number of data
+        write_buf[6] = 0x20; // bytes
+    }
+    for (i = 0; i < 2*count; i++)
+        write_buf[7+i] = data[i];
+    crc = CalculateCRC(data, 2*count);
+    if ( addr == 1 ) {
+        write_buf[35] = (unsigned char) (crc >> 8); // data crc hi
+        write_buf[36] = (unsigned char) (crc & 0xFF); // data crc lo
+        MakeReadDataCRC(write_buf,39);
+    } else {
+        write_buf[37] = (unsigned char) (crc >> 8); // data crc hi
+        write_buf[38] = (unsigned char) (crc & 0xFF); // data crc lo
+        MakeReadDataCRC(write_buf,41);
+    }
+
+    MClearRX();
+    if ( addr == 1 ) {
+        txsize=39;
+    } else {
+        txsize=41;
+    }
+    waitAddr = dev_list[index].m_Addr;
+    waitFCode = 0x10;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, write_buf, txsize);
+        MStartTX(com_fd);
+        //usleep(delay_time_2);
+
+        //current_time = time(NULL);
+		//log_time = localtime(&current_time);
+
+        lpdata = GetRespond(com_fd, 8, delay_time_2);
+        if ( lpdata ) {
+            if ( CheckCRC(lpdata, 8) ) {
+                printf("#### write_data OK ####\n");
+                dev_list[index].m_ok_time = time(NULL);
+                //free(lpdata);
+                return 0;
+            } else {
+                printf("#### write_data CRC Error ####\n");
+                err++;
+            }
+            //free(lpdata);
+        } else {
+            printf("#### write_data No Response ####\n");
+            err++;
+        }
+    }
+
+    return 4;
+}
+
 int main(int argc , char *argv[])
 {
     char opt;
@@ -2280,7 +2619,9 @@ int main(int argc , char *argv[])
     char buf[128] = {0};
     FILE *pdate_fd = NULL;
     FILE *ptime_fd = NULL;
+    FILE *pset_fd = NULL;
     int logdate = 0, size = 0, cmddate = 0;
+    int totalsize = 0, getsize = 0;
     struct stat st;
 
     // create socket
@@ -2347,7 +2688,6 @@ int main(int argc , char *argv[])
                     write_Hybrid_list();
                     ret = stat(HYBRID_LIST_PATH, &st);
                     if ( ret == 0 ) { // list exist
-                        int size = 0;
                         size = st.st_size;
 
                         ret_buf[0] = 0xFA;
@@ -2754,10 +3094,10 @@ int main(int argc , char *argv[])
 
                 case 0x05:
                     printf("cmd 05 ok. get current data.\n");
+                    get_config();
                     get_current_data();
                     ret = stat(HYBRID_TMP_DATA_PATH, &st);
                     if ( ret == 0 ) { // data exist
-                        int size = 0;
                         size = st.st_size;
 
                         ret_buf[0] = 0xFA;
@@ -2787,7 +3127,149 @@ int main(int argc , char *argv[])
                         ret_buf[7] = 0xAF;
                         printf("send size 0\n");
                         send(forClientSockfd, ret_buf, 8, 0);
+                        break;
                     }
+
+                    ret = stat(HYBRID_TMP_ERROR_PATH, &st);
+                    if ( ret == 0 ) { // data exist
+                        size = st.st_size;
+
+                        ret_buf[0] = 0xFA;
+                        ret_buf[1] = 0x05;
+                        ret_buf[2] = (unsigned char)((size >> 24) & 0x000000FF);
+                        ret_buf[3] = (unsigned char)((size >> 16) & 0x000000FF);
+                        ret_buf[4] = (unsigned char)((size >> 8) & 0x000000FF);
+                        ret_buf[5] = (unsigned char)(size & 0x000000FF);
+                        ret_buf[6] = ret_buf[0] + ret_buf[1] + ret_buf[2] + ret_buf[3] + ret_buf[4] + ret_buf[5];
+                        ret_buf[7] = 0xAF;
+                        printf("send size num\n");
+                        send(forClientSockfd, ret_buf, 8, 0);
+
+                        // send list file
+                        printf("send file %s\n", HYBRID_TMP_ERROR_PATH);
+                        send_file(forClientSockfd, HYBRID_TMP_ERROR_PATH, size);
+
+                    } else {
+                        // send zero size
+                        ret_buf[0] = 0xFA;
+                        ret_buf[1] = 0x05;
+                        ret_buf[2] = 0x00;
+                        ret_buf[3] = 0x00;
+                        ret_buf[4] = 0x00;
+                        ret_buf[5] = 0x00;
+                        ret_buf[6] = 0xFF;
+                        ret_buf[7] = 0xAF;
+                        printf("send size 0\n");
+                        send(forClientSockfd, ret_buf, 8, 0);
+                    }
+                    break;
+
+                case 0x06:
+                    printf("cmd 06 ok. set data.\n");
+
+                    unsigned char set_buf[1024] = {0};
+
+                    totalsize = (cmd_buf[2] << 24) + (cmd_buf[3] << 16) + (cmd_buf[4] << 8) + cmd_buf[5];
+
+                    // get data
+                    pset_fd = fopen(HYBRID_TMP_SET_PATH, "wb");
+                    if ( pset_fd == NULL ) {
+                        ret_buf[0] = 0xFA;
+                        ret_buf[1] = 0x06;
+                        ret_buf[2] = 0x00;
+                        ret_buf[3] = 0x00;
+                        ret_buf[4] = 0x00;
+                        ret_buf[5] = 0x01;
+                        ret_buf[6] = ret_buf[0] + ret_buf[1] + ret_buf[2] + ret_buf[3] + ret_buf[4] + ret_buf[5];
+                        ret_buf[7] = 0xAF;
+                        printf("send result 1\n");
+                        send(forClientSockfd, ret_buf, 8, 0);
+                        break;
+                    }
+
+                    while (totalsize > 0) {
+                        memset(set_buf, 0x00, 1024);
+                        if (totalsize > 1024)
+                            getsize = recv(forClientSockfd, set_buf, 1024, 0);
+                        else
+                            getsize = recv(forClientSockfd, set_buf, totalsize, 0);
+                        printf("getsize = %d\n", getsize);
+                        fwrite(set_buf, 1, getsize, pset_fd);
+                        totalsize -= getsize;
+                    }
+                    fclose(pset_fd);
+                    system("sync");
+
+                    // paser parameter
+                    char tmp_buf[1024] = {0};
+                    char set_sn[17] = {0};
+                    int start_addr = 0;
+                    int data_count = 0;
+                    int data_value = 0;
+                    unsigned char set_data[32] = {0};
+                    char *start_index = NULL;
+                    int i = 0;
+
+                    pset_fd = fopen(HYBRID_TMP_SET_PATH, "rb");
+                    if ( pset_fd == NULL ) {
+                        ret_buf[0] = 0xFA;
+                        ret_buf[1] = 0x06;
+                        ret_buf[2] = 0x00;
+                        ret_buf[3] = 0x00;
+                        ret_buf[4] = 0x00;
+                        ret_buf[5] = 0x02;
+                        ret_buf[6] = ret_buf[0] + ret_buf[1] + ret_buf[2] + ret_buf[3] + ret_buf[4] + ret_buf[5];
+                        ret_buf[7] = 0xAF;
+                        printf("send result 2\n");
+                        send(forClientSockfd, ret_buf, 8, 0);
+                        break;
+                    }
+                    memset(tmp_buf, 0x00, 1024);
+                    fgets(tmp_buf, 1024, pset_fd);
+                    fclose(pset_fd);
+
+                    start_index = tmp_buf;
+                    // set sn
+                    start_index = strstr(start_index, "<sn>");
+                    strncpy(set_sn, start_index+4, 16);
+                    printf("set_sn = %s\n", set_sn);
+                    // set addr
+                    start_index = strstr(start_index, "<StartingAddress>");
+                    sscanf(start_index+17, "%d", &start_addr);
+                    printf("start_addr = %d\n", start_addr);
+                    // set count
+                    start_index = strstr(start_index, "<DataCount>");
+                    sscanf(start_index+11, "%d", &data_count);
+                    printf("data_count = %d\n", data_count);
+                    // set data
+                    start_index = strstr(start_index, "<CommandValues>");
+                    start_index += 15;
+                    memset(set_data, 0x00, 32);
+                    for (i = 0; i < data_count; i++) {
+                        sscanf(start_index, "%02x", &data_value);
+                        set_data[i*2] = (unsigned char)data_value;
+                        start_index += 2;
+                        sscanf(start_index, "%02x", &data_value);
+                        set_data[i*2+1] = (unsigned char)data_value;
+                        start_index += 2;
+                    }
+                    for (i = 0; i < 32; i++)
+                        printf("set_data[%d] = %02X\n", i, set_data[i]);
+
+                    // set data
+                    ret = write_data(set_sn, start_addr, data_count, set_data);
+
+                    // send result
+                    ret_buf[0] = 0xFA;
+                    ret_buf[1] = 0x06;
+                    ret_buf[2] = 0x00;
+                    ret_buf[3] = 0x00;
+                    ret_buf[4] = 0x00;
+                    ret_buf[5] = ret;
+                    ret_buf[6] = ret_buf[0] + ret_buf[1] + ret_buf[2] + ret_buf[3] + ret_buf[4] + ret_buf[5];
+                    ret_buf[7] = 0xAF;
+                    printf("send result %d\n", ret);
+                    send(forClientSockfd, ret_buf, 8, 0);
                     break;
 
                 case 0x99:
@@ -2886,6 +3368,19 @@ int main(int argc , char *argv[])
                     printf("cmd 5 error\n");
                     ret_buf[0] = 0xFA;
                     ret_buf[1] = 0x05;
+                    ret_buf[2] = 0xFF;
+                    ret_buf[3] = 0xFF;
+                    ret_buf[4] = 0xFF;
+                    ret_buf[5] = 0xFF;
+                    ret_buf[6] = ret_buf[0] + ret_buf[1] + ret_buf[2] + ret_buf[3] + ret_buf[4] + ret_buf[5];
+                    ret_buf[7] = 0xAF;
+                    printf("send size 0xFFFFFFFF\n");
+                    send(forClientSockfd, ret_buf, 8, 0);
+                    break;
+                case 0x06:
+                    printf("cmd 6 error\n");
+                    ret_buf[0] = 0xFA;
+                    ret_buf[1] = 0x06;
                     ret_buf[2] = 0xFF;
                     ret_buf[3] = 0xFF;
                     ret_buf[4] = 0xFF;

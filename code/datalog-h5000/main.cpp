@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#define VERSION         "2.5.9"
+#define VERSION         "2.6.0"
 #define MODEL_LIST_PATH "/usr/home/ModelList"
 #define MODEL_NUM       1020 //255*4
 
@@ -24,11 +24,11 @@ void SaveList();
 int GetAllData(time_t data_time);
 void Show_State();
 void Show_Time(struct tm *st_time);
-void Set_Sampletime(int num);
+//void Set_Sampletime(int num);
 
 typedef struct system_config {
     int sample_time;
-    int upload_time;
+    //int upload_time;
 } SYS_CONFIG;
 SYS_CONFIG SConfig = {0};
 
@@ -61,11 +61,8 @@ int main(int argc, char* argv[])
 {
     int previous_min = 60;
     int previous_hour = 24;
-    //int reregister_hour = 24;
-    //int allregister_day = 0;
     int state = 0, ret = 0;
-    time_t sys_current_time = 0, start_time = 0, end_time = 0, span_time = 0;
-    time_t get_data_time = 0;
+    time_t sys_current_time = 0, get_data_time = 0;
     struct tm *sys_st_time = NULL;
 
     char opt;
@@ -90,8 +87,8 @@ int main(int argc, char* argv[])
 
     sys_current_time = time(NULL);
     sys_st_time = localtime(&sys_current_time);
-    //reregister_hour = sys_st_time->tm_hour;
-    //allregister_day = sys_st_time->tm_mday;
+    //previous_hour = sys_st_time->tm_hour;
+    //previous_min = sys_st_time->tm_min;
 
     memset(&SConfig, 0, sizeof(SConfig));
     GetConfig();
@@ -100,28 +97,26 @@ int main(int argc, char* argv[])
 
     while (1) {
         // get system time
-        span_time = 0;
         sys_current_time = time(NULL);
         sys_st_time = localtime(&sys_current_time);
-        if ( sys_st_time->tm_sec % 10 == 0 )
-            Show_Time(sys_st_time);
 
         // check time to run
-        if ( ( (previous_min != sys_st_time->tm_min) || ((previous_min == sys_st_time->tm_min) && (previous_hour != sys_st_time->tm_hour)) )
-            && (sys_st_time->tm_min % SConfig.sample_time == 0) ) {
-        //if (1) {
-            start_time = sys_current_time;
+        //if ( ( (previous_min != sys_st_time->tm_min) || ((previous_min == sys_st_time->tm_min) && (previous_hour != sys_st_time->tm_hour)) )
+        //    && (sys_st_time->tm_min % SConfig.sample_time == 0) ) {
+        if ( ((SConfig.sample_time <= 60) && (sys_st_time->tm_sec % SConfig.sample_time == 0)) ||
+            ((SConfig.sample_time > 60) && (sys_st_time->tm_min % (SConfig.sample_time/60) == 0) && (previous_min != sys_st_time->tm_min) && (sys_st_time->tm_sec == 0)) ||
+            ((SConfig.sample_time == 3600) && (sys_st_time->tm_min == 0) && (previous_hour != sys_st_time->tm_hour) && (sys_st_time->tm_sec == 0)) ) {
 
             printf("==== Run main loop start ====\n");
             previous_min = sys_st_time->tm_min;
-            previous_hour = sys_st_time->tm_hour;
+            //previous_hour = sys_st_time->tm_hour;
             get_data_time = sys_current_time;
 
             // loop part
             GetConfig();
             GetModelList();
             Init();
-            Show_State();
+            //Show_State();
             ret = GetAllData(get_data_time);
             if ( ret == -1 ) {
                 printf("Continue main while loop.\n");
@@ -129,26 +124,32 @@ int main(int argc, char* argv[])
             }
             // reregister
             if ( state != 0 ) {
-                ret = ReRegister(sys_current_time);
-                if ( ret == -1 ) {
-                    printf("Continue main while loop.\n");
-                    continue;
-                }
+                // one hour
+                if ( previous_hour != sys_st_time->tm_hour ) {
+                    previous_hour = sys_st_time->tm_hour;
+                    ret = ReRegister(sys_current_time);
+                    if ( ret == -1 ) {
+                        printf("Continue main while loop.\n");
+                        continue;
+                    }
 
-                ret = AllRegister(sys_current_time);
-                if ( ret == -1 ) {
-                    printf("Continue main while loop.\n");
-                    continue;
-                }
+                    ret = AllRegister(sys_current_time);
+                    if ( ret == -1 ) {
+                        printf("Continue main while loop.\n");
+                        continue;
+                    }
 
-                SaveList();
+                    SaveList();
+
+                    system("sync");
+                }
             }
+
             ////////////
-            end_time = time(NULL);
-            span_time = end_time - start_time;
-            if ( state == 0 )
+            if ( state == 0 ) {
                 state = 1;
-            else if ( state == 1 ) {
+                previous_hour = sys_st_time->tm_hour;
+            } else if ( state == 1 ) {
                 // cancel auto setting sample time, but state change
                 //Set_Sampletime((int)span_time/60+1);
                 state = 2;
@@ -158,17 +159,7 @@ int main(int argc, char* argv[])
             printf("======= main loop end =======\n");
         }
 
-        //if ( reregister_hour != sys_st_time->tm_hour ) {
-        //    reregister_hour = sys_st_time->tm_hour;
-        //    ReRegister(sys_current_time);
-        //}
-
-        //if ( allregister_day != sys_st_time->tm_mday ) {
-        //    allregister_day = sys_st_time->tm_mday;
-        //    AllRegister(sys_current_time);
-        //}
-
-        usleep(1000000);
+        usleep(100000);
         //printf("press any key to continue!!\n");
         //getchar();
     }
@@ -189,10 +180,10 @@ bool GetConfig()
     fgets(buf, 32, pFile);
     pclose(pFile);
     sscanf(buf, "%d", &SConfig.sample_time);
-    printf("Sample time (Min.) = %d\n", SConfig.sample_time);
+    printf("Sample time (Sec.) = %d\n", SConfig.sample_time);
 
     // get upload_time
-    pFile = popen("uci get dlsetting.@sms[0].upload_time", "r");
+    /*pFile = popen("uci get dlsetting.@sms[0].upload_time", "r");
     if ( pFile == NULL ) {
         printf("popen fail!\n");
         return false;
@@ -200,7 +191,7 @@ bool GetConfig()
     fgets(buf, 32, pFile);
     pclose(pFile);
     sscanf(buf, "%d", &SConfig.upload_time);
-    printf("Upload time (Min.) = %d\n", SConfig.upload_time);
+    printf("Upload time (Min.) = %d\n", SConfig.upload_time);*/
 
     return true;
 }
@@ -740,7 +731,7 @@ int GetAllData(time_t data_time)
                             }
                         }
 
-                        system("sync");
+                        //system("sync");
                     }
                     printf("Test getdata end.\n");
                     break;
@@ -783,7 +774,7 @@ void Show_Time(struct tm *st_time)
 
     return;
 }
-
+/*
 void Set_Sampletime(int num)
 {
     char buf[256] = {0};
@@ -824,3 +815,4 @@ void Set_Sampletime(int num)
 
     return;
 }
+*/

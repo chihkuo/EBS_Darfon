@@ -13,13 +13,17 @@ local sms_server_port = sms:option(Value, "sms_port", translate("SMS Port"))
 local update_server_ip = sms:option(Value, "update_server", translate("Update Server"))
 local update_server_port = sms:option(Value, "update_port", translate("Update Port"))
 
-local sample_value = {1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60}
-local sample_time = sms:option(ListValue, "sample_time", translate("Sample time (Min.)"))
+local sample_value = {1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60, 120, 180, 300, 600, 1200, 1800, 3600}
+local sample_time = sms:option(ListValue, "sample_time", translate("Sample time (Sec.)"))
 for i = 1,#sample_value do
 	sample_time:value(sample_value[i])
 end
 
-local upload_time = sms:option(Value, "upload_time", translate("Upload time (Min.)"))
+local upload_value = {1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60, 120, 180, 300, 600, 1200, 1800, 3600}
+local upload_time = sms:option(ListValue, "upload_time", translate("Upload time (Sec.)"))
+for i = 1,#upload_value do
+	upload_time:value(upload_value[i])
+end
 
 local update_SW_value = {5, 10, 15, 20, 30, 60}
 local update_SW_time = sms:option(ListValue, "update_SW_time", translate("Update SW time (Min.)"))

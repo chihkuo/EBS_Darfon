@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.5.9"
+#define VERSION         "2.6.0"
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
@@ -31,7 +31,7 @@
 #define CURL_FILE       "/tmp/Curlfile"
 #define TIMEOUT         "30"
 #define CURL_CMD        "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
-#define UPDATE_MAX      500
+#define UPDATE_MAX      200
 
 #define MODEL_LIST_PATH "/usr/home/ModelList"
 
@@ -52,8 +52,8 @@ char g_ERRLOG_PATH[64] = {0};
 char g_ENV_PATH[64] = {0};
 char g_BMS_PATH[64] = {0};
 char g_SYSLOG_PATH[64] = {0};
-int data_interval = 0; // min
-int update_interval = 0; // min
+int data_interval = 0; // sec
+int update_interval = 60; // sec
 int shelf_life = 0; // day
 int save_time = 3600*24*30;
 char g_CURL_CMD[256] = {0};
@@ -173,10 +173,10 @@ void getConfig()
     sscanf(buf, "%d", &tmp_interval);
     if ( update_interval == tmp_interval ) {
         printf("same update interval %d\n", update_interval);
-        return;
+    } else {
+        update_interval = tmp_interval;
+        printf("set update interval %d\n", update_interval);
     }
-    update_interval = tmp_interval;
-    printf("set update interval %d\n", update_interval);
 
     // get shelf life
     fd = popen("uci get dlsetting.@sms[0].shelf_life", "r");
@@ -189,10 +189,10 @@ void getConfig()
     sscanf(buf, "%d", &tmp_interval);
     if ( shelf_life == tmp_interval ) {
         printf("same shelf life %d\n", shelf_life);
-        return;
+    } else {
+        shelf_life = tmp_interval;
+        printf("set shelf life %d\n", shelf_life);
     }
-    shelf_life = tmp_interval;
-    printf("set shelf life %d\n", shelf_life);
 
     return;
 }
@@ -675,8 +675,8 @@ int Rcvlog()
                 st_file_time.tm_year = logdate/10000 - 1900;
                 st_file_time.tm_mon = (logdate%10000)/100 - 1;
                 st_file_time.tm_mday = logdate%100;
-                sscanf(buf, "%02d%02d", &st_file_time.tm_hour, &st_file_time.tm_min);
-                st_file_time.tm_sec = 0;
+                sscanf(buf, "%02d%02d%02d", &st_file_time.tm_hour, &st_file_time.tm_min, &st_file_time.tm_sec);
+                //st_file_time.tm_sec = 0;
                 //printf("File time : %04d/%02d/%02d %02d:%02d\n",
                 //    st_file_time.tm_year+1900, st_file_time.tm_mon+1, st_file_time.tm_mday, st_file_time.tm_hour, st_file_time.tm_min);
                 // check time,
@@ -727,7 +727,10 @@ int Rcvlog()
                     if ( st.st_size == 0 ) {
                         printf("#### Rcvlog() /tmp/Rcvlog empty ####\n");
                         SaveLog("DataProgram Rcvlog() : /tmp/Rcvlog empty", st_time);
-                        continue;
+                        //continue;
+                        fclose(ptime_fd);
+                        fclose(pdate_fd);
+                        return 3;
                     }
                 // read data
                 presult_fd = fopen("/tmp/Rcvlog", "rb");
@@ -984,8 +987,8 @@ int Rcverrorlog()
                 st_file_time.tm_year = errlogdate/10000 - 1900;
                 st_file_time.tm_mon = (errlogdate%10000)/100 - 1;
                 st_file_time.tm_mday = errlogdate%100;
-                sscanf(buf, "%02d%02d", &st_file_time.tm_hour, &st_file_time.tm_min);
-                st_file_time.tm_sec = 0;
+                sscanf(buf, "%02d%02d%02d", &st_file_time.tm_hour, &st_file_time.tm_min, &st_file_time.tm_sec);
+                //st_file_time.tm_sec = 0;
                 //printf("File time : %04d/%02d/%02d %02d:%02d\n",
                 //    st_file_time.tm_year+1900, st_file_time.tm_mon+1, st_file_time.tm_mday, st_file_time.tm_hour, st_file_time.tm_min);
                 // check time,
@@ -1036,7 +1039,10 @@ int Rcverrorlog()
                     if ( st.st_size == 0 ) {
                         printf("#### Rcverrorlog() /tmp/Rcverrorlog empty ####\n");
                         SaveLog("DataProgram Rcverrorlog() : /tmp/Rcverrorlog empty", st_time);
-                        continue;
+                        //continue;
+                        fclose(ptime_fd);
+                        fclose(pdate_fd);
+                        return 3;
                     }
                 // read data
                 presult_fd = fopen("/tmp/Rcverrorlog", "rb");
@@ -1140,7 +1146,7 @@ int Updsampletime()
     fputs(buf, fd);
     sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
     fputs(buf, fd);
-    sprintf(buf, "\t\t\t<samplingtime>%d</samplingtime>\n", data_interval*60);
+    sprintf(buf, "\t\t\t<samplingtime>%d</samplingtime>\n", data_interval);
     fputs(buf, fd);
     sprintf(buf, "\t\t</Updsampletime>\n");
     fputs(buf, fd);
@@ -1616,7 +1622,7 @@ int GetToDoList()
     start_index = strstr(data, "<GetToDoListResult>");
     if ( start_index == NULL ) {
         printf("#### GetToDoList() <GetToDoListResult> not found ####\n");
-        SaveLog("DataProgram GetToDoList() : <GetToDoListResult> not found", st_time);
+        //SaveLog("DataProgram GetToDoList() : <GetToDoListResult> not found", st_time);
         if ( data )
             free(data);
         return 4;
@@ -1762,7 +1768,7 @@ int GetWhiteListChanged()
     start_index = strstr(data, "<GetWhiteListChangedResult>");
     if ( start_index == NULL ) {
         printf("#### GetWhiteListChanged() <GetWhiteListChangedResult> not found ####\n");
-        SaveLog("DataProgram GetWhiteListChanged() : <GetWhiteListChangedResult> not found", st_time);
+        //SaveLog("DataProgram GetWhiteListChanged() : <GetWhiteListChangedResult> not found", st_time);
         if ( data )
             free(data);
         return 4;
@@ -2260,7 +2266,7 @@ int QryRawDataFile()
     start_index = strstr(data, "<QryRawDataFileResult>");
     if ( start_index == NULL ) {
         printf("#### QryRawDataFile() <QryRawDataFileResult> not found ####\n");
-        SaveLog("DataProgram QryRawDataFile() : <QryRawDataFileResult> not found", st_time);
+        //SaveLog("DataProgram QryRawDataFile() : <QryRawDataFileResult> not found", st_time);
         if ( data )
             free(data);
         return 4;
@@ -2653,10 +2659,11 @@ void clean_storage_data(time_t time)
 
 int main(int argc, char* argv[])
 {
-    time_t  previous_time;
-    time_t  current_time;
-    struct tm *st_time = NULL;
-    int counter = 0, myhour = -1, myday = 0, state = 0, ret = -1;
+    int previous_min = 60;
+    int previous_hour = 24;
+    int state = 0, ret = -1;
+    time_t sys_current_time = 0;
+    struct tm *sys_st_time = NULL;
 
     char opt;
     while( (opt = getopt(argc, argv, "vVtTdD")) != -1 )
@@ -2684,43 +2691,41 @@ int main(int argc, char* argv[])
         }
     }
 
-    current_time = time(NULL);
-    previous_time = current_time;
-    st_time = localtime(&current_time);
+    sys_current_time = time(NULL);
+    sys_st_time = localtime(&sys_current_time);
+    //previous_hour = sys_st_time->tm_hour;
+    //previous_min = sys_st_time->tm_min;
 
     printf("Data Program Start!\n");
     init();
     getConfig();
     setCMD();
     setPath();
-    OpenLog(g_SYSLOG_PATH, st_time);
-    SaveLog("DataProgram main() : start", st_time);
-
+    OpenLog(g_SYSLOG_PATH, sys_st_time);
+    SaveLog("DataProgram main() : start", sys_st_time);
     //counter = 9999;
     while (1) {
-        if ( counter >= update_interval*60 ) {
-            current_time = time(NULL);
-            previous_time = current_time;
-            st_time = localtime(&current_time);
-            printf("#### Debug : loop start time : %ld ####\n", previous_time);
+        // get system time
+        sys_current_time = time(NULL);
+        sys_st_time = localtime(&sys_current_time);
+
+        // check time to run
+        if ( ((update_interval <= 60) && (sys_st_time->tm_sec % update_interval == 0)) ||
+            ((update_interval > 60) && (sys_st_time->tm_min % (update_interval/60) == 0) && (previous_min != sys_st_time->tm_min) && (sys_st_time->tm_sec == 0)) ||
+            ((update_interval == 3600) && (sys_st_time->tm_min == 0) && (previous_hour != sys_st_time->tm_hour) && (sys_st_time->tm_sec == 0)) ) {
+
+            printf("==== Run upload loop start ====\n");
 
             // get config & set parameter
             getConfig();
             setCMD();
             setPath();
-            CloseLog();
-            system("sync");
-            OpenLog(g_SYSLOG_PATH, st_time);
 
             // get while list change
             GetWhiteListChanged();
-            //printf("press enter key to next loop~\n");
-            //while ((ch = getchar()) != '\n' && ch != EOF);
 
             // get to do list
             GetToDoList();
-            //printf("press enter key to next loop~\n");
-            //while ((ch = getchar()) != '\n' && ch != EOF);
 
             if ( state == 0)
                 state = 1;
@@ -2730,86 +2735,60 @@ int main(int argc, char* argv[])
                 else
                     state = 2;
             }
+
             // update white list if has new file
             PostMIList();
-            //printf("press enter key to next loop~\n");
-            //while ((ch = getchar()) != '\n' && ch != EOF);
-
-            // get white list change
-            // get to do command
 
             ret = Qrylogdata();
-            //printf("press enter key to next loop~\n");
-            //while ((ch = getchar()) != '\n' && ch != EOF);
             if ( ret == 0 ) {
                 setPath();
                 Rcvlog();
             }
-            //printf("press enter key to next loop~\n");
-            //while ((ch = getchar()) != '\n' && ch != EOF);
 
             ret = Qryerrlogdata();
-            //printf("press enter key to next loop~\n");
-            //while ((ch = getchar()) != '\n' && ch != EOF);
             if ( ret == 0 ) {
                 setPath();
                 Rcverrorlog();
             }
-            //printf("press enter key to next loop~\n");
-            //while ((ch = getchar()) != '\n' && ch != EOF);
 
-            // check raw data update need
             setPath();
             QryRawDataFile();
-            //printf("press enter key to next loop~\n");
-            //while ((ch = getchar()) != '\n' && ch != EOF);
 
-            current_time = time(NULL);
-            counter = current_time - previous_time;
-            printf("#### Debug : loop end time : %ld ####\n", current_time);
-            printf("#### Debug : loop span time : %d ####\n", counter);
+            // check data interval
+            if ( !Updsampletime() )
+                printf("Updsampletime() change data interval %d OK\n", data_interval);
 
+            // check update interval
+            if ( !CheckUpdateInterval() )
+                printf("CheckUpdateInterval() change update interval %d OK\n", update_interval);
+
+            // one minute run
+            if ( (previous_min != sys_st_time->tm_min) || ((previous_min == sys_st_time->tm_min) && (previous_hour != sys_st_time->tm_hour)) ) {
+                previous_min = sys_st_time->tm_min;
+                // update alive
+                if ( !Updheartbeattime(sys_current_time) )
+                    printf("Updheartbeattime() OK\n");
+
+                CloseLog();
+                OpenLog(g_SYSLOG_PATH, sys_st_time);
+            }
+
+            // one hour run
+            if ( previous_hour != sys_st_time->tm_hour ) {
+                previous_hour = sys_st_time->tm_hour;
+                // clean host data
+                clean_host_data(sys_current_time);
+                // clean storage data
+                clean_storage_data(sys_current_time);
+                system("sync");
+            }
+
+            printf("==== upload loop end ====\n");
         }
 
         // sleep
-        printf("usleep() 60s\n");
-        usleep(60000000);
+        usleep(100000);
 
-        printf("######### check time #########\n");
-        current_time = time(NULL);
-        counter = current_time - previous_time;
-        printf("current_time   = %ld\n", current_time);
-        printf("previous_time  = %ld\n", previous_time);
-        printf("counter        = %d\n", counter);
-        printf("##############################\n");
-
-        // check data interval
-        if ( !Updsampletime() )
-            printf("Updsampletime() change data interval %d OK\n", data_interval);
-
-        // check update interval
-        if ( !CheckUpdateInterval() )
-            printf("CheckUpdateInterval() change update interval %d OK\n", update_interval);
-
-        // update alive
-        if ( !Updheartbeattime(current_time) )
-            printf("Updheartbeattime() OK\n");
-
-        // clean host data
-        st_time = localtime(&current_time);
-        if ( myhour != st_time->tm_hour ) {
-            myhour = st_time->tm_hour;
-            clean_host_data(current_time);
-        }
-        // clean storage data
-        if ( myday != st_time->tm_mday ) {
-            myday = st_time->tm_mday;
-            clean_storage_data(current_time);
-        }
-
-        //printf("End of loop! press enter key to next loop~\n");
-        //char ch;
-        //while ((ch = getchar()) != '\n' && ch != EOF);
     }
 
     return 0;

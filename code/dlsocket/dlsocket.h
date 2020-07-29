@@ -1,16 +1,26 @@
 // define
 #define VERSION     "1.0.0"
+
+#define USB_DEV         "/dev/sda1"
+
 #define LOG_PATH    "/mnt/XML/LOG"
 #define ERRLOG_PATH "/mnt/XML/ERRLOG"
 #define ENV_PATH    "/mnt/XML/ENV"
 #define SYSLOG_PATH "/mnt/SYSLOG"
 #define MODEL_PATH  "/usr/home/ModelList"
 
+#define DEF_LOG_PATH    "/tmp/test/XML/LOG"
+#define DEF_ERRLOG_PATH "/tmp/test/XML/ERRLOG"
+#define DEF_ENV_PATH    "/tmp/test/XML/ENV"
+#define DEF_SYSLOG_PATH "/tmp/test/SYSLOG"
+
 #define OFFLINE_SECOND_HB 180
 #define QUERY_SIZE 4096
 
 #define HYBRID_LIST_PATH        "/tmp/Hybrid_List"
 #define HYBRID_TMP_DATA_PATH    "/tmp/Hybrid_Tmp_Data"
+#define HYBRID_TMP_ERROR_PATH   "/tmp/Hybrid_Tmp_Error"
+#define HYBRID_TMP_SET_PATH     "/tmp/Hybrid_Tmp_Set"
 
 // for extern
 #define bool int
@@ -43,6 +53,7 @@ extern int MyOffLineQuery(int fd, byte addr, byte buf[], int buf_size);
 extern int MyAssignAddress(int fd, unsigned char *ID, unsigned char Addr);
 extern void RemoveRegisterQuery(int fd, byte byAddr);
 extern bool CheckCRC(unsigned char *,int );
+unsigned short CalculateCRC(unsigned char *, unsigned int );
 // extern end
 
 
