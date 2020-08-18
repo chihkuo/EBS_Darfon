@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#define VERSION         "2.6.0"
+#define VERSION         "2.6.1"
 #define MODEL_LIST_PATH "/usr/home/ModelList"
 #define MODEL_NUM       1020 //255*4
 

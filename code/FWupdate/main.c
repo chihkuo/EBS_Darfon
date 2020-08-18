@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.2.3"
+#define VERSION             "1.2.4"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -41,6 +41,9 @@
 #define SYSLOG_PATH         "/tmp/test/SYSLOG"
 #define MAX_DATA_SIZE       144
 #define MAX_HYBRID_SIZE     100
+
+#define	HYBRIDFW_FILE       "/mnt/hybridfw.tar.gz"
+//#define HYBRIDFW_LIST       "/mnt/hybridfwlist"
 
 // extern part
 extern int  MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_bits);
@@ -3501,6 +3504,14 @@ int main(int argc, char* argv[])
     struct stat st;
     //int doUpdDLFWStatus = 0;
 
+    char strbuf[256] = {0};
+    char milistbuf[256] = {0};
+    char filebuf[256] = {0};
+    char hybrid_sn[17] = {0};
+    FILE *pfile = NULL;
+    FILE *plist = NULL;
+    char *pindex = NULL;
+
     current_time = time(NULL);
     st_time = localtime(&current_time);
 
@@ -3601,6 +3612,120 @@ int main(int argc, char* argv[])
         if ( doflag ) {
             printf("doflag = 1, fw update check start\n");
             if ( gisusb ) {
+                // check fw data from usb
+                if ( stat(HYBRIDFW_FILE, &st) == 0 ) {
+                    printf("detect fw data\n");
+                    // unzip
+                    sprintf(strbuf, "tar -zxvf %s -C /mnt/", HYBRIDFW_FILE);
+                    system(strbuf);
+                    usleep(1000000);
+                    system("sync");
+                    // remove fw data
+                    if ( remove(HYBRIDFW_FILE) == 0 )
+                        printf("Remove %s\n", HYBRIDFW_FILE);
+                    else
+                        perror("remove");
+                    usleep(1000000);
+                    system("sync");
+
+                    // check milist
+                    while (1) {
+                        printf("check MIList\n");
+                        pfile = popen("ls /tmp/MIList_*", "r");
+                        if ( pfile != NULL ) {
+                            memset(strbuf, 0x00, 256);
+                            memset(milistbuf, 0x00, 256);
+                            fgets(strbuf, 255, pfile);
+                            if ( strlen(strbuf) > 0 ) {
+                                strncpy(milistbuf, strbuf, strlen(strbuf)-1);
+                                break;
+                            } else {
+                                printf("MIList not found\n");
+                            }
+                            pclose(pfile);
+                        }
+                        usleep(10000000);
+                    }
+                    printf("get milistbuf name [%s]\n", milistbuf);
+
+                    // check fw file cpu1
+                    printf("check cpu1\n");
+                    pfile = popen("ls /mnt/cpu1_*", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(USB_HBFW_LIST, &st) != 0 )
+                                plist = fopen(USB_HBFW_LIST, "w");
+                            else
+                                plist = fopen(USB_HBFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s\n", hybrid_sn, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf("cpu1 not found.\n");
+                        }
+                    }
+                    // check fw file cpu2
+                    printf("check cpu2\n");
+                    pfile = popen("ls /mnt/cpu2_*", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(USB_HBFW_LIST, &st) != 0 )
+                                plist = fopen(USB_HBFW_LIST, "w");
+                            else
+                                plist = fopen(USB_HBFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s\n", hybrid_sn, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf("cpu2 not found.\n");
+                        }
+                    }
+                }
+
                 // check mi unicast fw
                 if ( stat(USB_MIFW_LIST, &st) == 0 ) {
                     DoUpdate(USB_MIFW_LIST);
