@@ -131,6 +131,9 @@ typedef struct stHybrid_ID_Flags2 {
     char B9_Self_Supply;
     char B10_Charge_only_from_PV;
     char B11_Dominion;
+    char B12_SunSpec;
+    char B13_MA;
+    char B14_ZeroExport;
 }HB_ID_FLAGS2;
 
 typedef struct stHybrid_RTC_Data {
@@ -168,6 +171,8 @@ typedef struct stHybrid_Remote_Realtime_Setting_Info {
     int DegreeLeadLag;
     int Volt_VAr; // PeakShavingPower
     int AC_Coupling_Power;
+    int SunSpec_Write_All;
+    int Remote_Control;
 }HB_RRS_INFO;
 
 typedef struct stHybrid_Realtime_Info {

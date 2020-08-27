@@ -1760,6 +1760,8 @@ bool CG320::RunTODOList()
                                 m_hb_rrs_info.DegreeLeadLag = m_dl_cmd.m_data[4];
                                 m_hb_rrs_info.Volt_VAr = m_dl_cmd.m_data[5];
                                 m_hb_rrs_info.AC_Coupling_Power = m_dl_cmd.m_data[6];
+                                m_hb_rrs_info.SunSpec_Write_All = m_dl_cmd.m_data[7];
+                                m_hb_rrs_info.Remote_Control = m_dl_cmd.m_data[8];
                                 SaveLog((char *)"DataLogger RunTODOList() : run SetHybridRRSInfo()", m_st_time);
                                 SetHybridRRSInfo(i);
                                 break;
@@ -4151,6 +4153,12 @@ void CG320::ParserHybridIDFlags2(int flags)
     m_hb_id_flags2.B10_Charge_only_from_PV = tmp & 0x01;
     tmp>>=1;
     m_hb_id_flags2.B11_Dominion = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B12_SunSpec = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B13_MA = tmp & 0x01;
+    tmp>>=1;
+    m_hb_id_flags2.B14_ZeroExport = tmp & 0x01;
 
 /*    printf("#### Parser Hybrid ID Flags2 ####\n");
     printf("Bit0 : Rule21              = %d\n", m_hb_id_flags2.B0_Rule21);
@@ -4165,6 +4173,9 @@ void CG320::ParserHybridIDFlags2(int flags)
     printf("Bit9 : Self Supply         = %d\n", m_hb_id_flags2.B9_Self_Supply);
     printf("Bit10: Charge only from PV = %d\n", m_hb_id_flags2.B10_Charge_only_from_PV);
     printf("Bit11: Dominion            = %d\n", m_hb_id_flags2.B11_Dominion);
+    printf("Bit12: Sun Spec            = %d\n", m_hb_id_flags2.B12_SunSpec);
+    printf("Bit13: MA                  = %d\n", m_hb_id_flags2.B13_MA);
+    printf("Bit14: Zero Export         = %d\n", m_hb_id_flags2.B14_ZeroExport);
     printf("################################\n");*/
 }
 
@@ -4597,7 +4608,7 @@ bool CG320::GetHybridRRSInfo(int index)
     time_t current_time;
 	struct tm *log_time;
 
-    unsigned char szHBRSinfo[]={0x00, 0x03, 0x00, 0xA0, 0x00, 0x07, 0x00, 0x00};
+    unsigned char szHBRSinfo[]={0x00, 0x03, 0x00, 0xA0, 0x00, 0x09, 0x00, 0x00};
     szHBRSinfo[0]=arySNobj[index].m_Addr;
     MakeReadDataCRC(szHBRSinfo,8);
 
@@ -4614,7 +4625,7 @@ bool CG320::GetHybridRRSInfo(int index)
         current_time = time(NULL);
 		log_time = localtime(&current_time);
 
-        lpdata = GetRespond(m_busfd, 19, m_dl_config.m_delay_time_2);
+        lpdata = GetRespond(m_busfd, 23, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRRSInfo OK ####\n");
             //SaveLog((char *)"DataLogger GetHybridRRSInfo() : OK", log_time);
@@ -4646,6 +4657,8 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
     m_hb_rrs_info.DegreeLeadLag = (*(buf+8) << 8) + *(buf+9);
     m_hb_rrs_info.Volt_VAr = (*(buf+10) << 8) + *(buf+11);
     m_hb_rrs_info.AC_Coupling_Power = (*(buf+12) << 8) + *(buf+13);
+    m_hb_rrs_info.SunSpec_Write_All = (*(buf+14) << 8) + *(buf+15);
+    m_hb_rrs_info.Remote_Control = (*(buf+16) << 8) + *(buf+17);
 
 /*    printf("#### Dump Hybrid RRS Info ####\n");
     printf("Charge = %d ==> ", m_hb_rrs_info.ChargeSetting);
@@ -4694,7 +4707,10 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
             printf("Other\n");
     }
     printf("AC Coupling Power = %d *100W\n", m_hb_rrs_info.AC_Coupling_Power);
-    printf("##############################\n");*/
+    printf("SunSpec Write All = %d\n", m_hb_rrs_info.SunSpec_Write_All);
+    printf("Remote Control = %d\n", m_hb_rrs_info.Remote_Control);*/
+
+    printf("##############################\n");
 }
 
 bool CG320::SetHybridRRSInfo(int index)
@@ -4713,7 +4729,7 @@ bool CG320::SetHybridRRSInfo(int index)
     szRRSInfo[4] = 0x00;
     szRRSInfo[5] = 0x10; // number of data
     szRRSInfo[6] = 0x20; // bytes
-    // data 0xA0 ~ 0xA6
+    // data 0xA0 ~ 0xA8
     szRRSInfo[7] = 0x00;
     szRRSInfo[8] = (unsigned char)m_hb_rrs_info.ChargeSetting;
     szRRSInfo[9] = (unsigned char)((m_hb_rrs_info.ChargePower >> 8) & 0xFF);
@@ -4728,11 +4744,11 @@ bool CG320::SetHybridRRSInfo(int index)
     szRRSInfo[18] = (unsigned char)(m_hb_rrs_info.Volt_VAr & 0xFF);
     szRRSInfo[19] = (unsigned char)((m_hb_rrs_info.AC_Coupling_Power >> 8) & 0xFF);
     szRRSInfo[20] = (unsigned char)(m_hb_rrs_info.AC_Coupling_Power & 0xFF);
-    // zero 0xA7 ~ 0xAE
-    szRRSInfo[21] = 0x00;
-    szRRSInfo[22] = 0x00;
-    szRRSInfo[23] = 0x00;
-    szRRSInfo[24] = 0x00;
+    szRRSInfo[21] = (unsigned char)((m_hb_rrs_info.SunSpec_Write_All >> 8) & 0xFF);
+    szRRSInfo[22] = (unsigned char)(m_hb_rrs_info.SunSpec_Write_All & 0xFF);
+    szRRSInfo[23] = (unsigned char)((m_hb_rrs_info.Remote_Control >> 8) & 0xFF);;
+    szRRSInfo[24] = (unsigned char)(m_hb_rrs_info.Remote_Control & 0xFF);;
+    // zero 0xA9 ~ 0xAE
     szRRSInfo[25] = 0x00;
     szRRSInfo[26] = 0x00;
     szRRSInfo[27] = 0x00;
@@ -6455,6 +6471,12 @@ bool CG320::WriteLogXML(int index)
             sprintf(buf, "<AC_Coupling_Power>%d</AC_Coupling_Power>", m_hb_rrs_info.AC_Coupling_Power);
             strcat(m_log_buf, buf);
             sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb_rs_info.PeakShavingPower)/10);
+            strcat(m_log_buf, buf);
+            // SunSpec_Write_All
+            sprintf(buf, "<SunSpec_Write_All>%d</SunSpec_Write_All>", m_hb_rrs_info.SunSpec_Write_All);
+            strcat(m_log_buf, buf);
+            // Remote_Control
+            sprintf(buf, "<Remote_Control>%d</Remote_Control>", m_hb_rrs_info.Remote_Control);
             strcat(m_log_buf, buf);
         }
     }
