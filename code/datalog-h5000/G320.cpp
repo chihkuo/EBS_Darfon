@@ -29,7 +29,7 @@
 #define TIME_SERVER_URL "https://www.worldtimeserver.com/handlers/GetData.ashx?action=GCTData"
 
 #define OFFLINE_SECOND_MI 1200
-#define OFFLINE_SECOND_HB 240
+#define OFFLINE_SECOND_HB 1200
 
 extern "C"
 {
@@ -97,6 +97,11 @@ CG320::CG320()
     m_dl_cmd = {0};
     m_dl_config = {0};
     m_dl_path = {0};
+    m_save_hb_id_data = false;
+    m_save_hb_rs_info= false;
+    m_save_hb_rrs_info= false;
+    m_save_hb_rt_info= false;
+    m_save_hb_bms_info= false;
     memset(m_log_buf, 0x00, LOG_BUF_SIZE);
     memset(m_log_filename, 0x00, 128);
     memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
@@ -1028,17 +1033,19 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     //        return -1;
 
                     // get power data
-                    if ( GetHybridIDData(i) )
+                    if ( GetHybridIDData(i) ) {
                         arySNobj[i].m_Err = 0;
-                    else {
+                        m_save_hb_id_data = true;
+                    } else {
                         if ( m_loopflag == 0 )
                             arySNobj[i].m_Err++;
                         m_loopflag++;
+                        m_save_hb_id_data = false;
                     }
 
                     // get time
-                    current_time = time(NULL);
-                    m_st_time = localtime(&current_time);
+                    //current_time = time(NULL);
+                    //m_st_time = localtime(&current_time);
                     // get data time not 0 min. current time is 0 min.
                     //if ( m_data_st_time.tm_min != 0 )
                     //    if ( m_st_time->tm_min == 0 )
@@ -1060,12 +1067,14 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     //    if ( m_st_time->tm_min == 0 )
                     //        return -1;
 
-                    if ( GetHybridRSInfo(i) )
+                    if ( GetHybridRSInfo(i) ) {
                         arySNobj[i].m_Err = 0;
-                    else {
+                        m_save_hb_rs_info = true;
+                    } else {
                         if ( m_loopflag == 0 )
                             arySNobj[i].m_Err++;
                         m_loopflag++;
+                        m_save_hb_rs_info = false;
                     }
 
                     // get time
@@ -1076,12 +1085,14 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     //    if ( m_st_time->tm_min == 0 )
                     //        return -1;
 
-                    if ( GetHybridRRSInfo(i) )
+                    if ( GetHybridRRSInfo(i) ) {
                         arySNobj[i].m_Err = 0;
-                    else {
+                        m_save_hb_rrs_info = true;
+                    } else {
                         if ( m_loopflag == 0 )
                             arySNobj[i].m_Err++;
                         m_loopflag++;
+                        m_save_hb_rrs_info = false;
                     }
 
                     // get time
@@ -1092,12 +1103,14 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     //    if ( m_st_time->tm_min == 0 )
                     //        return -1;
 
-                    if ( GetHybridRTInfo(i) )
+                    if ( GetHybridRTInfo(i) ) {
                         arySNobj[i].m_Err = 0;
-                    else {
+                        m_save_hb_rt_info = true;
+                    } else {
                         if ( m_loopflag == 0 )
                             arySNobj[i].m_Err++;
                         m_loopflag++;
+                        m_save_hb_rt_info = false;
                     }
 
                     // get time
@@ -1121,10 +1134,12 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                         arySNobj[i].m_Err = 0;
                         //SetHybridBMSModule(i);
                         //SaveBMS();
+                        m_save_hb_bms_info = true;
                     } else {
                         if ( m_loopflag == 0 )
                             arySNobj[i].m_Err++;
                         m_loopflag++;
+                        m_save_hb_bms_info = false;
                     }
 
                     // get time
@@ -3229,6 +3244,10 @@ bool CG320::ReRegister(int index)
     printf("#### Remove %d Query ####\n", arySNobj[index].m_Addr);
     RemoveRegisterQuery(m_busfd, arySNobj[index].m_Addr);
     usleep(500000);
+    RemoveRegisterQuery(m_busfd, arySNobj[index].m_Addr);
+    usleep(500000);
+    RemoveRegisterQuery(m_busfd, arySNobj[index].m_Addr);
+    usleep(500000);
 
     printf("ReRegiser SN = %s\n", arySNobj[index].m_Sn);
     for (i = 0; i < 8; i++) {
@@ -3237,23 +3256,25 @@ bool CG320::ReRegister(int index)
         //printf("buffer[%d] = %02X\n", i, buffer[i]);
     }
 
-    if ( MyAssignAddress(m_busfd, buffer, arySNobj[index].m_Addr) )
-    {
-        sprintf(buf, "DataLogger ReRegiser() : addr %d OK", arySNobj[index].m_Addr);
-        SaveLog(buf, m_st_time);
-        printf("=================================\n");
-        printf("#### ReRegiser(%d) OK! ####\n", arySNobj[index].m_Addr);
-        printf("=================================\n");
-        //arySNobj[index].m_Device = -1; // device not change
-        arySNobj[index].m_Err = 0;
-        arySNobj[index].m_state = 1;
-        arySNobj[index].m_ok_time = time(NULL);
-        return true;
-    }
-    else {
-        printf("#### ReRegiser(%d) fail! ####\n", arySNobj[index].m_Addr);
-        sprintf(buf, "DataLogger ReRegiser() : addr %d fail", arySNobj[index].m_Addr);
-        SaveLog(buf, m_st_time);
+    for (i = 0; i < 3; i++) {
+        if ( MyAssignAddress(m_busfd, buffer, arySNobj[index].m_Addr) )
+        {
+            sprintf(buf, "DataLogger ReRegiser() : addr %d OK", arySNobj[index].m_Addr);
+            SaveLog(buf, m_st_time);
+            printf("=================================\n");
+            printf("#### ReRegiser(%d) OK! ####\n", arySNobj[index].m_Addr);
+            printf("=================================\n");
+            //arySNobj[index].m_Device = -1; // device not change
+            arySNobj[index].m_Err = 0;
+            arySNobj[index].m_state = 1;
+            arySNobj[index].m_ok_time = time(NULL);
+            return true;
+        }
+        else {
+            printf("#### ReRegiser(%d) fail! ####\n", arySNobj[index].m_Addr);
+            sprintf(buf, "DataLogger ReRegiser() : addr %d fail", arySNobj[index].m_Addr);
+            SaveLog(buf, m_st_time);
+        }
     }
 
     return false;
@@ -3879,9 +3900,8 @@ bool CG320::GetHybridIDData(int index)
     time_t current_time = 0;
     current_time = time(NULL);
     if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_HB ) {
-        printf("Last m_ok_time more then 240 sec.\n");
-        if ( !ReRegister(index) )
-            return false;
+        printf("Last m_ok_time more then 1200 sec.\n");
+        ReRegister(index);
     }
 
     unsigned char szHBIDdata[]={0x00, 0x03, 0x00, 0x01, 0x00, 0x0E, 0x00, 0x00};
@@ -3929,8 +3949,8 @@ bool CG320::GetHybridIDData(int index)
             else {
                 printf("#### GetHybridIDData No Response ####\n");
                 SaveLog((char *)"DataLogger GetHybridIDData() : No Response", log_time);
-                SaveLog((char *)"DataLogger GetHybridIDData() : run reregister()", log_time);
-                ReRegister(index);
+                //SaveLog((char *)"DataLogger GetHybridIDData() : run reregister()", log_time);
+                //ReRegister(index);
             }
             err++;
         }
@@ -4261,9 +4281,8 @@ bool CG320::SetHybridRTCData(int index)
 
     // check ok time
     if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_HB ) {
-        printf("Last m_ok_time more then 240 sec.\n");
-        if ( !ReRegister(index) )
-            return false;
+        printf("Last m_ok_time more then 1200 sec.\n");
+        ReRegister(index);
     }
 
     m_hb_rtc_data.Second = st_time->tm_sec;
@@ -4355,8 +4374,8 @@ bool CG320::SetHybridRTCData(int index)
         } else {
             printf("#### SetHybridRTCData No Response ####\n");
             SaveLog((char *)"DataLogger SetHybridRTCData() : No Response", st_time);
-            SaveLog((char *)"DataLogger SetHybridRTCData() : run reregister()", st_time);
-            ReRegister(index);
+            //SaveLog((char *)"DataLogger SetHybridRTCData() : run reregister()", st_time);
+            //ReRegister(index);
             err++;
         }
 
@@ -5912,7 +5931,7 @@ bool CG320::WriteLogXML(int index)
                     m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn);
             strcat(m_log_buf, buf);
 
-            if ( m_loopflag == 0 ) {
+            //if ( m_loopflag == 0 ) {
                 sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
                 strcat(m_log_buf, buf);
 
@@ -5973,7 +5992,7 @@ bool CG320::WriteLogXML(int index)
                     error_tmp = 0;
                 sprintf(buf, "<Error_Code>%d</Error_Code>", error_tmp);
                 strcat(m_log_buf, buf);
-            }
+            //}
 
             // set status
             if ( error_tmp ) {
@@ -6001,7 +6020,7 @@ bool CG320::WriteLogXML(int index)
                     m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn+1);
             strcat(m_log_buf, buf);
 
-            if ( m_loopflag == 0 ) {
+            //if ( m_loopflag == 0 ) {
                 sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
                 strcat(m_log_buf, buf);
 
@@ -6075,7 +6094,7 @@ bool CG320::WriteLogXML(int index)
                     error_tmp = 0;
                 sprintf(buf, "<Error_Code>%d</Error_Code>", error_tmp);
                 strcat(m_log_buf, buf);
-            }
+            //}
 
             // set status
             if ( error_tmp ) {
@@ -6103,7 +6122,7 @@ bool CG320::WriteLogXML(int index)
                     m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn+1);
             strcat(m_log_buf, buf);
 
-            if ( m_loopflag == 0 ) {
+            //if ( m_loopflag == 0 ) {
                 sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_mi_power_info.Temperature)/10);
                 strcat(m_log_buf, buf);
 
@@ -6177,7 +6196,7 @@ bool CG320::WriteLogXML(int index)
                     error_tmp = 0;
                 sprintf(buf, "<Error_Code>%d</Error_Code>", error_tmp);
                 strcat(m_log_buf, buf);
-            }
+            //}
 
             // set status
             if ( error_tmp ) {
@@ -6203,155 +6222,157 @@ bool CG320::WriteLogXML(int index)
                 m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn);
         strcat(m_log_buf, buf);
 
-        if ( m_loopflag == 0 ) {
+        //if ( m_loopflag == 0 ) {
             // set real time part///////////////////////////////////////////////////////////////////////////////////////////
             // set DC power (KW)
             // set dc power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 65.535 KW, must in range
-            sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_hb_rt_info.PV_Total_Power)/1000);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_hb_rt_info.PV1_Power)/1000);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<dc_power_2>%05.3f</dc_power_2>", ((float)m_hb_rt_info.PV2_Power)/1000);
-            strcat(m_log_buf, buf);
-            // set DC voltage (V)
-            // set dc voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 65535 V
-            if ( m_hb_rt_info.PV1_Voltage < 10000 ) {
-                sprintf(buf, "<dcv_1>%d</dcv_1>", m_hb_rt_info.PV1_Voltage);
+            if ( m_save_hb_rt_info ) {
+                sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_hb_rt_info.PV_Total_Power)/1000);
                 strcat(m_log_buf, buf);
+                sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_hb_rt_info.PV1_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dc_power_2>%05.3f</dc_power_2>", ((float)m_hb_rt_info.PV2_Power)/1000);
+                strcat(m_log_buf, buf);
+                // set DC voltage (V)
+                // set dc voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 65535 V
+                if ( m_hb_rt_info.PV1_Voltage < 10000 ) {
+                    sprintf(buf, "<dcv_1>%d</dcv_1>", m_hb_rt_info.PV1_Voltage);
+                    strcat(m_log_buf, buf);
+                }
+                if ( m_hb_rt_info.PV2_Voltage < 10000 ) {
+                    sprintf(buf, "<dcv_2>%d</dcv_2>", m_hb_rt_info.PV2_Voltage);
+                    strcat(m_log_buf, buf);
+                }
+                if ( ((m_hb_rt_info.PV1_Voltage + m_hb_rt_info.PV2_Voltage)/2) < 10000 ) {
+                    sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)(m_hb_rt_info.PV1_Voltage + m_hb_rt_info.PV2_Voltage))/2);
+                    strcat(m_log_buf, buf);
+                }
+                // set DC current (A)
+                // set dc current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 655.35 A, must in range
+                sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_hb_rt_info.PV1_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dci_2>%04.2f</dci_2>", ((float)m_hb_rt_info.PV2_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dc_current>%d</dc_current>", m_hb_rt_info.PV1_Current + m_hb_rt_info.PV2_Current);
+                strcat(m_log_buf, buf);
+
+                // set AC power (KW)
+                // set ac power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 65.535 KW, must in range
+                sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_hb_rt_info.Load_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_hb_rt_info.Load_Power)/1000);
+                strcat(m_log_buf, buf);
+                // set AC voltage (V)
+                // set ac voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 65535 V
+                if ( m_hb_rt_info.Load_Voltage < 10000 ) {
+                    sprintf(buf, "<acv_AN>%d</acv_AN>", m_hb_rt_info.Load_Voltage);
+                    strcat(m_log_buf, buf);
+                    sprintf(buf, "<ac_voltage>%d</ac_voltage>", m_hb_rt_info.Load_Voltage);
+                    strcat(m_log_buf, buf);
+                }
+                // set AC current (A)
+                // set ac current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 655.35 A, must in range
+                sprintf(buf, "<aci_A>%04.2f</aci_A>", ((float)m_hb_rt_info.Load_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ac_current>%04.2f</ac_current>", ((float)m_hb_rt_info.Load_Current)/100);
+                strcat(m_log_buf, buf);
+
+                // set total power
+                // set total KWH, in range 0 ~ 999999999999999.999 KWH, max 0xFFFFFFFF => ‭‭6553599.99?, anyway must in range
+                sprintf(buf, "<total_KWH>%04.2f</total_KWH>", m_hb_rt_info.PV_Total_EnergyH*100 + ((float)m_hb_rt_info.PV_Total_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+
+                // set battery SOC
+                // set soc, in range 0 ~ 9999.99 %, max 0xFFFF = > 65535
+                if ( m_hb_rt_info.Battery_SOC < 10000 ) {
+                    sprintf(buf, "<soc>%d</soc>", m_hb_rt_info.Battery_SOC);
+                    strcat(m_log_buf, buf);
+                }
+
+                // set temperature
+                sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_hb_rt_info.Inv_Temp)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV1_Temp>%03.1f</PV1_Temp>", ((float)m_hb_rt_info.PV1_Temp)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV2_Temp>%03.1f</PV2_Temp>", ((float)m_hb_rt_info.PV2_Temp)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<DD_Temp>%03.1f</DD_Temp>", ((float)m_hb_rt_info.DD_Temp)/10);
+                strcat(m_log_buf, buf);
+
+                // set Grid
+                sprintf(buf, "<VGrid_A>%d</VGrid_A>", m_hb_rt_info.Grid_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<IGrid_A>%04.2f</IGrid_A>", ((float)m_hb_rt_info.Grid_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PGrid_A>%05.3f</PGrid_A>", ((float)m_hb_rt_info.Grid_Power)/1000);
+                strcat(m_log_buf, buf);
+
+                // set battery
+                sprintf(buf, "<VBattery>%03.1f</VBattery>", ((float)m_hb_rt_info.Battery_Voltage)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<IBattery>%03.1f</IBattery>", ((float)m_hb_rt_info.Battery_Current)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PBattery>%05.3f</PBattery>", ((float)m_hb_rt_info.PBat)/1000);
+                strcat(m_log_buf, buf);
+
+
+                // set bus
+                sprintf(buf, "<Vbus>%03.1f</Vbus>", ((float)m_hb_rt_info.Bus_Voltage)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Ibus>%03.1f</Ibus>", ((float)m_hb_rt_info.Bus_Current)/10);
+                strcat(m_log_buf, buf);
+
+                // set battery power
+                sprintf(buf, "<Pbat_Total>%04.2f</Pbat_Total>", m_hb_rt_info.Bat_Total_EnergyH*100 + ((float)m_hb_rt_info.Bat_Total_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+
+                // set load power
+                sprintf(buf, "<Pload_Total>%04.2f</Pload_Total>", m_hb_rt_info.Load_Total_EnergyH*100 + ((float)m_hb_rt_info.Load_Total_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+
+                // set grid feed power
+                sprintf(buf, "<GridFeed_Total>%04.2f</GridFeed_Total>", m_hb_rt_info.GridFeed_TotalH*100 + ((float)m_hb_rt_info.GridFeed_TotalL)*0.01);
+                strcat(m_log_buf, buf);
+
+                // set grid charge power
+                sprintf(buf, "<GridCharge_Total>%04.2f</GridCharge_Total>", m_hb_rt_info.GridCharge_TotalH*100 + ((float)m_hb_rt_info.GridCharge_TotalL)*0.01);
+                strcat(m_log_buf, buf);
+
+                // set external power
+                sprintf(buf, "<ExtPower>%05.3f</ExtPower>", ((float)m_hb_rt_info.External_Power)/10);
+                strcat(m_log_buf, buf);
+
+                // set system state
+                sprintf(buf, "<Sys_State>%d</Sys_State>", m_hb_rt_info.Sys_State);
+                strcat(m_log_buf, buf);
+
+                // set Icon
+                sprintf(buf, "<Hybrid_Icon>%d</Hybrid_Icon>", (m_hb_rt_info.Hybrid_IconH << 16) + m_hb_rt_info.Hybrid_IconL);
+                strcat(m_log_buf, buf);
+
+                // set error code
+                sprintf(buf, "<Error_Code>%d</Error_Code>", m_hb_rt_info.Error_Code);
+                strcat(m_log_buf, buf);
+
+                // set frequency, in range 0 ~ 999.9 Hz, max 0xFFFF = 65535 => 6553.5 Hz
+                if ( m_hb_rt_info.Invert_Frequency < 10000 ) {
+                    sprintf(buf, "<Inverterfrequency>%03.1f</Inverterfrequency>", ((float)m_hb_rt_info.Invert_Frequency)/10);
+                    strcat(m_log_buf, buf);
+                }
+                // set frequency, in range 0 ~ 999.99 Hz, max 0xFFFF = 65535 => 6553.5 Hz
+                if ( m_hb_rt_info.Grid_Frequency < 10000 ) {
+                    sprintf(buf, "<frequency>%03.1f</frequency>", ((float)m_hb_rt_info.Grid_Frequency)/10);
+                    strcat(m_log_buf, buf);
+                }
             }
-            if ( m_hb_rt_info.PV2_Voltage < 10000 ) {
-                sprintf(buf, "<dcv_2>%d</dcv_2>", m_hb_rt_info.PV2_Voltage);
-                strcat(m_log_buf, buf);
-            }
-            if ( ((m_hb_rt_info.PV1_Voltage + m_hb_rt_info.PV2_Voltage)/2) < 10000 ) {
-                sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)(m_hb_rt_info.PV1_Voltage + m_hb_rt_info.PV2_Voltage))/2);
-                strcat(m_log_buf, buf);
-            }
-            // set DC current (A)
-            // set dc current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 655.35 A, must in range
-            sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_hb_rt_info.PV1_Current)/100);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<dci_2>%04.2f</dci_2>", ((float)m_hb_rt_info.PV2_Current)/100);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<dc_current>%d</dc_current>", m_hb_rt_info.PV1_Current + m_hb_rt_info.PV2_Current);
-            strcat(m_log_buf, buf);
-
-            // set AC power (KW)
-            // set ac power, in range 0 ~ 999999.999 KW, max 0xFFFF = 65535 => 65.535 KW, must in range
-            sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_hb_rt_info.Load_Power)/1000);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_hb_rt_info.Load_Power)/1000);
-            strcat(m_log_buf, buf);
-            // set AC voltage (V)
-            // set ac voltage, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 65535 V
-            if ( m_hb_rt_info.Load_Voltage < 10000 ) {
-                sprintf(buf, "<acv_AN>%d</acv_AN>", m_hb_rt_info.Load_Voltage);
-                strcat(m_log_buf, buf);
-                sprintf(buf, "<ac_voltage>%d</ac_voltage>", m_hb_rt_info.Load_Voltage);
-                strcat(m_log_buf, buf);
-            }
-            // set AC current (A)
-            // set ac current, in range 0 ~ 9999.99 V, max 0xFFFF = 65535 => 655.35 A, must in range
-            sprintf(buf, "<aci_A>%04.2f</aci_A>", ((float)m_hb_rt_info.Load_Current)/100);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<ac_current>%04.2f</ac_current>", ((float)m_hb_rt_info.Load_Current)/100);
-            strcat(m_log_buf, buf);
-
-            // set total power
-            // set total KWH, in range 0 ~ 999999999999999.999 KWH, max 0xFFFFFFFF => ‭‭6553599.99?, anyway must in range
-            sprintf(buf, "<total_KWH>%04.2f</total_KWH>", m_hb_rt_info.PV_Total_EnergyH*100 + ((float)m_hb_rt_info.PV_Total_EnergyL)*0.01);
-            strcat(m_log_buf, buf);
-
-            // set battery SOC
-            // set soc, in range 0 ~ 9999.99 %, max 0xFFFF = > 65535
-            if ( m_hb_rt_info.Battery_SOC < 10000 ) {
-                sprintf(buf, "<soc>%d</soc>", m_hb_rt_info.Battery_SOC);
-                strcat(m_log_buf, buf);
-            }
-
-            // set temperature
-            sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_hb_rt_info.Inv_Temp)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<PV1_Temp>%03.1f</PV1_Temp>", ((float)m_hb_rt_info.PV1_Temp)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<PV2_Temp>%03.1f</PV2_Temp>", ((float)m_hb_rt_info.PV2_Temp)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<DD_Temp>%03.1f</DD_Temp>", ((float)m_hb_rt_info.DD_Temp)/10);
-            strcat(m_log_buf, buf);
-
-            // set Grid
-            sprintf(buf, "<VGrid_A>%d</VGrid_A>", m_hb_rt_info.Grid_Voltage);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<IGrid_A>%04.2f</IGrid_A>", ((float)m_hb_rt_info.Grid_Current)/100);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<PGrid_A>%05.3f</PGrid_A>", ((float)m_hb_rt_info.Grid_Power)/1000);
-            strcat(m_log_buf, buf);
-
-            // set battery
-            sprintf(buf, "<VBattery>%03.1f</VBattery>", ((float)m_hb_rt_info.Battery_Voltage)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<IBattery>%03.1f</IBattery>", ((float)m_hb_rt_info.Battery_Current)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<PBattery>%05.3f</PBattery>", ((float)m_hb_rt_info.PBat)/1000);
-            strcat(m_log_buf, buf);
-
-
-            // set bus
-            sprintf(buf, "<Vbus>%03.1f</Vbus>", ((float)m_hb_rt_info.Bus_Voltage)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<Ibus>%03.1f</Ibus>", ((float)m_hb_rt_info.Bus_Current)/10);
-            strcat(m_log_buf, buf);
-
-            // set battery power
-            sprintf(buf, "<Pbat_Total>%04.2f</Pbat_Total>", m_hb_rt_info.Bat_Total_EnergyH*100 + ((float)m_hb_rt_info.Bat_Total_EnergyL)*0.01);
-            strcat(m_log_buf, buf);
-
-            // set load power
-            sprintf(buf, "<Pload_Total>%04.2f</Pload_Total>", m_hb_rt_info.Load_Total_EnergyH*100 + ((float)m_hb_rt_info.Load_Total_EnergyL)*0.01);
-            strcat(m_log_buf, buf);
-
-            // set grid feed power
-            sprintf(buf, "<GridFeed_Total>%04.2f</GridFeed_Total>", m_hb_rt_info.GridFeed_TotalH*100 + ((float)m_hb_rt_info.GridFeed_TotalL)*0.01);
-            strcat(m_log_buf, buf);
-
-            // set grid charge power
-            sprintf(buf, "<GridCharge_Total>%04.2f</GridCharge_Total>", m_hb_rt_info.GridCharge_TotalH*100 + ((float)m_hb_rt_info.GridCharge_TotalL)*0.01);
-            strcat(m_log_buf, buf);
-
-            // set external power
-            sprintf(buf, "<ExtPower>%05.3f</ExtPower>", ((float)m_hb_rt_info.External_Power)/10);
-            strcat(m_log_buf, buf);
-
-            // set system state
-            sprintf(buf, "<Sys_State>%d</Sys_State>", m_hb_rt_info.Sys_State);
-            strcat(m_log_buf, buf);
-
-            // set Icon
-            sprintf(buf, "<Hybrid_Icon>%d</Hybrid_Icon>", (m_hb_rt_info.Hybrid_IconH << 16) + m_hb_rt_info.Hybrid_IconL);
-            strcat(m_log_buf, buf);
-
-            // set error code
-            sprintf(buf, "<Error_Code>%d</Error_Code>", m_hb_rt_info.Error_Code);
-            strcat(m_log_buf, buf);
-
-            // set frequency, in range 0 ~ 999.9 Hz, max 0xFFFF = 65535 => 6553.5 Hz
-            if ( m_hb_rt_info.Invert_Frequency < 10000 ) {
-                sprintf(buf, "<Inverterfrequency>%03.1f</Inverterfrequency>", ((float)m_hb_rt_info.Invert_Frequency)/10);
-                strcat(m_log_buf, buf);
-            }
-            // set frequency, in range 0 ~ 999.99 Hz, max 0xFFFF = 65535 => 6553.5 Hz
-            if ( m_hb_rt_info.Grid_Frequency < 10000 ) {
-                sprintf(buf, "<frequency>%03.1f</frequency>", ((float)m_hb_rt_info.Grid_Frequency)/10);
-                strcat(m_log_buf, buf);
-            }
-        }
+        //}
 
         // set status
         if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.PV_Inv_Error_COD3_Record ||
             m_hb_rt_info.DD_Error_COD_Record || m_hb_rt_info.DD_Error_COD2_Record ) {
             strcat(m_log_buf, "<Status>2</Status>");
         } else {
-            if ( m_loopflag == 6 ) {
+            if ( m_loopflag == 5 ) {
                 strcat(m_log_buf, "<Status>1</Status>");
                 m_inverter_state = 1;
                 m_sys_error |= SYS_0010_Off_Line;
@@ -6363,122 +6384,130 @@ bool CG320::WriteLogXML(int index)
         }
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        if ( m_loopflag == 0 ) {
+        //if ( m_loopflag == 0 ) {
             // set BMS module0
-            sprintf(buf, "<BMS_Voltage>%04.2f</BMS_Voltage>", ((float)m_hb_bms_info.Voltage/100));
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_Current>%04.2f</BMS_Current>", ((float)m_hb_bms_info.Current/100));
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_SOC>%d</BMS_SOC>", m_hb_bms_info.SOC);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_Max_Temp>%d</BMS_Max_Temp>", m_hb_bms_info.MaxTemperature);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_CycleCount>%d</BMS_CycleCount>", m_hb_bms_info.CycleCount);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_Status>%d</BMS_Status>", m_hb_bms_info.Status);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_Error>%d</BMS_Error>", m_hb_bms_info.Error);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_ModuleNo>%d</BMS_ModuleNo>", m_hb_bms_info.Number);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_Info>%d</BMS_Info>", m_hb_bms_info.BMS_Info);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_MaxCell>%05.3f</BMS_MaxCell>", ((float)m_hb_bms_info.BMS_Max_Cell/1000));
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_MinCell>%05.3f</BMS_MinCell>", ((float)m_hb_bms_info.BMS_Min_Cell/1000));
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BMS_BaudRate>%d</BMS_BaudRate>", m_hb_bms_info.BMS_BaudRate);
-            strcat(m_log_buf, buf);
+            if ( m_save_hb_bms_info ) {
+                sprintf(buf, "<BMS_Voltage>%04.2f</BMS_Voltage>", ((float)m_hb_bms_info.Voltage/100));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_Current>%04.2f</BMS_Current>", ((float)m_hb_bms_info.Current/100));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_SOC>%d</BMS_SOC>", m_hb_bms_info.SOC);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_Max_Temp>%d</BMS_Max_Temp>", m_hb_bms_info.MaxTemperature);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_CycleCount>%d</BMS_CycleCount>", m_hb_bms_info.CycleCount);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_Status>%d</BMS_Status>", m_hb_bms_info.Status);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_Error>%d</BMS_Error>", m_hb_bms_info.Error);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_ModuleNo>%d</BMS_ModuleNo>", m_hb_bms_info.Number);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_Info>%d</BMS_Info>", m_hb_bms_info.BMS_Info);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_MaxCell>%05.3f</BMS_MaxCell>", ((float)m_hb_bms_info.BMS_Max_Cell/1000));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_MinCell>%05.3f</BMS_MinCell>", ((float)m_hb_bms_info.BMS_Min_Cell/1000));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_BaudRate>%d</BMS_BaudRate>", m_hb_bms_info.BMS_BaudRate);
+                strcat(m_log_buf, buf);
+            }
 
             // set remote setting
-            sprintf(buf, "<InverterMode>%d</InverterMode>", m_hb_rs_info.Mode);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<StarHour>%d</StarHour>", m_hb_rs_info.StarHour);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<StarMin>%d</StarMin>", m_hb_rs_info.StarMin);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<EndHour>%d</EndHour>", m_hb_rs_info.EndHour);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<EndMin>%d</EndMin>", m_hb_rs_info.EndMin);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<Multi_Module>%d</Multi_Module>", m_hb_rs_info.MultiModuleSetting);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<Battery_Type>%d</Battery_Type>", m_hb_rs_info.BatteryType);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<ChargeCurrent>%d</ChargeCurrent>", m_hb_rs_info.BatteryCurrent);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BatShutdownVolt>%03.1f</BatShutdownVolt>", ((float)m_hb_rs_info.BatteryShutdownVoltage)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BatFloatingVolt>%03.1f</BatFloatingVolt>", ((float)m_hb_rs_info.BatteryFloatingVoltage)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<BatReservePercent>%d</BatReservePercent>", m_hb_rs_info.BatteryReservePercentage);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<Q_Value>%d</Q_Value>", m_hb_rrs_info.Volt_VAr);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<StartFrequency>%03.1f</StartFrequency>", ((float)m_hb_rs_info.StartFrequency)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<EndFrequency>%03.1f</EndFrequency>", ((float)m_hb_rs_info.EndFrequency)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<FeedInPower>%05.3f</FeedInPower>", ((float)m_hb_rs_info.FeedinPower)/10);
-            strcat(m_log_buf, buf);
+            if ( m_save_hb_rs_info ) {
+                sprintf(buf, "<InverterMode>%d</InverterMode>", m_hb_rs_info.Mode);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<StarHour>%d</StarHour>", m_hb_rs_info.StarHour);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<StarMin>%d</StarMin>", m_hb_rs_info.StarMin);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<EndHour>%d</EndHour>", m_hb_rs_info.EndHour);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<EndMin>%d</EndMin>", m_hb_rs_info.EndMin);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Multi_Module>%d</Multi_Module>", m_hb_rs_info.MultiModuleSetting);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Battery_Type>%d</Battery_Type>", m_hb_rs_info.BatteryType);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ChargeCurrent>%d</ChargeCurrent>", m_hb_rs_info.BatteryCurrent);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BatShutdownVolt>%03.1f</BatShutdownVolt>", ((float)m_hb_rs_info.BatteryShutdownVoltage)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BatFloatingVolt>%03.1f</BatFloatingVolt>", ((float)m_hb_rs_info.BatteryFloatingVoltage)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BatReservePercent>%d</BatReservePercent>", m_hb_rs_info.BatteryReservePercentage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb_rs_info.PeakShavingPower)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<StartFrequency>%03.1f</StartFrequency>", ((float)m_hb_rs_info.StartFrequency)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<EndFrequency>%03.1f</EndFrequency>", ((float)m_hb_rs_info.EndFrequency)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<FeedInPower>%05.3f</FeedInPower>", ((float)m_hb_rs_info.FeedinPower)/10);
+                strcat(m_log_buf, buf);
+            }
 
             // set ID part
             // set grid voltage
-            sprintf(buf, "<Grid_Voltage>%d</Grid_Voltage>", m_hb_id_data.Grid_Voltage);
-            strcat(m_log_buf, buf);
-            // set model
-            sprintf(buf, "<Model>%d</Model>", m_hb_id_data.Model);
-            strcat(m_log_buf, buf);
-            // set hw ver
-            sprintf(buf, "<HWver>%d</HWver>", m_hb_id_data.HW_Ver);
-            strcat(m_log_buf, buf);
-            // set date
-            sprintf(buf, "<Product_Y>%04d</Product_Y>", m_hb_id_data.Year);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<Product_M>%02d</Product_M>", m_hb_id_data.Month);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<Product_D>%02d</Product_D>", m_hb_id_data.Date);
-            strcat(m_log_buf, buf);
-            // set version
-            sprintf(buf, "<Ver_HW>%d</Ver_HW>", m_hb_id_data.Inverter_Ver);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<Ver_FW>%d</Ver_FW>", m_hb_id_data.DD_Ver);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<Ver_EE>%d</Ver_EE>", m_hb_id_data.EEPROM_Ver);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<DisplayVer>%d</DisplayVer>", m_hb_id_data.Display_Ver);
-            strcat(m_log_buf, buf);
-            // set flags1
-            sprintf(buf, "<SystemFlag>%d</SystemFlag>", m_hb_id_data.Flags1);
-            strcat(m_log_buf, buf);
-            // set flags2
-            sprintf(buf, "<Rule_Flag>%d</Rule_Flag>", m_hb_id_data.Flags2);
-            strcat(m_log_buf, buf);
+            if ( m_save_hb_id_data ) {
+                sprintf(buf, "<Grid_Voltage>%d</Grid_Voltage>", m_hb_id_data.Grid_Voltage);
+                strcat(m_log_buf, buf);
+                // set model
+                sprintf(buf, "<Model>%d</Model>", m_hb_id_data.Model);
+                strcat(m_log_buf, buf);
+                // set hw ver
+                sprintf(buf, "<HWver>%d</HWver>", m_hb_id_data.HW_Ver);
+                strcat(m_log_buf, buf);
+                // set date
+                sprintf(buf, "<Product_Y>%04d</Product_Y>", m_hb_id_data.Year);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Product_M>%02d</Product_M>", m_hb_id_data.Month);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Product_D>%02d</Product_D>", m_hb_id_data.Date);
+                strcat(m_log_buf, buf);
+                // set version
+                sprintf(buf, "<Ver_HW>%d</Ver_HW>", m_hb_id_data.Inverter_Ver);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Ver_FW>%d</Ver_FW>", m_hb_id_data.DD_Ver);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Ver_EE>%d</Ver_EE>", m_hb_id_data.EEPROM_Ver);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<DisplayVer>%d</DisplayVer>", m_hb_id_data.Display_Ver);
+                strcat(m_log_buf, buf);
+                // set flags1
+                sprintf(buf, "<SystemFlag>%d</SystemFlag>", m_hb_id_data.Flags1);
+                strcat(m_log_buf, buf);
+                // set flags2
+                sprintf(buf, "<Rule_Flag>%d</Rule_Flag>", m_hb_id_data.Flags2);
+                strcat(m_log_buf, buf);
+            }
 
             // set remote real time setting
-            sprintf(buf, "<ChargeSetting>%d</ChargeSetting>", m_hb_rrs_info.ChargeSetting);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<ChargePower>%05.3f</ChargePower>", ((float)m_hb_rrs_info.ChargePower)/10);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<DischargePower>%05.3f</DischargePower>", ((float)m_hb_rrs_info.DischargePower)/10);
-            strcat(m_log_buf, buf);
-            // charge discharge power undefine in web server
-            sprintf(buf, "<RampRate>%d</RampRate>", m_hb_rrs_info.RampRatePercentage);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<Degree>%d</Degree>", m_hb_rrs_info.DegreeLeadLag);
-            strcat(m_log_buf, buf);
-            // AC_Coupling_Power
-            sprintf(buf, "<AC_Coupling_Power>%d</AC_Coupling_Power>", m_hb_rrs_info.AC_Coupling_Power);
-            strcat(m_log_buf, buf);
-            sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb_rs_info.PeakShavingPower)/10);
-            strcat(m_log_buf, buf);
-            // SunSpec_Write_All
-            sprintf(buf, "<SunSpec_Write_All>%d</SunSpec_Write_All>", m_hb_rrs_info.SunSpec_Write_All);
-            strcat(m_log_buf, buf);
-            // Remote_Control
-            sprintf(buf, "<Remote_Control>%d</Remote_Control>", m_hb_rrs_info.Remote_Control);
-            strcat(m_log_buf, buf);
-        }
+            if ( m_save_hb_rrs_info ) {
+                sprintf(buf, "<ChargeSetting>%d</ChargeSetting>", m_hb_rrs_info.ChargeSetting);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ChargePower>%05.3f</ChargePower>", ((float)m_hb_rrs_info.ChargePower)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<DischargePower>%05.3f</DischargePower>", ((float)m_hb_rrs_info.DischargePower)/10);
+                strcat(m_log_buf, buf);
+                // charge discharge power undefine in web server
+                sprintf(buf, "<RampRate>%d</RampRate>", m_hb_rrs_info.RampRatePercentage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Degree>%d</Degree>", m_hb_rrs_info.DegreeLeadLag);
+                strcat(m_log_buf, buf);
+                // AC_Coupling_Power
+                sprintf(buf, "<AC_Coupling_Power>%d</AC_Coupling_Power>", m_hb_rrs_info.AC_Coupling_Power);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Q_Value>%d</Q_Value>", m_hb_rrs_info.Volt_VAr);
+                strcat(m_log_buf, buf);
+                // SunSpec_Write_All
+                sprintf(buf, "<SunSpec_Write_All>%d</SunSpec_Write_All>", m_hb_rrs_info.SunSpec_Write_All);
+                strcat(m_log_buf, buf);
+                // Remote_Control
+                sprintf(buf, "<Remote_Control>%d</Remote_Control>", m_hb_rrs_info.Remote_Control);
+                strcat(m_log_buf, buf);
+            }
+        //}
     }
 
     strcat(m_log_buf, "</record>");

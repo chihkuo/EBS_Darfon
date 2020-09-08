@@ -190,6 +190,11 @@ protected:
     time_t  m_last_savelog_time;
     time_t  m_current_time;
     int     m_plcver;
+    bool    m_save_hb_id_data;
+    bool    m_save_hb_rs_info;
+    bool    m_save_hb_rrs_info;
+    bool    m_save_hb_rt_info;
+    bool    m_save_hb_bms_info;
 
     MI_ID_INFO      m_mi_id_info;
     MI_POWER_INFO   m_mi_power_info;
