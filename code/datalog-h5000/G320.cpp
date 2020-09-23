@@ -3256,7 +3256,7 @@ bool CG320::ReRegister(int index)
         //printf("buffer[%d] = %02X\n", i, buffer[i]);
     }
 
-    for (i = 0; i < 3; i++) {
+    //for (i = 0; i < 3; i++) {
         if ( MyAssignAddress(m_busfd, buffer, arySNobj[index].m_Addr) )
         {
             sprintf(buf, "DataLogger ReRegiser() : addr %d OK", arySNobj[index].m_Addr);
@@ -3275,7 +3275,7 @@ bool CG320::ReRegister(int index)
             sprintf(buf, "DataLogger ReRegiser() : addr %d fail", arySNobj[index].m_Addr);
             SaveLog(buf, m_st_time);
         }
-    }
+    //}
 
     return false;
 }
@@ -5159,9 +5159,15 @@ void CG320::ParserHybridPVInvErrCOD3(int COD3)
 {
     int tmp = COD3;
     m_hb_pvinv_err_cod3.B0_External_PV_OPP = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_pvinv_err_cod3.B1_Model123_Reconnected_Delay = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_pvinv_err_cod3.B2_Peak_Shaving_Over_Power = tmp & 0x0001;
 
 /*    printf("#### Parser Hybrid PV Inverter Error Code 3 ####\n");
     printf("Bit0  : External_PV_OPP = %d\n", m_hb_pvinv_err_cod3.B0_External_PV_OPP);
+    printf("Bit1  : Model123_Reconnected_Delay = %d\n", m_hb_pvinv_err_cod3.B1_Model123_Reconnected_Delay);
+    printf("Bit2  : Peak_Shaving_Over_Power = %d\n", m_hb_pvinv_err_cod3.B2_Peak_Shaving_Over_Power);
     printf("################################################\n");*/
 }
 
@@ -5232,6 +5238,18 @@ void CG320::ParserHybridDDErrCOD2(int COD2)
     m_hb_dd_err_cod2.B3_Fan_Fault = tmp & 0x0001;
     tmp>>=1;
     m_hb_dd_err_cod2.B4_Low_Battery = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B5_Relay_state = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B6_Off_Grid_Operation = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B7_InvEnable_flag = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B8_Bypass_flag = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B9_DD_en = tmp & 0x0001;
+    tmp>>=1;
+    m_hb_dd_err_cod2.B10_PVEnable_flag = tmp & 0x0001;
 
 /*    printf("#### Parser Hybrid DD Error Code 2 ####\n");
     printf("Bit0  : EEProm_Fault = %d\n", m_hb_dd_err_cod2.B0_EEProm_Fault);
@@ -5239,6 +5257,12 @@ void CG320::ParserHybridDDErrCOD2(int COD2)
     printf("Bit2  : OT_Fault = %d\n", m_hb_dd_err_cod2.B2_OT_Fault);
     printf("Bit3  : Fan_Fault = %d\n", m_hb_dd_err_cod2.B3_Fan_Fault);
     printf("Bit4  : Low_Battery = %d\n", m_hb_dd_err_cod2.B4_Low_Battery);
+    printf("Bit5  : Relay_state = %d\n", m_hb_dd_err_cod2.B5_Relay_state);
+    printf("Bit6  : Off_Grid_Operation = %d\n", m_hb_dd_err_cod2.B6_Off_Grid_Operation);
+    printf("Bit7  : InvEnable_flag = %d\n", m_hb_dd_err_cod2.B7_InvEnable_flag);
+    printf("Bit8  : Bypass_flag = %d\n", m_hb_dd_err_cod2.B8_Bypass_flag);
+    printf("Bit9  : DD_en = %d\n", m_hb_dd_err_cod2.B9_DD_en);
+    printf("Bit10 : PVEnable_flag = %d\n", m_hb_dd_err_cod2.B10_PVEnable_flag);
     printf("#####################################\n");*/
 }
 
@@ -6985,6 +7009,10 @@ bool CG320::WriteErrorLogXML(int index)
         // PV_Inv_Error_COD3_Record 0xF0
         if ( m_hb_rt_info.PV_Inv_Error_COD3_Record & 0x0001 )
             strcat(m_errlog_buf, "<code>COD4_0001_External_PV_OPP</code>");
+        if ( m_hb_rt_info.PV_Inv_Error_COD3_Record & 0x0002 )
+            strcat(m_errlog_buf, "<code>COD4_0002_Model123_Reconnected_Delay</code>");
+        if ( m_hb_rt_info.PV_Inv_Error_COD3_Record & 0x0004 )
+            strcat(m_errlog_buf, "<code>COD4_0004_Peak_Shaving_Over_Power</code>");
         // DD_Error_COD2_Record 0xF1
         if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0001 )
             strcat(m_errlog_buf, "<code>COD5_0001_EEProm_Fault</code>");
@@ -6996,6 +7024,18 @@ bool CG320::WriteErrorLogXML(int index)
             strcat(m_errlog_buf, "<code>COD5_0008_Fan_Fault</code>");
         if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0010 )
             strcat(m_errlog_buf, "<code>COD5_0010_Low_Battery</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0020 )
+            strcat(m_errlog_buf, "<code>COD5_0020_Relay_state</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0040 )
+            strcat(m_errlog_buf, "<code>COD5_0040_Off_Grid_Operation</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0080 )
+            strcat(m_errlog_buf, "<code>COD5_0080_InvEnable_flag</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0100 )
+            strcat(m_errlog_buf, "<code>COD5_0100_Bypass_flag</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0200 )
+            strcat(m_errlog_buf, "<code>COD5_0200_DD_en</code>");
+        if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0400 )
+            strcat(m_errlog_buf, "<code>COD5_0400_PVEnable_flag</code>");
     }
 
     // set system error log

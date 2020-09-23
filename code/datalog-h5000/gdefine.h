@@ -268,6 +268,8 @@ typedef struct stHybrid_PV_Inv_Error_COD2 {
 
 typedef struct stHybrid_PV_Inv_Error_COD3 {
     char B0_External_PV_OPP;
+    char B1_Model123_Reconnected_Delay;
+    char B2_Peak_Shaving_Over_Power;
 }HB_PVINV_ERR_COD3;
 
 typedef struct stHybrid_DD_Error_COD {
@@ -295,6 +297,12 @@ typedef struct stHybrid_DD_Error_COD2 {
     char B2_OT_Fault;
     char B3_Fan_Fault;
     char B4_Low_Battery;
+    char B5_Relay_state;
+    char B6_Off_Grid_Operation;
+    char B7_InvEnable_flag;
+    char B8_Bypass_flag;
+    char B9_DD_en;
+    char B10_PVEnable_flag;
 }HB_DD_ERR_COD2;
 
 typedef struct stHybrid_Icon_Info {

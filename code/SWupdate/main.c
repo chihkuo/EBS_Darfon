@@ -16,7 +16,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.4.3"
+#define VERSION             "2.4.4"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -706,6 +706,18 @@ int UpdDLSWStatus()
             printf("UpdDLSWStatus() get result Fail\n");
             SaveLog("SWupdate UpdDLSWStatus() : get result Fail", st_time);
             printf("======================= UpdDLSWStatus end =======================\n");
+            // newSWupdate.sh if exist
+            if ( stat("/tmp/newSWupdate.sh", &myst) == 0 ) {
+                // save log
+                CloseLog();
+                system("sync");
+                // end
+
+                system("/tmp/newSWupdate.sh &");
+                printf("Wait update~\n");
+                usleep(10000000); // sleep 10s
+                printf("update end\n");
+            }
             return 3;
         }
     }
@@ -792,7 +804,7 @@ int main(int argc, char* argv[])
     time_t  previous_time;
     time_t  current_time;
     struct tm   *st_time = NULL;
-    int counter, run_processs_min, syslog_count;
+    int counter, run_processs_min, run_processs_hour, syslog_count;
     struct stat st;
     int doUpdDLSWStatus = 0;
     int reboot_day = 0, reboot_count = 0;
@@ -823,6 +835,7 @@ int main(int argc, char* argv[])
 
     counter = 0;
     run_processs_min = -1;
+    run_processs_hour = st_time->tm_hour;
     syslog_count = 0;
     while (1) {
         // get local time
@@ -840,6 +853,13 @@ int main(int argc, char* argv[])
                 CloseLog();
                 system("sync");
                 OpenLog(g_SYSLOG_PATH, st_time);
+            }
+
+            // save time
+            if ( run_processs_hour != st_time->tm_hour ) {
+                run_processs_hour = st_time->tm_hour;
+                system("touch /etc/banner; sync;");
+                SaveLog("SWupdate main() : save time", st_time);
             }
 
             // check reboot time
