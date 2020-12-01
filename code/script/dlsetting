@@ -34,8 +34,8 @@ config comport
 	option com1_baud '9600'
 
 config swver
-	option dlver '2.6.4'
-	option dpver '2.6.4'
+	option dlver '2.6.5'
+	option dpver '2.6.5'
 	option fuver '1.2.4'
 	option dsver '1.0.0'
 

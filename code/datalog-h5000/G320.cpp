@@ -1701,7 +1701,7 @@ bool CG320::RunTODOList()
 {
     char buf[128] = {0};
     char data[128] = {0};
-    int i = 0;
+    int i = 0, flag = 0;
     FILE *fd = NULL;
 
     fd = fopen(TODOLIST_PATH, "rb");
@@ -1777,8 +1777,19 @@ bool CG320::RunTODOList()
                                 m_hb_rrs_info.AC_Coupling_Power = m_dl_cmd.m_data[6];
                                 m_hb_rrs_info.SunSpec_Write_All = m_dl_cmd.m_data[7];
                                 m_hb_rrs_info.Remote_Control = m_dl_cmd.m_data[8];
+                                if ( m_hb_rrs_info.Remote_Control & 0x0001 )
+                                    flag = 1;
+                                else
+                                    flag = 0;
                                 SaveLog((char *)"DataLogger RunTODOList() : run SetHybridRRSInfo()", m_st_time);
                                 SetHybridRRSInfo(i);
+                                if ( flag ) {
+                                    printf("sleep 10 sec. wait inverter restart\n");
+                                    usleep(10000000);
+                                    printf("run ReRegister %d\n", i);
+                                    ReRegister(i);
+                                }
+
                                 break;
                         }
                     } else {
@@ -4883,8 +4894,8 @@ bool CG320::GetHybridRTInfo(int index)
         return false;
 
     //szHBRTinfo[]={0x00, 0x03, 0x00, 0xB0, 0x00, 0x30, 0x00, 0x00};
-    szHBRTinfo[3] = 0xF0; // addr
-    szHBRTinfo[5] = 0x02; // no. of data
+    szHBRTinfo[3] = 0xE0; // addr
+    szHBRTinfo[5] = 0x20; // no. of data
     MakeReadDataCRC(szHBRTinfo,8);
 
     MClearRX();
@@ -4900,7 +4911,7 @@ bool CG320::GetHybridRTInfo(int index)
         current_time = time(NULL);
 		log_time = localtime(&current_time);
 
-        lpdata = GetRespond(m_busfd, 9, m_dl_config.m_delay_time_2);
+        lpdata = GetRespond(m_busfd, 69, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRTInfo2 OK ####\n");
             //SaveLog((char *)"DataLogger GetHybridRTInfo2() : OK", log_time);
