@@ -4844,7 +4844,7 @@ bool CG320::GetHybridRTInfo(int index)
     time_t current_time;
 	struct tm *log_time;
 
-    unsigned char szHBRTinfo[]={0x00, 0x03, 0x00, 0xB0, 0x00, 0x30, 0x00, 0x00};
+    unsigned char szHBRTinfo[]={0x00, 0x03, 0x00, 0xB0, 0x00, 0x50, 0x00, 0x00};
     szHBRTinfo[0]=arySNobj[index].m_Addr;
     MakeReadDataCRC(szHBRTinfo,8);
 
@@ -4861,7 +4861,7 @@ bool CG320::GetHybridRTInfo(int index)
         current_time = time(NULL);
 		log_time = localtime(&current_time);
 
-        lpdata = GetRespond(m_busfd, 101, m_dl_config.m_delay_time_2);
+        lpdata = GetRespond(m_busfd, 165, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridRTInfo OK ####\n");
             //SaveLog((char *)"DataLogger GetHybridRTInfo() : OK", log_time);
@@ -4874,9 +4874,11 @@ bool CG320::GetHybridRTInfo(int index)
             ParserHybridDDErrCOD(m_hb_rt_info.DD_Error_COD_Record);
             //ParserHybridDDErrCOD(m_hb_rt_info.DD_Error_COD);
             ParserHybridIconInfo(m_hb_rt_info.Hybrid_IconL, m_hb_rt_info.Hybrid_IconH);
-            flag = 1;
-            break;
-            //return true;
+            ParserHybridPVInvErrCOD3(m_hb_rt_info.PV_Inv_Error_COD3_Record);
+            ParserHybridDDErrCOD2(m_hb_rt_info.DD_Error_COD2_Record);
+            //flag = 1;
+            //break;
+            return true;
         } else {
             if ( have_respond == true ) {
                 printf("#### GetHybridRTInfo CRC Error ####\n");
@@ -4889,7 +4891,7 @@ bool CG320::GetHybridRTInfo(int index)
             err++;
         }
     }
-
+/*
     if ( flag == 0 )
         return false;
 
@@ -4932,7 +4934,7 @@ bool CG320::GetHybridRTInfo(int index)
             err++;
         }
     }
-
+*/
     return false;
 }
 
@@ -4986,6 +4988,8 @@ void CG320::DumpHybridRTInfo(unsigned char *buf)
     m_hb_rt_info.Invert_Frequency = (*(buf+90) << 8) + *(buf+91);
     m_hb_rt_info.Grid_Frequency = (*(buf+92) << 8) + *(buf+93);
     m_hb_rt_info.PBat = (*(buf+94) << 8) + *(buf+95);
+    m_hb_rt_info.PV_Inv_Error_COD3_Record = (*(buf+96) << 8) + *(buf+97);
+    m_hb_rt_info.DD_Error_COD2_Record = (*(buf+98) << 8) + *(buf+99);
 
 /*    printf("#### Dump Hybrid RT Info ####\n");
     printf("Inv_Temp = %03.1f C\n", ((float)m_hb_rt_info.Inv_Temp)/10);
@@ -5042,6 +5046,8 @@ void CG320::DumpHybridRTInfo(unsigned char *buf)
     printf("Invert Frequency = %03.1f Hz\n", ((float)m_hb_rt_info.Invert_Frequency)/10);
     printf("Grid Frequency = %03.1f Hz\n", ((float)m_hb_rt_info.Grid_Frequency)/10);
     printf("PBat = %d W\n", m_hb_rt_info.PBat);
+    printf("PV_Inv_Error_COD3_Record = 0x%04X\n", m_hb_rt_info.PV_Inv_Error_COD3_Record);
+    printf("DD_Error_COD2_Record = 0x%04X\n", m_hb_rt_info.DD_Error_COD2_Record);
     printf("#############################\n");*/
 }
 

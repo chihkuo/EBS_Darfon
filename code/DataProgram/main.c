@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.6.5"
+#define VERSION         "2.6.6"
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
