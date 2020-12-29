@@ -1163,6 +1163,10 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                 // set state to offline
                 arySNobj[i].m_state = 0; // offline
                 //ReRegiser(i);
+                if ( current_time - arySNobj[i].m_ok_time >= OFFLINE_SECOND_HB ) {
+                    printf("Last m_ok_time more then %d sec.\n", OFFLINE_SECOND_HB);
+                    ReRegister(i);
+                }
             }
             printf("Debug : index %d, m_Err = %d, m_loopflag = %d\n", i, arySNobj[i].m_Err, m_loopflag);
             m_loopflag = 0;
@@ -3070,7 +3074,7 @@ int CG320::WhiteListRegister()
 
 int CG320::StartRegisterProcess()
 {
-    int DefaultMODValue = 20;
+    int DefaultMODValue = 10;
     int i, ret = 0, cnt = 0, total = 0;
 	bool Conflict = false;
 
@@ -4839,7 +4843,7 @@ bool CG320::GetHybridRTInfo(int index)
     printf("#### GetHybridRTInfo start ####\n");
 
     int err = 0;
-    int flag = 0;
+    //int flag = 0;
     byte *lpdata = NULL;
     time_t current_time;
 	struct tm *log_time;

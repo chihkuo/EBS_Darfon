@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#define VERSION         "2.6.6"
+#define VERSION         "2.6.7"
 #define MODEL_LIST_PATH "/usr/home/ModelList"
 #define MODEL_NUM       1020 //255*4
 
@@ -132,17 +132,17 @@ int main(int argc, char* argv[])
                         printf("Continue main while loop.\n");
                         continue;
                     }
-
-                    ret = AllRegister(sys_current_time);
-                    if ( ret == -1 ) {
-                        printf("Continue main while loop.\n");
-                        continue;
-                    }
-
-                    SaveList();
-
-                    system("sync");
                 }
+
+                //every loop
+                ret = AllRegister(sys_current_time);
+                if ( ret == -1 ) {
+                    printf("Continue main while loop.\n");
+                    continue;
+                }
+
+                SaveList();
+                system("sync");
             }
 
             ////////////
