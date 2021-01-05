@@ -12,8 +12,8 @@ config sms
 	option cleartx_delay '200000'
 	option shelf_life '30'
 	option reboot_time '1'
-	option update_FW_start '8'
-	option update_FW_stop '17'
+	option update_FW_start '0'
+	option update_FW_stop '0'
 
 config comport
 	option com1_data_bits '8'
@@ -34,8 +34,8 @@ config comport
 	option com1_baud '9600'
 
 config swver
-	option dlver '2.6.7'
-	option dpver '2.6.7'
+	option dlver '2.6.8'
+	option dpver '2.6.8'
 	option fuver '1.2.4'
 	option dsver '1.0.0'
 
