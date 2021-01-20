@@ -128,6 +128,7 @@ protected:
     void    DumpHybridRRSInfo(unsigned char *buf);
     bool    SetHybridRRSInfo(int index);
     bool    GetHybridRTInfo(int index);
+    bool    GetHybridData(int index, int star_address, int data_count);
     void    DumpHybridRTInfo(unsigned char *buf);
     void    DumpHybridRTInfo2(unsigned char *buf);
     void    ParserHybridPVInvErrCOD1(int COD1);
@@ -195,6 +196,7 @@ protected:
     bool    m_save_hb_rrs_info;
     bool    m_save_hb_rt_info;
     bool    m_save_hb_bms_info;
+    int     read_size;
 
     MI_ID_INFO      m_mi_id_info;
     MI_POWER_INFO   m_mi_power_info;

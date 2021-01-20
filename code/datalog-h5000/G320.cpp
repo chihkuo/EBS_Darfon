@@ -31,6 +31,17 @@
 #define OFFLINE_SECOND_MI 1200
 #define OFFLINE_SECOND_HB 1200
 
+#define START_ADDRESS_ID        0x01
+#define START_ADDRESS_RTC       0x40
+#define START_ADDRESS_RSINFO    0x90
+#define START_ADDRESS_RRSINFO   0xA0
+#define START_ADDRESS_RTINFO    0xB0
+#define COUNT_ID                30
+#define COUNT_RTC               32
+#define COUNT_RSINFO            32
+#define COUNT_RRSINFO           32
+#define COUNT_RTINFO            160
+
 extern "C"
 {
     #include "../common/SaveLog.h"
@@ -102,6 +113,7 @@ CG320::CG320()
     m_save_hb_rrs_info= false;
     m_save_hb_rt_info= false;
     m_save_hb_bms_info= false;
+    read_size = 100;
     memset(m_log_buf, 0x00, LOG_BUF_SIZE);
     memset(m_log_filename, 0x00, 128);
     memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
@@ -1103,7 +1115,13 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     //    if ( m_st_time->tm_min == 0 )
                     //        return -1;
 
-                    if ( GetHybridRTInfo(i) ) {
+                    // for test only
+                    //GetHybridData(i, START_ADDRESS_ID, COUNT_ID);
+                    //GetHybridData(i, START_ADDRESS_RTC, COUNT_RTC);
+                    //GetHybridData(i, START_ADDRESS_RSINFO, COUNT_RSINFO);
+                    //GetHybridData(i, START_ADDRESS_RRSINFO, COUNT_RRSINFO);
+                    //if ( GetHybridRTInfo2(i) ) {
+                    if ( GetHybridData(i, START_ADDRESS_RTINFO, COUNT_RTINFO) ) {
                         arySNobj[i].m_Err = 0;
                         m_save_hb_rt_info = true;
                     } else {
@@ -4939,6 +4957,106 @@ bool CG320::GetHybridRTInfo(int index)
         }
     }
 */
+    return false;
+}
+
+bool CG320::GetHybridData(int index, int star_address, int data_count)
+{
+    printf("#### GetHybridData start ####, star_address = 0x%x, data_count = %d\n", star_address, data_count);
+
+    int err = 0, read_data_size = 0, read_count = 0;
+    //int flag = 0;
+    byte *lpdata = NULL;
+    unsigned char data_buf[160] = {0};
+    unsigned char szHBData[]={0x00, 0x03, 0x00, star_address, 0x00, data_count, 0x00, 0x00};
+    szHBData[0]=arySNobj[index].m_Addr;
+    time_t current_time;
+	struct tm *log_time;
+
+    while ( (err < 3) && (read_count < data_count) ) {
+        //check remaining size
+        if ( read_size < (data_count - read_count) )
+            read_data_size = read_size;
+        else
+            read_data_size = data_count - read_count;
+        printf("read_count = %d\n", read_count);
+        printf("read_size = %d\n", read_size);
+        printf("read_data_size = %d\n", read_data_size);
+        szHBData[3] = star_address + read_count/2;
+        szHBData[5] = read_data_size/2;
+        MakeReadDataCRC(szHBData,8);
+
+        MClearRX();
+        txsize=8;
+        waitAddr = arySNobj[index].m_Addr;
+        waitFCode = 0x03;
+
+        memcpy(txbuffer, szHBData, 8);
+        MStartTX(m_busfd);
+
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
+		lpdata = GetRespond(m_busfd, read_data_size+5, m_dl_config.m_delay_time_2);
+		if ( lpdata ) {
+            memcpy(data_buf+read_count, lpdata+3, read_data_size);
+            read_count += read_data_size;
+            printf("#### GetHybridData OK ####, read_count = %d\n", read_count);
+            arySNobj[index].m_ok_time = time(NULL);
+
+            if ( read_count == data_count ) {
+                switch ( star_address )
+                {
+                    case START_ADDRESS_ID:
+                        DumpHybridIDData(data_buf);
+                        ParserHybridIDFlags1(m_hb_id_data.Flags1);
+                        ParserHybridIDFlags2(m_hb_id_data.Flags2);
+                        break;
+                    case START_ADDRESS_RTC:
+                        DumpHybridRTCData(data_buf);
+                        break;
+                    case START_ADDRESS_RSINFO:
+                        DumpHybridRSInfo(data_buf);
+                        break;
+                    case START_ADDRESS_RRSINFO:
+                        DumpHybridRRSInfo(data_buf);
+                        break;
+                    case START_ADDRESS_RTINFO:
+                        DumpHybridRTInfo(data_buf);
+                        ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1_Record);
+                        ParserHybridPVInvErrCOD2(m_hb_rt_info.PV_Inv_Error_COD2_Record);
+                        ParserHybridDDErrCOD(m_hb_rt_info.DD_Error_COD_Record);
+                        ParserHybridIconInfo(m_hb_rt_info.Hybrid_IconL, m_hb_rt_info.Hybrid_IconH);
+                        ParserHybridPVInvErrCOD3(m_hb_rt_info.PV_Inv_Error_COD3_Record);
+                        ParserHybridDDErrCOD2(m_hb_rt_info.DD_Error_COD2_Record);
+                        break;
+                    default:
+                        printf("wrong address\n");
+                }
+                return true;
+            }
+        } else {
+            if ( have_respond == true ) {
+                printf("#### GetHybridData CRC Error ####\n");
+                SaveLog((char *)"DataLogger GetHybridData() : CRC Error", log_time);
+            }
+            else {
+                printf("#### GetHybridData No Response ####\n");
+                SaveLog((char *)"DataLogger GetHybridData() : No Response", log_time);
+            }
+            err++;
+            if (err == 3) {
+                if ( read_size > 20 ) {
+                    read_size -= 20;
+                    printf("set read_size = %d\n", read_size);
+                    err = 0;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
     return false;
 }
 

@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.6.8"
+#define VERSION         "2.6.9"
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
@@ -29,7 +29,7 @@
 #define TODOLIST_PATH   "/tmp/TODOList"
 #define WL_CHANGED_PATH "/tmp/WL_Changed"
 #define CURL_FILE       "/tmp/Curlfile"
-#define TIMEOUT         "30"
+#define TIMEOUT         "10"
 #define CURL_CMD        "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' http://60.251.36.232:80/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
 #define UPDATE_MAX      200
 
