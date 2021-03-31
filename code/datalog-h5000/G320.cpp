@@ -4968,7 +4968,7 @@ bool CG320::GetHybridData(int index, int star_address, int data_count)
     //int flag = 0;
     byte *lpdata = NULL;
     unsigned char data_buf[160] = {0};
-    unsigned char szHBData[]={0x00, 0x03, 0x00, star_address, 0x00, data_count, 0x00, 0x00};
+    unsigned char szHBData[]={0x00, 0x03, 0x00, (unsigned char)star_address, 0x00, (unsigned char)data_count, 0x00, 0x00};
     szHBData[0]=arySNobj[index].m_Addr;
     time_t current_time;
 	struct tm *log_time;
