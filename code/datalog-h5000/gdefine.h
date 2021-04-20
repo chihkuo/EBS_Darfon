@@ -209,7 +209,7 @@ typedef struct stHybrid_Realtime_Info {
     int GridFeed_TotalL;
     int GridCharge_TotalH;
     int GridCharge_TotalL;
-    short External_Power; // OnGrid_Mode
+    short External_Power; // OnGrid_Mode //+-
     int Sys_State;
     int PV_Inv_Error_COD1_Record;
     int PV_Inv_Error_COD2_Record;
