@@ -22,7 +22,8 @@
 #define TODOLIST_PATH   "/tmp/TODOList"
 #define WL_CHANGED_PATH "/tmp/WL_Changed"
 
-#define TIMEZONE_URL    "http://ip-api.com/json"
+//#define TIMEZONE_URL    "http://ip-api.com/json"
+#define TIMEZONE_URL    "https://worldtimeapi.org/api/ip"
 //#define TIME_OFFSET_URL "http://svn.fonosfera.org/fon-ng/trunk/luci/modules/admin-fon/root/etc/timezones.db"
 #define TIME_OFFSET_URL "https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/luasrc/sys/zoneinfo/tzdata.lua"
 //#define KEY             "O10936IZHJTQ"
@@ -5893,17 +5894,22 @@ bool CG320::GetTimezone()
         } else if ( tmp[i] == '/' ) { // /, copy
             timezone[j] = tmp[i];
             j++;
-        } else if ( (tmp[i] == '+') || (tmp[i] == '-') ) { // + or -
-            if ( ('0' <= tmp[i+1]) && (tmp[i+1] <= '9') ) { // next byte is number 0 ~ 9, copy
+        } else if ( (tmp[i] == '+') || (tmp[i] == '-') ) { // + or - , copy
+            timezone[j] = tmp[i];
+            j++;
+            /*if ( ('0' <= tmp[i+1]) && (tmp[i+1] <= '9') ) { // next byte is number 0 ~ 9, copy
                 timezone[j] = tmp[i];
                 j++;
             } else { // next byte not number, set .
                 timezone[j] = '.';
                 j++;
-            }
-        } else { // other, all set .
-            timezone[j] = '.';
+            }*/
+        } else if ( tmp[i] == '_' ) { // _ , set to space
+            timezone[j] = ' ';
             j++;
+        } else { // other, do nothing
+            //timezone[j] = '.';
+            //j++;
         }
     }
     printf("Debug : timezone[] = %s\n", timezone);
