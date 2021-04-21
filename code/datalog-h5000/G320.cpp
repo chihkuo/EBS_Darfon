@@ -187,16 +187,16 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
     GetMAC();
     GetDLConfig();
 
+    // set save file path
+    GetLocalTime();
+    SetPath();
+    OpenLog(m_dl_path.m_syslog_path, m_st_time);
+
     // get time zone
     if ( first ) {
         GetTimezone();
         usleep(1000000);
     }
-
-    // set save file path
-    GetLocalTime();
-    SetPath();
-    OpenLog(m_dl_path.m_syslog_path, m_st_time);
 
     if ( open_com ) {
         port = szPort[com-1]; // COM1~4 <==> /dev/ttyS0~3 or ttyUSB0~3
@@ -5859,6 +5859,12 @@ bool CG320::GetTimezone()
     FILE *pFile = NULL;
     int i = 0, j = 0;
 
+    time_t current_time;
+    struct tm *log_time;
+    current_time = time(NULL);
+    log_time = localtime(&current_time);
+    SaveLog("DataLogger GetTimezone() run.", log_time);
+
     m_do_get_TZ = true;
     printf("\n########### Get Timezone ###########\n");
     // get timezone from ip
@@ -5913,6 +5919,9 @@ bool CG320::GetTimezone()
         }
     }
     printf("Debug : timezone[] = %s\n", timezone);
+    sprintf(tmp, "DataLogger GetTimezone() : timezone = [%s]", timezone);
+    SaveLog(tmp, log_time);
+
     if ( strlen(timezone) == 0 )
         return false;
 
@@ -5959,6 +5968,8 @@ bool CG320::GetTimezone()
         i++;
     }
     printf("Debug : time_offset[] = %s\n", time_offset);
+    sprintf(tmp, "DataLogger GetTimezone() : time_offset = [%s]", time_offset);
+    SaveLog(tmp, log_time);
 
     SetTimezone(zonename, time_offset);
     m_do_get_TZ = false;
