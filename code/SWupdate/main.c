@@ -16,7 +16,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "2.4.4"
+#define VERSION             "2.4.5"
 #define DLMODEL             "SBC700"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/SWupdate"
@@ -354,6 +354,9 @@ int QryDLSWUpdate()
         sprintf(buf, "SWupdate QryDLSWUpdate() : DLModel %s not match this board %s", myupdate.DLModel, DLMODEL);
         printf("%s\n", buf);
         SaveLog(buf, st_time);
+
+        memset(myupdate.SWURL, 0, sizeof(myupdate.SWURL));
+
         return 6;
     }
 
@@ -383,6 +386,8 @@ int QryDLSWUpdate()
                     printf("Download Fail\n");
                     sprintf(buf, "SWupdate QryDLSWUpdate() : Download %s to %s Fail", myupdate.SWURL, UPDATE_DIR);
                     SaveLog(buf, st_time);
+
+                    memset(myupdate.SWURL, 0, sizeof(myupdate.SWURL));
                 }
             }
             printf("======================= QryDLSWUpdate end =======================\n");
