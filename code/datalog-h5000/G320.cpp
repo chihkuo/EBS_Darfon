@@ -1048,6 +1048,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     // get power data
                     if ( GetHybridIDData(i) ) {
                         arySNobj[i].m_Err = 0;
+                        arySNobj[i].m_state = 1;
                         m_save_hb_id_data = true;
                     } else {
                         if ( m_loopflag == 0 )
@@ -1082,6 +1083,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
 
                     if ( GetHybridRSInfo(i) ) {
                         arySNobj[i].m_Err = 0;
+                        arySNobj[i].m_state = 1;
                         m_save_hb_rs_info = true;
                     } else {
                         if ( m_loopflag == 0 )
@@ -1100,6 +1102,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
 
                     if ( GetHybridRRSInfo(i) ) {
                         arySNobj[i].m_Err = 0;
+                        arySNobj[i].m_state = 1;
                         m_save_hb_rrs_info = true;
                     } else {
                         if ( m_loopflag == 0 )
@@ -1124,6 +1127,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     //if ( GetHybridRTInfo2(i) ) {
                     if ( GetHybridData(i, START_ADDRESS_RTINFO, COUNT_RTINFO) ) {
                         arySNobj[i].m_Err = 0;
+                        arySNobj[i].m_state = 1;
                         m_save_hb_rt_info = true;
                     } else {
                         if ( m_loopflag == 0 )
@@ -1151,6 +1155,7 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                         //        return -1;
 
                         arySNobj[i].m_Err = 0;
+                        arySNobj[i].m_state = 1;
                         //SetHybridBMSModule(i);
                         //SaveBMS();
                         m_save_hb_bms_info = true;
