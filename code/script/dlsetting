@@ -1,8 +1,8 @@
 
 config sms
-	option sms_server 'portal.darfon.com'
+	option sms_server 'http://portal.darfon.com'
 	option sms_port '8080'
-	option update_server 'portal.darfon.com'
+	option update_server 'http://portal.darfon.com'
 	option update_port '8080'
 	option sample_time '300'
 	option upload_time '300'
@@ -34,9 +34,9 @@ config comport
 	option com1_baud '9600'
 
 config swver
-	option dlver '2.7.3'
-	option dpver '2.7.3'
-	option fuver '1.2.4'
+	option dlver '2.7.4'
+	option dpver '2.7.4'
+	option fuver '1.2.5'
 	option dsver '1.0.0'
 
 config button

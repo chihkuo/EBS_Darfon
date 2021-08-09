@@ -138,6 +138,7 @@ protected:
     void    ParserHybridDDErrCOD2(int COD2);
     void    ParserHybridIconInfo(int Icon_L, int Icon_H);
     bool    GetHybridBMSInfo(int index);
+    bool    GetHybridBMSVer(int index);
     void    DumpHybridBMSInfo(unsigned char *buf);
     bool    SetHybridBMSModule(int index);
     bool    GetHybridPanasonicModule(int index);
@@ -215,6 +216,7 @@ protected:
     HB_DD_ERR_COD2  m_hb_dd_err_cod2;
     HB_ICON_INFO    m_hb_icon_info;
     HB_BMS_INFO     m_hb_bms_info;
+    unsigned short  m_hb_bms_ver;
 
     DL_CMD          m_dl_cmd;
     DL_CONFIG       m_dl_config;

@@ -100,6 +100,7 @@ CG320::CG320()
     m_hb_rrs_info = {0};
     m_hb_rt_info = {0};
     m_hb_bms_info = {0};
+    m_hb_bms_ver = 0;
     m_hb_pvinv_err_cod1 = {0};
     m_hb_pvinv_err_cod2 = {0};
     m_hb_pvinv_err_cod3 = {0};
@@ -1030,11 +1031,14 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                     CleanParameter();
 
                     // first set rtc time, and one day set one time
-                    if ( m_loopstate == 1 )
+                    if ( m_loopstate == 1 ) {
+                        GetHybridBMSVer(i);
                         SetHybridRTCData(i);
-                    else if ( m_loopstate == 2 ) {
-                        if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) )
+                    } else if ( m_loopstate == 2 ) {
+                        if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) ) {
+                            GetHybridBMSVer(i);
                             SetHybridRTCData(i);
+                        }
                     }
 
                     // get time
@@ -5544,6 +5548,56 @@ bool CG320::GetHybridBMSInfo(int index)
     return false;
 }
 
+bool CG320::GetHybridBMSVer(int index)
+{
+    printf("#### GetHybridBMSVer start ####\n");
+
+    int err = 0;
+    byte *lpdata = NULL;
+    time_t current_time;
+	struct tm *log_time;
+
+    unsigned char szHBBMSver[]={0x00, 0x03, 0x02, 0x71, 0x00, 0x01, 0x00, 0x00};
+    szHBBMSver[0]=arySNobj[index].m_Addr;
+    MakeReadDataCRC(szHBBMSver,8);
+
+    MClearRX();
+    txsize=8;
+    waitAddr = arySNobj[index].m_Addr;
+    waitFCode = 0x03;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, szHBBMSver, 8);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
+        lpdata = GetRespond(m_busfd, 7, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            printf("#### GetHybridBMSVer OK ####\n");
+            //SaveLog((char *)"DataLogger GetHybridBMSVer() : OK", log_time);
+            arySNobj[index].m_ok_time = time(NULL);
+            m_hb_bms_ver = (*(lpdata+3) << 8) + *(lpdata+4);
+            printf("m_hb_bms_ver = 0x%04X\n", m_hb_bms_ver);
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### GetHybridBMSVer CRC Error ####\n");
+                SaveLog((char *)"DataLogger GetHybridBMSVer() : CRC Error", log_time);
+            }
+            else {
+                printf("#### GetHybridBMSVer No Response ####\n");
+                SaveLog((char *)"DataLogger GetHybridBMSVer() : No Response", log_time);
+            }
+            err++;
+        }
+    }
+
+    return false;
+}
+
 void CG320::DumpHybridBMSInfo(unsigned char *buf)
 {
     m_hb_bms_info.Voltage = (*(buf) << 8) + *(buf+1);
@@ -6595,6 +6649,12 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<BMS_MinCell>%05.3f</BMS_MinCell>", ((float)m_hb_bms_info.BMS_Min_Cell/1000));
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<BMS_BaudRate>%d</BMS_BaudRate>", m_hb_bms_info.BMS_BaudRate);
+                strcat(m_log_buf, buf);
+            }
+
+            // set BMS ver
+            if ( m_hb_bms_ver ) {
+                sprintf(buf, "<BMS_Ver>%d</BMS_Ver>", m_hb_bms_ver);
                 strcat(m_log_buf, buf);
             }
 

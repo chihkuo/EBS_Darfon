@@ -129,6 +129,7 @@ unsigned char txbuffer[1544];//MODBUS_TX_BUFFER_SIZE
 int TRC_RECEIVED, TRC_TXIDLE, TRC_RXERROR, ZIGBEECMD_RECEIVED,ZIGBEECMD_RESPONSE_COUNT;
 bool have_respond = false;
 unsigned char respond_buff[4096];
+bool check_respond = false;
 
 /* for inverter/sensor */
 enum
@@ -1459,7 +1460,9 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
 	//p = pbuf;
 
 	memset(respond_buff, 0x00, 4096);
-    pbuf = respond_buff;
+	pbuf = respond_buff;
+	have_respond = false;
+	check_respond = false;
 	while (total_delat < delay) {
 
 
@@ -1474,7 +1477,7 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
         i=read(fd, pbuf, 4096); // get all data(if 0x00 start command), clean return data
         if (i==-1) {
             //printf("read error code=%d (%s) \n",errno, strerror(errno));
-            have_respond = false;
+            //have_respond = false;
             usleep(delay_time);
             total_delat += delay_time;
             continue;
@@ -1500,7 +1503,7 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
         if ( all_len >= iSize ) {
             DebugPrint(respond_buff, all_len, "Buffer");
             for (i = 0; i < all_len-6; i++) {
-                if ( respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode ) {
+                if ( (respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode) || (respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode+0x08) ) {
                     switch ( respond_buff[i+1] )
                     {
                         case 0x00: // query
@@ -1563,8 +1566,27 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                             }
                             break;
                         case 0x33:
+                            count = respond_buff[i+2];
+                            if ( CheckCRC(respond_buff+i, count+5) ) {
+                                DebugPrint(respond_buff+i, count+5, "0x33 Read recv");
+                                return respond_buff+i;
+                            }
+                            break;
+                        case 0x34:
+                            if ( CheckCRC(respond_buff+i, 8) ) {
+                                DebugPrint(respond_buff+i, 8, "0x34 Write recv");
+                                return respond_buff+i;
+                            }
+                            break;
+                        case 0x3B:
                             if ( CheckCRC(respond_buff+i, respond_buff[i+2]) ) {
                                 DebugPrint(respond_buff+i, respond_buff[i+2], "0x33 Read recv");
+                                return respond_buff+i;
+                            }
+                            break;
+                        case 0x3C:
+                            if ( CheckCRC(respond_buff+i, respond_buff[i+2]) ) {
+                                DebugPrint(respond_buff+i, respond_buff[i+2], "0x34 Read recv");
                                 return respond_buff+i;
                             }
                             break;
@@ -1659,7 +1681,19 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                     }
                 }
             }
-        }
+        } else {
+		printf("######## debug print 1 ########\n");
+		//DebugPrint(respond_buff, all_len, "Buffer");
+		//printf("wait Slave Address : 0x%02X, wait Function Code : 0x%02X \n", waitAddr, waitFCode);
+		for (i = 0; i < all_len-6; i++) {
+			if ( (respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode) || (respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode+0x08) ) {
+				if ( (all_len == 8) && (respond_buff[i+2] == 0) && (respond_buff[i+3] == 0) && (respond_buff[i+4] == 0) && (respond_buff[i+5] == 0) ) {
+					printf("######## debug print 2 ########\n");
+					check_respond = true;
+				}
+			}
+		}
+	}
 
         usleep(delay_time);
         total_delat += delay_time;
