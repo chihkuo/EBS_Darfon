@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.2.5"
+#define VERSION             "1.2.6"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' -k https://52.9.235.220:8443/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -644,14 +644,14 @@ int QryDeviceFWUpdate()
         fclose(mibfd);
     if ( hbufd )
         fclose(hbufd);
+    if ( batfd )
+        fclose(batfd);
     if ( plcfd )
         fclose(plcfd);
     if ( plcmfd )
         fclose(plcmfd);
     if ( decode_data )
         free(decode_data);
-    if ( batfd )
-        free(batfd);
 
     printf("======================= QryDeviceFWUpdate end =======================\n");
 
