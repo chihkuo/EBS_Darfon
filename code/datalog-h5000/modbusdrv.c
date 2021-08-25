@@ -1579,14 +1579,14 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
                             }
                             break;
                         case 0x3B:
-                            if ( CheckCRC(respond_buff+i, respond_buff[i+2]) ) {
-                                DebugPrint(respond_buff+i, respond_buff[i+2], "0x33 Read recv");
+                            if ( CheckCRC(respond_buff+i, count+5) ) {
+                                DebugPrint(respond_buff+i, count+5, "0x3B Read err recv");
                                 return respond_buff+i;
                             }
                             break;
                         case 0x3C:
-                            if ( CheckCRC(respond_buff+i, respond_buff[i+2]) ) {
-                                DebugPrint(respond_buff+i, respond_buff[i+2], "0x34 Read recv");
+                            if ( CheckCRC(respond_buff+i, 8) ) {
+                                DebugPrint(respond_buff+i, 8, "0x3C Write err recv");
                                 return respond_buff+i;
                             }
                             break;
@@ -1917,11 +1917,14 @@ void CleanRespond(int fd)
     int i = 0;
 
     printf("#### CleanRespond() start ####\n");
-	while ( i != -1 ) {
+	/*while ( i != -1 ) {
         //i=read(fdModbus, respond_buff, 4096);
         i=read(fd, respond_buff, 4096);
         if ( i > 0 )
             DebugPrint(respond_buff, i, "Clean");
-	}
+	}*/
+	i=read(fd, respond_buff, 4096);
+    if ( i > 0 )
+        DebugPrint(respond_buff, i, "Clean");
     printf("#### CleanRespond() clean OK ####\n");
 }

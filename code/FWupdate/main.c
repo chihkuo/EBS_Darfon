@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.2.6"
+#define VERSION             "1.2.7"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' -k https://52.9.235.220:8443/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -44,7 +44,7 @@
 #define SYSLOG_PATH         "/tmp/test/SYSLOG"
 #define MAX_DATA_SIZE       144
 #define MAX_HYBRID_SIZE     100
-#define MAX_BATTERY_SIZE    92
+#define MAX_BATTERY_SIZE    100
 
 #define	HYBRIDFW_FILE       "/mnt/hybridfw.tar.gz"
 //#define HYBRIDFW_LIST       "/mnt/hybridfwlist"
@@ -57,7 +57,7 @@ extern void MClearRX();
 extern void MStartTX(int fd);
 extern unsigned char *GetRespond(int fd, int iSize, int delay);
 extern void RemoveRegisterQuery(int fd, unsigned int byAddr);
-extern void CleanRespond();
+extern void CleanRespond(int fd);
 extern void initenv(char *init_name);
 extern unsigned short CalculateCRC(unsigned char *, unsigned int );
 
@@ -106,7 +106,7 @@ int Updheartbeattime(time_t time);
 // add battery fw update
 int RunStopBat(int loop, int slaveid);
 int RunStartBat(int loop, int slaveid);
-int GetBatInfo(int loop, int slaveid);
+int GetBatInfo(int loop, int slaveid, int retry);
 int GetBatVer(int loop, int slaveid);
 int GetSlaveInfo(int loop, int slaveid, int number);
 int SetControl(int loop, int slaveid, unsigned char value, int retry);
@@ -1207,7 +1207,7 @@ int RunStartBat(int loop, int slaveid)
     return ret;
 }
 
-int GetBatInfo(int loop, int slaveid)
+int GetBatInfo(int loop, int slaveid, int retry)
 {
     printf("\n#### GetBatInfo start ####\n");
 
@@ -1231,7 +1231,7 @@ int GetBatInfo(int loop, int slaveid)
     waitAddr = cmd[0];
     waitFCode = 0x33;
 
-    while ( err < 3 ) {
+    while ( err < retry ) {
         memcpy(txbuffer, cmd, 8);
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
@@ -1427,7 +1427,7 @@ int GetSlaveInfo(int loop, int slaveid, int number)
 {
     printf("\n#### GetSlaveInfo start ####\n");
 
-    int err = 0, ret = 0, i = 0;
+    int err = 0, ret = 0, i = 0, flag = 0;
     char buf[256] = {0}, log[1024] = {0};
     unsigned char *lpdata = NULL;
     time_t      current_time = 0;
@@ -1501,8 +1501,37 @@ int GetSlaveInfo(int loop, int slaveid, int number)
                 err++;
             } else {
                 printf("#### GetSlaveInfo OK ####\n");
-                SaveLog((char *)"FWupdate GetSlaveInfo() : OK", st_time);
-                ret = 0;
+                printf("#### Check slave ver ####\n");
+                for (i = 0; i < number; i++) {
+                    // check app ver
+                    if ( snlist[loop].ver != ((lpdata[i*12+5]<<8) + lpdata[i*12+6]) ) {
+                        sprintf(buf, "FWupdate GetSlaveInfo() : %d app ver 0x%02X%02X not match", i, lpdata[i*12+5], lpdata[i*12+6]);
+                        printf(buf);
+                        printf("\n");
+                        SaveLog(buf, st_time);
+                        flag++;
+                    }
+
+                    // check backup ver
+                    if ( snlist[loop].ver != ((lpdata[i*12+7]<<8) + lpdata[i*12+8]) ) {
+                        sprintf(buf, "FWupdate GetSlaveInfo() : %d backup ver 0x%02X%02X not match", i, lpdata[i*12+7], lpdata[i*12+8]);
+                        printf(buf);
+                        printf("\n");
+                        SaveLog(buf, st_time);
+                        flag++;
+                    }
+                }
+                // check result
+                if ( flag == 0 ) {
+                    printf("#### GetSlaveInfo Check slave ver OK ####\n");
+                    SaveLog((char *)"FWupdate GetSlaveInfo() : Check slave ver OK", st_time);
+                    ret = 0;
+                } else {
+                    printf("#### GetSlaveInfo Check slave ver Fail ####\n");
+                    SaveLog((char *)"FWupdate GetSlaveInfo() : Check slave ver Fail", st_time);
+                    ret = 3;
+                }
+                //SaveLog((char *)"FWupdate GetSlaveInfo() : OK", st_time);
                 break;
             }
         } else {
@@ -1687,7 +1716,7 @@ int SetHeader(int loop, int slaveid, unsigned char *header)
     waitAddr = cmd[0];
     waitFCode = 0x34;
 
-    while ( err < 3 ) {
+    while ( err < 60 ) {
         memcpy(txbuffer, cmd, 31);
         MStartTX(gcomportfd);
         //usleep(10000); // 0.01s
@@ -1775,23 +1804,25 @@ int StopBatFWUpdate(int loop, int slaveid)
 
     while (1) {
         memset(&mybatinfo, 0x00, sizeof(mybatinfo));
-        ret = GetBatInfo(loop, slaveid);
+        ret = GetBatInfo(loop, slaveid, 1);
         //if (ret)
         //    break;
 
         if ( mybatinfo.status == 3 ) {
             printf("status = 3, end.\n");
             break;
-        } else if ( mybatinfo.status == 0 || mybatinfo.status == 1 ) {
+        } else if ( mybatinfo.status == 0 ) {
+            printf("status = %d, burn_status = %d, wait!\n", mybatinfo.status, mybatinfo.burn_status);
+        } else if ( mybatinfo.status == 1 ) {
             printf("status = %d, send 0xE3\n", mybatinfo.status);
-            ret = SetControl(loop, slaveid, 0xE3, 3);
+            ret = SetControl(loop, slaveid, 0xE3, 1);
         } else if ( mybatinfo.status == 15 ) {
-            printf("status = 15, send 0xE2\n");
-            ret = SetControl(loop, slaveid, 0xE2, 3);
+            printf("status = %d, send 0xE2\n", mybatinfo.status);
+            ret = SetControl(loop, slaveid, 0xE2, 1);
         } else if ( mybatinfo.status == 2 ) {
             if ( mybatinfo.burn_status == 1 || mybatinfo.burn_status == 5 || mybatinfo.burn_status == 7 || mybatinfo.burn_status == 10 || mybatinfo.burn_status == 13 ) {
                 printf("status = %d, burn_status = %d, send 0xE2\n", mybatinfo.status, mybatinfo.burn_status);
-                ret = SetControl(loop, slaveid, 0xE2, 3);
+                ret = SetControl(loop, slaveid, 0xE2, 1);
             } else if ( mybatinfo.burn_status == 8 || mybatinfo.burn_status == 9 || mybatinfo.burn_status == 11 || mybatinfo.burn_status == 12 ) {
                 printf("status = %d, burn_status = %d, wait!\n", mybatinfo.status, mybatinfo.burn_status);
             }
@@ -1800,13 +1831,15 @@ int StopBatFWUpdate(int loop, int slaveid)
         current_time = time(NULL);
         printf("current_time = %ld\n", current_time);
         printf("%ld sec. passed\n", current_time - start_time);
-        if ( current_time - start_time >= (300*mybatinfo.BMS_number) ) {
+        //if ( current_time - start_time >= (300*mybatinfo.BMS_number) ) {
+        if ( current_time - start_time >= 900 ) {
             printf("Time out! end.\n");
+            SetControl(loop, slaveid, 0xE2, 1);
             ret = 10;
             break;
         }
 
-        usleep(1000000); // 1 sec.
+        usleep(3000000); // 1 sec.
 
     }
 
@@ -1828,59 +1861,69 @@ int CheckResult(int loop, int slaveid)
 
     while (1) {
         memset(&mybatinfo, 0x00, sizeof(mybatinfo));
-        ret = GetBatInfo(loop, slaveid);
+        ret = GetBatInfo(loop, slaveid, 1);
 
         current_time = time(NULL);
         st_time = localtime(&current_time);
 
-        if ( mybatinfo.status == 3 ) {
+        if ( ret == 0 ) {
+        //if ( mybatinfo.status == 3 ) {
             if ( snlist[loop].ver == mybatinfo.app_ver && snlist[loop].ver == mybatinfo.backup_ver ) {
-                snlist[loop].status = 0;
-                sprintf(buf, "FWupdate CheckResult() : ver 0x%04X update ok", snlist[loop].ver);
+                // check slave info
+                if ( mybatinfo.BMS_number > 1 ) {
+                    ret = GetSlaveInfo(loop, slaveid, mybatinfo.BMS_number-1);
+                    if ( ret == 0 ) {
+                        snlist[loop].status = 0;
+                        sprintf(buf, "FWupdate CheckResult() : ver 0x%04X update ok", snlist[loop].ver);
+                        printf(buf);
+                        printf("\n");
+                        SaveLog(buf, st_time);
+                        return 0;
+                    } else {
+                        snlist[loop].status = 58;
+                        printf("wait!\n");
+                    }
+                } else {
+                    snlist[loop].status = 0;
+                    sprintf(buf, "FWupdate CheckResult() : ver 0x%04X update ok", snlist[loop].ver);
+                    printf(buf);
+                    printf("\n");
+                    SaveLog(buf, st_time);
+                    return 0;
+                }
+            } else {
+                snlist[loop].status = 53;
+                sprintf(buf, "FWupdate CheckResult() : ver 0x%04X update fail, app 0x%04X, backup 0x%04X", snlist[loop].ver, mybatinfo.app_ver, mybatinfo.backup_ver);
                 printf(buf);
                 printf("\n");
                 SaveLog(buf, st_time);
-                ret = 0;
-                break;
-            } else {
-                snlist[loop].status = 53;
-                printf("FWupdate CheckResult() : ver 0x%04X, app 0x%04X, backup 0x%04X\n", snlist[loop].ver, mybatinfo.app_ver, mybatinfo.backup_ver);
             }
-        } else if ( mybatinfo.status == 0 || mybatinfo.status == 1 ) {
-            printf("status = %d, send 0xE3\n", mybatinfo.status);
-            SetControl(loop, slaveid, 0xE3, 3);
-        } else if ( mybatinfo.status == 2 ) {
-            printf("status = %d, send 0xE2\n", mybatinfo.status);
-            SetControl(loop, slaveid, 0xE2, 3);
+        //} else if ( mybatinfo.status == 0 || mybatinfo.status == 1 ) {
+        //    printf("status = %d, send 0xE3\n", mybatinfo.status);
+        //    SetControl(loop, slaveid, 0xE3, 1);
+        //} else if ( mybatinfo.status == 2 ) {
+        //    printf("status = %d, send 0xE2\n", mybatinfo.status);
+        //    SetControl(loop, slaveid, 0xE2, 1);
+        //}
         }
 
         current_time = time(NULL);
         printf("current_time = %ld\n", current_time);
         printf("%ld sec. passed\n", current_time - start_time);
-        if ( current_time - start_time >= 180 ) {
+        if ( current_time - start_time >= 60 ) {
             printf("Time out! end.\n");
-            ret = 1;
-            break;
+            sprintf(buf, "FWupdate CheckResult() : ver 0x%04X update fail", snlist[loop].ver);
+            printf(buf);
+            printf("\n");
+            SaveLog(buf, st_time);
+            return 1;
         }
 
         usleep(3000000); // 3 sec.
     }
 
-    if ( ret ) {
-        current_time = time(NULL);
-        st_time = localtime(&current_time);
-        sprintf(buf, "FWupdate CheckResult() : ver 0x%04X update fail, app 0x%04X, backup 0x%04X", snlist[loop].ver, mybatinfo.app_ver, mybatinfo.backup_ver);
-        printf(buf);
-        printf("\n");
-        SaveLog(buf, st_time);
-    }
+    return 2;
 
-    // save slave info
-    if ( mybatinfo.BMS_number > 1 ) {
-        ret = GetSlaveInfo(loop, slaveid, mybatinfo.BMS_number-1);
-    }
-
-    return ret;
 }
 
 int RunEnableP3(int slaveid)
@@ -2568,7 +2611,7 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
     printf("\n#### WriteBatData start ####\n");
 
     //int i = 0, err = 0, index = 0, numofdata = MAX_HYBRID_SIZE/2, writesize = MAX_HYBRID_SIZE, address = 0, cnt = 0, end = 0;
-    int i = 0, err = 0, index = 0, numofdata = 0, writesize = 0, address = 0, cnt = 0, end = 0, ret = 0, section_index = 0;
+    int i = 0, err = 0, index = 0, numofdata = 0, writesize = 0, address = 0, cnt = 0, ret = 0, section_index = 0; //end = 0;
     unsigned char addrh = 0, addrl = 0;
     unsigned char *lpdata = NULL;
     unsigned char read_buf[1036] = {0};
@@ -2584,7 +2627,12 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
     for (section_index = 0; section_index < section-1; section_index++) {
         if ( section_index != 0 ) {
             memset(&mybatinfo, 0x00, sizeof(mybatinfo));
-            ret = GetBatInfo(loop, slaveid);
+            ret = GetBatInfo(loop, slaveid, 40);
+            if ( ret ) {
+                printf("GetBatInfo fail timeout\n");
+                snlist[loop].status = 59;
+                break;
+            }
             if (mybatinfo.status != 2) {
                 printf("status = %d, stop\n", mybatinfo.status);
                 ret = mybatinfo.status;
@@ -2629,7 +2677,7 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
         waitFCode = cmd[1];
 
         err = 0;
-        while ( err < 3 ) {
+        while ( err < 40 ) {
             memcpy(txbuffer, cmd, 15);
             MStartTX(gcomportfd);
             usleep(100000); // 0.1s
@@ -2658,17 +2706,18 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
             }
             if ( lpdata ) {
                 // check result
-                if ( (lpdata[2] == 0) && (lpdata[3] == 0) && (lpdata[4] == 0) && (lpdata[5] == 0) ) {
+                if ( (lpdata[1] == waitFCode) && (lpdata[2] == 0) && (lpdata[3] == 0) && (lpdata[4] == 0) && (lpdata[5] == 0) ) {
                     // no response from bms
                     printf("#### WriteBatData No Response From BMS ####\n");
                     SaveLog((char *)"FWupdate WriteBatData() : No Response From BMS", st_time);
                     ret = 1;
                     snlist[loop].status = 38;
                     err++;
-                } else if ( lpdata[1] == 0x3C ) {
+                } else if ( lpdata[1] == waitFCode+0x08 ) {
                     // get error code
-                    sprintf(buf, "FWupdate WriteBatData() : Get Error Code %d", lpdata[1]);
+                    sprintf(buf, "FWupdate WriteBatData() : Get Error Code 0x%X", lpdata[1]);
                     printf(buf);
+                    printf("\n");
                     SaveLog(buf, st_time);
                     ret = 2;
                     snlist[loop].status = 39;
@@ -2749,7 +2798,7 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
             waitFCode = cmd[1];
 
             err = 0;
-            while ( err < 3 ) {
+            while ( err < 40 ) {
                 memcpy(txbuffer, cmd, txsize);
                 MStartTX(gcomportfd);
                 usleep(100000); // 0.1s
@@ -2778,7 +2827,7 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
                 }
                 if ( lpdata ) {
                     //lpdata = cmd; // for test
-                    if ( (lpdata[2] == addrh) && (lpdata[3] == addrl) && (lpdata[4] == 00) && (lpdata[5] == numofdata) ) {
+                    if ( (lpdata[1] == waitFCode) && (lpdata[2] == addrh) && (lpdata[3] == addrl) && (lpdata[4] == 00) && (lpdata[5] == numofdata) ) {
                         cnt++;
                         printf("#### WriteBatData data count %d, addr 0x%X, index 0x%X, size %d OK ####\n", cnt, address, index, writesize);
                         //sprintf(buf, "FWupdate WriteBatData() : write count %d, addr 0x%X, index 0x%X, size %d OK", cnt, address, index, writesize);
@@ -2799,10 +2848,11 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
                         ret = 1;
                         snlist[loop].status = 43;
                         err++;
-                    } else if ( lpdata[1] == 0x3C ) {
+                    } else if ( lpdata[1] == waitFCode+0x08 ) {
                         // get error code
-                        sprintf(buf, "FWupdate WriteBatData() : Get Error Code %d", lpdata[1]);
+                        sprintf(buf, "FWupdate WriteBatData() : Get Error Code 0x%X", lpdata[1]);
                         printf(buf);
+                        printf("\n");
                         SaveLog(buf, st_time);
                         ret = 2;
                         snlist[loop].status = 44;
@@ -2831,7 +2881,7 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
 
                     err++;
                     printf("#### WriteBatData GetRespond Error %d ####\n", err);
-                    if ( err == 3 ) {
+                    /*if ( err == 3 ) {
                         // check data size
                         if ( numofdata > 0x08 ) {
                             numofdata-=0x08;
@@ -2851,12 +2901,15 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
                             end = 1;
                             break;
                         }
-                    }
+                    }*/
                 }
             }
+            if ( ret ) {
+                return ret;
+            }
 
-            if ( end )
-                break;
+            //if ( end )
+            //    break;
         }
         if ( ret ) {
             return ret;
@@ -2913,7 +2966,7 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
         }
 
         err = 0;
-        while ( err < 3 ) {
+        while ( err < 40 ) {
             if ( section_index < section-2 )
                 memcpy(txbuffer, cmd, 11);
             else
@@ -2948,17 +3001,18 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
             }
             if ( lpdata ) {
                 // check result
-                if ( (lpdata[2] == 0) && (lpdata[3] == 0) && (lpdata[4] == 0) && (lpdata[5] == 0) ) {
+                if ( (lpdata[1] == waitFCode) && (lpdata[2] == 0) && (lpdata[3] == 0) && (lpdata[4] == 0) && (lpdata[5] == 0) ) {
                     // no response from bms
                     printf("#### WriteBatData No Response From BMS ####\n");
                     SaveLog((char *)"FWupdate WriteBatData() : No Response From BMS", st_time);
                     ret = 1;
                     snlist[loop].status = 48;
                     err++;
-                } else if ( lpdata[1] == 0x3C ) {
+                } else if ( lpdata[1] == waitFCode+0x08 ) {
                     // get error code
-                    sprintf(buf, "FWupdate WriteBatData() : Get Error Code %d", lpdata[1]);
+                    sprintf(buf, "FWupdate WriteBatData() : Get Error Code 0x%X", lpdata[1]);
                     printf(buf);
+                    printf("\n");
                     SaveLog(buf, st_time);
                     ret = 2;
                     snlist[loop].status = 49;
@@ -4115,13 +4169,13 @@ int GetHbFWData(char *list_path)
         // remove register
         if ( gcomportfd > 0 ) {
             RemoveRegisterQuery(gcomportfd, 0);
-            CleanRespond();
+            CleanRespond(gcomportfd);
             usleep(500000);
             RemoveRegisterQuery(gcomportfd, 0);
-            CleanRespond();
+            CleanRespond(gcomportfd);
             usleep(500000);
             RemoveRegisterQuery(gcomportfd, 0);
-            CleanRespond();
+            CleanRespond(gcomportfd);
             usleep(500000);
         }
         // register
@@ -4255,7 +4309,7 @@ int GetHbFWData(char *list_path)
 
 int RunBatFWUpdate(char *list_path)
 {
-    int i = 0, loop = 0, addr = 0, total_size = 0, retval = 0, clearsn = 0, clearfile = 0, retry = 0;
+    int i = 0, loop = 0, addr = 0, total_size = 0, retval = 0, clearsn = 0, clearfile = 0, retry = 0, fail_check = 0;
     unsigned short section = 0, section_size = 0, crc_tmp = 0;
     char strtmp[256] = {0}, valuetmp[16] = {0}; // for debug
     unsigned char read_buf[38] = {0}, crc_check[36] = {0};
@@ -4281,6 +4335,8 @@ int RunBatFWUpdate(char *list_path)
         CloseLog();
         system("sync");
         OpenLog(g_SYSLOG_PATH, st_time);
+
+        fail_check = 0;
 
         // open battery fw file
         pfile_fd = fopen(snlist[loop].FILE, "r");
@@ -4388,13 +4444,13 @@ int RunBatFWUpdate(char *list_path)
         // remove register
         if ( gcomportfd > 0 ) {
             RemoveRegisterQuery(gcomportfd, 0);
-            CleanRespond();
+            CleanRespond(gcomportfd);
             usleep(500000);
             RemoveRegisterQuery(gcomportfd, 0);
-            CleanRespond();
+            CleanRespond(gcomportfd);
             usleep(500000);
             RemoveRegisterQuery(gcomportfd, 0);
-            CleanRespond();
+            CleanRespond(gcomportfd);
             usleep(500000);
         }
 
@@ -4498,7 +4554,7 @@ int RunBatFWUpdate(char *list_path)
             // 2.5.3.2
             // send check bms info
             memset(&mybatinfo, 0x00, sizeof(mybatinfo));
-            retval = GetBatInfo(loop, gV2id);
+            retval = GetBatInfo(loop, gV2id, 40);
             if ( retval != 0 ) {
                 // delete the SN from list if stop time is not up
                 current_time = time(NULL);
@@ -4542,12 +4598,12 @@ int RunBatFWUpdate(char *list_path)
             // send enter update cmd. if status 3. app mode
             //mybatinfo.status = 3; // for test
             if ( mybatinfo.status == 3 ) {
-                retry = 3;
+                retry = 20;
                 while ( (mybatinfo.status == 3) && retry ) {
                     // send entry update cmd.
                     SetControl(loop, gV2id, 0xE0, 1);
                     usleep(1000000);
-                    GetBatInfo(loop, gV2id);
+                    retval = GetBatInfo(loop, gV2id, 3);
                     retry--;
                     //mybatinfo.status = 0; // for test
                 }
@@ -4592,150 +4648,26 @@ int RunBatFWUpdate(char *list_path)
                 //RunStartBat(loop, gV2id);
                 //continue;
             }
-
-            // 2.5.3.3
-            //mybatinfo.status = 0; // for test
-            if ( mybatinfo.status == 0 ) {
-                retry = 3;
-                while ( (mybatinfo.status != 1) && retry ) {
-                    // send entry update cmd.
-                    SetControl(loop, gV2id, 0xE0, 1);
-                    usleep(3000000);
-                    GetBatInfo(loop, gV2id);
-                    retry--;
-                    //mybatinfo.status = 1; // for test
-                }
-            } else {
-                // delete the SN from list if stop time is not up
-                /*current_time = time(NULL);
-                st_time = localtime(&current_time);
-                clearsn = 0;
-                if ( update_FW_start == update_FW_stop )
-                    clearsn = 1;
-                else if ( update_FW_start < update_FW_stop ) {
-                    if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
-                        clearsn = 1;
-                } else {
-                    if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
-                        clearsn = 1;
-                }
-                if ( clearsn ) {
-                    // delete first sn & file
-                    CLEANSN(snlist[loop].SN, snlist[loop].FILE, list_path);
-                    // search file in list, if exist, do not delete it
-                    for (i = loop+1; i < gsncount; i++ ) {
-                        if ( strcmp(snlist[loop].FILE, snlist[i].FILE) == 0 ) {
-                            clearfile = 0;
-                            break;
-                        } else
-                            clearfile = 1;
-                    }
-                    if ( loop == gsncount-1 )
-                        clearfile = 1;
-                    if ( clearfile ) {
-                        memset(strtmp, 0x00, 256);
-                        sprintf(strtmp, "rm %s; sync;", snlist[loop].FILE);
-                        system(strtmp);
-                    }
-                }*/
-
-                sprintf(strtmp, "FWupdate RunBatFWUpdate() : step 2.5.3.3 mybatinfo.status = %d, end", mybatinfo.status);
-                SaveLog(strtmp, st_time);
-                snlist[loop].status = 6;
-                //fclose(pfile_fd);
-                //RunStartBat(loop, gV2id);
-                //continue;
+            if ( retval ) {
+                fail_check = 1;
             }
 
-            // 2.5.3.4
-            //mybatinfo.status = 1; // for test
-            if ( mybatinfo.status == 1 ) {
-                retry = 3;
-                while ( !((mybatinfo.status == 2) && (mybatinfo.burn_status == 4)) && retry ) {
-                    // send entry update cmd.
-                    SetControl(loop, gV2id, 0xE1, 1);
-                    usleep(1000000);
-                    GetBatInfo(loop, gV2id);
-                    retry--;
-                    //mybatinfo.status = 2; // for test
-                    //mybatinfo.burn_status = 2; // for test
-                }
-
-                if ( ((mybatinfo.status == 2) && (mybatinfo.burn_status == 4)) ) {
-                    retry = 3;
-                    retval = 0;
-                    while ( retry ) {
-                        // send file header
-                        SetHeader(loop, gV2id, read_buf);
-                        usleep(1000000);
-                        GetBatInfo(loop, gV2id);
-                        if (mybatinfo.burn_status == 5 || mybatinfo.burn_status == 9 || mybatinfo.burn_status == 10 || mybatinfo.burn_status == 12 || mybatinfo.burn_status == 13) {
-                            retval = 1;
-                            break;
-                        } else if (mybatinfo.burn_status == 4) {
-                            retval = 2;
-                            break;
-                        } else if (mybatinfo.burn_status == 11) {
-                            retval = 3;
-                            break;
-                        } else if ( ((mybatinfo.status == 1) && (mybatinfo.burn_status == 2)) ) {
-                            retval = 4;
-                            break;
-                        } else {
-                            retval = 5;
-                            break;
-                        }
-
+            if ( fail_check == 0 ) {
+                // 2.5.3.3
+                //mybatinfo.status = 0; // for test
+                if ( mybatinfo.status == 0 ) {
+                    retry = 10;
+                    while ( (mybatinfo.status != 1) && retry ) {
+                        // send entry update cmd.
+                        SetControl(loop, gV2id, 0xE0, 1);
+                        usleep(3000000);
+                        retval = GetBatInfo(loop, gV2id, 3);
                         retry--;
+                        //mybatinfo.status = 1; // for test
                     }
-
-                    // check retval
-                    switch (retval)
-                    {
-                        case 1:
-                            printf("stop update\n");
-                            StopBatFWUpdate(loop, gV2id);
-                            usleep(1000000);
-                            CheckResult(loop, gV2id);
-                            RunStartBat(loop, gV2id);
-                            snlist[loop].status = 7;
-                            break;
-                        case 2:
-                            printf("start update\n");
-                            WriteBatData(loop, gV2id, section, section_size, pfile_fd);
-                            //usleep(1000000);
-                            StopBatFWUpdate(loop, gV2id);
-                            usleep(1000000);
-                            CheckResult(loop, gV2id);
-                            RunStartBat(loop, gV2id);
-                            break;
-                        case 3:
-                            printf("wait slave update\n");
-                            StopBatFWUpdate(loop, gV2id);
-                            usleep(1000000);
-                            CheckResult(loop, gV2id);
-                            RunStartBat(loop, gV2id);
-                            snlist[loop].status = 8;
-                            break;
-                        case 4:
-                            printf("same version\n");
-                            StopBatFWUpdate(loop, gV2id);
-                            usleep(1000000);
-                            CheckResult(loop, gV2id);
-                            RunStartBat(loop, gV2id);
-                            snlist[loop].status = 9;
-                            break;
-                        case 5:
-                            printf("unknow status\n");
-                            StopBatFWUpdate(loop, gV2id);
-                            usleep(1000000);
-                            CheckResult(loop, gV2id);
-                            RunStartBat(loop, gV2id);
-                            snlist[loop].status = 10;
-                            break;
-                    }
+                } else {
                     // delete the SN from list if stop time is not up
-                    current_time = time(NULL);
+                    /*current_time = time(NULL);
                     st_time = localtime(&current_time);
                     clearsn = 0;
                     if ( update_FW_start == update_FW_stop )
@@ -4765,8 +4697,185 @@ int RunBatFWUpdate(char *list_path)
                             sprintf(strtmp, "rm %s; sync;", snlist[loop].FILE);
                             system(strtmp);
                         }
+                    }*/
+
+                    sprintf(strtmp, "FWupdate RunBatFWUpdate() : step 2.5.3.3 mybatinfo.status = %d, end", mybatinfo.status);
+                    SaveLog(strtmp, st_time);
+                    snlist[loop].status = 6;
+                    //fclose(pfile_fd);
+                    //RunStartBat(loop, gV2id);
+                    //continue;
+                }
+                if ( retval ) {
+                    fail_check = 2;
+                }
+            }
+
+            if ( fail_check == 0 ) {
+                // 2.5.3.4
+                //mybatinfo.status = 1; // for test
+                if ( mybatinfo.status == 1 ) {
+                    retry = 20;
+                    while ( !((mybatinfo.status == 2) && (mybatinfo.burn_status == 4)) && retry ) {
+                        // send entry update cmd.
+                        SetControl(loop, gV2id, 0xE1, 1);
+                        usleep(1000000);
+                        retval = GetBatInfo(loop, gV2id, 3);
+                        retry--;
+                        //mybatinfo.status = 2; // for test
+                        //mybatinfo.burn_status = 2; // for test
                     }
 
+                    if ( ((mybatinfo.status == 2) && (mybatinfo.burn_status == 4)) ) {
+                        retry = 20;
+                        retval = 0;
+                        while ( retry ) {
+                            // send file header
+                            SetHeader(loop, gV2id, read_buf);
+                            usleep(1000000);
+                            GetBatInfo(loop, gV2id, 3);
+                            if (mybatinfo.burn_status == 5 || mybatinfo.burn_status == 9 || mybatinfo.burn_status == 10 || mybatinfo.burn_status == 12 || mybatinfo.burn_status == 13) {
+                                retval = 1;
+                                break;
+                            } else if (mybatinfo.burn_status == 4) {
+                                retval = 2;
+                                break;
+                            } else if (mybatinfo.burn_status == 11) {
+                                retval = 3;
+                                break;
+                            } else if ( ((mybatinfo.status == 1) && (mybatinfo.burn_status == 2)) ) {
+                                retval = 4;
+                                break;
+                            } else {
+                                retval = 5;
+                                break;
+                            }
+
+                            retry--;
+                        }
+
+                        // check retval
+                        switch (retval)
+                        {
+                            case 1:
+                                printf("stop update\n");
+                                StopBatFWUpdate(loop, gV2id);
+                                usleep(1000000);
+                                CheckResult(loop, gV2id);
+                                RunStartBat(loop, gV2id);
+                                snlist[loop].status = 7;
+                                break;
+                            case 2:
+                                printf("start update\n");
+                                WriteBatData(loop, gV2id, section, section_size, pfile_fd);
+                                //usleep(1000000);
+                                StopBatFWUpdate(loop, gV2id);
+                                usleep(1000000);
+                                CheckResult(loop, gV2id);
+                                RunStartBat(loop, gV2id);
+                                break;
+                            case 3:
+                                printf("wait slave update\n");
+                                StopBatFWUpdate(loop, gV2id);
+                                usleep(1000000);
+                                CheckResult(loop, gV2id);
+                                RunStartBat(loop, gV2id);
+                                snlist[loop].status = 8;
+                                break;
+                            case 4:
+                                printf("same version\n");
+                                StopBatFWUpdate(loop, gV2id);
+                                usleep(1000000);
+                                CheckResult(loop, gV2id);
+                                RunStartBat(loop, gV2id);
+                                snlist[loop].status = 9;
+                                break;
+                            case 5:
+                                printf("unknow status\n");
+                                StopBatFWUpdate(loop, gV2id);
+                                usleep(1000000);
+                                CheckResult(loop, gV2id);
+                                RunStartBat(loop, gV2id);
+                                snlist[loop].status = 10;
+                                break;
+                        }
+                        // delete the SN from list if stop time is not up
+                        current_time = time(NULL);
+                        st_time = localtime(&current_time);
+                        clearsn = 0;
+                        if ( update_FW_start == update_FW_stop )
+                            clearsn = 1;
+                        else if ( update_FW_start < update_FW_stop ) {
+                            if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
+                                clearsn = 1;
+                        } else {
+                            if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
+                                clearsn = 1;
+                        }
+                        if ( clearsn ) {
+                            // delete first sn & file
+                            CLEANSN(snlist[loop].SN, snlist[loop].FILE, list_path);
+                            // search file in list, if exist, do not delete it
+                            for (i = loop+1; i < gsncount; i++ ) {
+                                if ( strcmp(snlist[loop].FILE, snlist[i].FILE) == 0 ) {
+                                    clearfile = 0;
+                                    break;
+                                } else
+                                    clearfile = 1;
+                            }
+                            if ( loop == gsncount-1 )
+                                clearfile = 1;
+                            if ( clearfile ) {
+                                memset(strtmp, 0x00, 256);
+                                sprintf(strtmp, "rm %s; sync;", snlist[loop].FILE);
+                                system(strtmp);
+                            }
+                        }
+
+                    } else {
+                        // delete the SN from list if stop time is not up
+                        current_time = time(NULL);
+                        st_time = localtime(&current_time);
+                        clearsn = 0;
+                        if ( update_FW_start == update_FW_stop )
+                            clearsn = 1;
+                        else if ( update_FW_start < update_FW_stop ) {
+                            if ( (update_FW_start <= st_time->tm_hour) && (st_time->tm_hour < update_FW_stop) )
+                                clearsn = 1;
+                        } else {
+                            if ( (update_FW_start <= st_time->tm_hour) || (st_time->tm_hour < update_FW_stop) )
+                                clearsn = 1;
+                        }
+                        if ( clearsn ) {
+                            // delete first sn & file
+                            CLEANSN(snlist[loop].SN, snlist[loop].FILE, list_path);
+                            // search file in list, if exist, do not delete it
+                            for (i = loop+1; i < gsncount; i++ ) {
+                                if ( strcmp(snlist[loop].FILE, snlist[i].FILE) == 0 ) {
+                                    clearfile = 0;
+                                    break;
+                                } else
+                                    clearfile = 1;
+                            }
+                            if ( loop == gsncount-1 )
+                                clearfile = 1;
+                            if ( clearfile ) {
+                                memset(strtmp, 0x00, 256);
+                                sprintf(strtmp, "rm %s; sync;", snlist[loop].FILE);
+                                system(strtmp);
+                            }
+                        }
+
+                        sprintf(strtmp, "FWupdate RunBatFWUpdate() : step 2.5.3.4 step2 mybatinfo.status = %d, mybatinfo.burn_status = %d, end", mybatinfo.status, mybatinfo.burn_status);
+                        SaveLog(strtmp, st_time);
+                        StopBatFWUpdate(loop, gV2id);
+                        usleep(1000000);
+                        CheckResult(loop, gV2id);
+                        RunStartBat(loop, gV2id);
+                        snlist[loop].status = 54;
+                        fclose(pfile_fd);
+                        continue;
+                    }
                 } else {
                     // delete the SN from list if stop time is not up
                     current_time = time(NULL);
@@ -4801,11 +4910,14 @@ int RunBatFWUpdate(char *list_path)
                         }
                     }
 
-                    sprintf(strtmp, "FWupdate RunBatFWUpdate() : step 2.5.3.4 step2 mybatinfo.status = %d, mybatinfo.burn_status = %d, end", mybatinfo.status, mybatinfo.burn_status);
+                    sprintf(strtmp, "FWupdate RunBatFWUpdate() : step 2.5.3.4 step1 mybatinfo.status = %d, end", mybatinfo.status);
                     SaveLog(strtmp, st_time);
-                    snlist[loop].status = 54;
-                    fclose(pfile_fd);
+                    StopBatFWUpdate(loop, gV2id);
+                    usleep(1000000);
+                    CheckResult(loop, gV2id);
                     RunStartBat(loop, gV2id);
+                    snlist[loop].status = 55;
+                    fclose(pfile_fd);
                     continue;
                 }
             } else {
@@ -4842,11 +4954,14 @@ int RunBatFWUpdate(char *list_path)
                     }
                 }
 
-                sprintf(strtmp, "FWupdate RunBatFWUpdate() : step 2.5.3.4 step1 mybatinfo.status = %d, end", mybatinfo.status);
+                sprintf(strtmp, "FWupdate RunBatFWUpdate() : fail_check = %d, end", fail_check);
                 SaveLog(strtmp, st_time);
-                snlist[loop].status = 55;
-                fclose(pfile_fd);
+                StopBatFWUpdate(loop, gV2id);
+                usleep(1000000);
+                CheckResult(loop, gV2id);
                 RunStartBat(loop, gV2id);
+                snlist[loop].status = 60;
+                fclose(pfile_fd);
                 continue;
             }
 
@@ -5309,13 +5424,13 @@ int DoUpdate(char *list_path)
                 printf("Use V2.0 protocol\n");
 
                 RemoveRegisterQuery(gcomportfd, 0);
-                CleanRespond();
+                CleanRespond(gcomportfd);
                 usleep(500000);
                 RemoveRegisterQuery(gcomportfd, 0);
-                CleanRespond();
+                CleanRespond(gcomportfd);
                 usleep(500000);
                 RemoveRegisterQuery(gcomportfd, 0);
-                CleanRespond();
+                CleanRespond(gcomportfd);
                 usleep(500000);
             } else {
                 // success
@@ -5372,8 +5487,9 @@ int DoUpdate(char *list_path)
                 system(buf);
             }
         }
-        printf("sleep 30 sec. for test\n");
-        usleep(30000000); //for test
+        system("sync; sync");
+        printf("sleep 10 sec. for save log\n");
+        usleep(10000000); //for test
     } else {
         printf("Do nothing, list_path = %s\n", list_path);
     }
@@ -5525,7 +5641,7 @@ int CLEANSN(char *sn, char *file_path, char *list_path)
 {
     char buf[1024] = {0};
     FILE *sn_fd = NULL;
-    int snline = 0;
+    int snline = 0, ret = 0;
 
     sprintf(buf, "grep -n \"%s %s\" %s", sn, file_path, list_path);
     sn_fd = popen(buf, "r");
@@ -5536,10 +5652,14 @@ int CLEANSN(char *sn, char *file_path, char *list_path)
         sprintf(buf, "sed -i '%dd' %s", snline, list_path);
         printf("%s\n", buf);
         system(buf);
+        ret = 0;
     } else
-        return -1;
+        ret = -1;
 
-    return 0;
+    if ( sn_fd )
+        pclose(sn_fd);
+
+    return ret;
 }
 
 int Updheartbeattime(time_t time)

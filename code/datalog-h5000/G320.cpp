@@ -3053,13 +3053,13 @@ int CG320::WhiteListRegister()
 
 	if (m_snCount==0) {
         RemoveRegisterQuery(m_busfd, 0);
-        CleanRespond();
+        CleanRespond(m_busfd);
         usleep(500000);
         RemoveRegisterQuery(m_busfd, 0);
-        CleanRespond();
+        CleanRespond(m_busfd);
         usleep(500000);
         RemoveRegisterQuery(m_busfd, 0);
-        CleanRespond();
+        CleanRespond(m_busfd);
         usleep(500000);
 	}
 
@@ -3123,13 +3123,13 @@ int CG320::StartRegisterProcess()
 
 	if (m_snCount==0) {
         RemoveRegisterQuery(m_busfd, 0);
-        CleanRespond();
+        CleanRespond(m_busfd);
         usleep(500000);
         RemoveRegisterQuery(m_busfd, 0);
-        CleanRespond();
+        CleanRespond(m_busfd);
         usleep(500000);
         RemoveRegisterQuery(m_busfd, 0);
-        CleanRespond();
+        CleanRespond(m_busfd);
         usleep(500000);
 	}
 

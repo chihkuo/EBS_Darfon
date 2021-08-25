@@ -51,7 +51,7 @@ extern int ModbusDrvDeinit(int fd);
 extern unsigned char respond_buff[RESPOND_SIZE];
 extern unsigned char *GetRespond(int fd, int iSize, int delay);
 extern int GetQuery(int fd, unsigned char *buf, int buf_size);
-extern void CleanRespond();
+extern void CleanRespond(int fd);
 }
 
 class CG320
