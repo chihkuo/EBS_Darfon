@@ -1044,7 +1044,7 @@ int RunStopBat(int loop, int slaveid)
         // save debug log
         current_time = time(NULL);
         st_time = localtime(&current_time);
-        if ( have_respond ) {
+        if ( have_respond && (lpdata != NULL) ) {
             sprintf(log, "FWupdate RunStopBat() get :");
             for (i = 0; i < 8; i++) {
                 sprintf(buf, " %02X", lpdata[i]);
@@ -1147,7 +1147,7 @@ int RunStartBat(int loop, int slaveid)
         // save debug log
         current_time = time(NULL);
         st_time = localtime(&current_time);
-        if ( have_respond ) {
+        if ( have_respond && (lpdata != NULL) ) {
             sprintf(log, "FWupdate RunStartBat() get :");
             for (i = 0; i < 8; i++) {
                 sprintf(buf, " %02X", lpdata[i]);
@@ -1250,7 +1250,7 @@ int GetBatInfo(int loop, int slaveid, int retry)
         // save debug log
         current_time = time(NULL);
         st_time = localtime(&current_time);
-        if ( have_respond ) {
+        if ( have_respond && (lpdata != NULL) ) {
             if ( lpdata ) {
                 sprintf(log, "FWupdate GetBatInfo() get :");
                 for (i = 0; i < 21; i++) {
@@ -1375,7 +1375,7 @@ int GetBatVer(int loop, int slaveid)
         // save debug log
         current_time = time(NULL);
         st_time = localtime(&current_time);
-        if ( have_respond ) {
+        if ( have_respond && (lpdata != NULL) ) {
             if ( lpdata ) {
                 sprintf(log, "FWupdate GetBatVer() get :");
                 for (i = 0; i < 7; i++) {
@@ -1467,7 +1467,7 @@ int GetSlaveInfo(int loop, int slaveid, int number)
         // save debug log
         current_time = time(NULL);
         st_time = localtime(&current_time);
-        if ( have_respond ) {
+        if ( have_respond && (lpdata != NULL) ) {
             if ( lpdata ) {
                 sprintf(log, "FWupdate GetSlaveInfo() get :");
                 for (i = 0; i < 12*number+5; i++) {
@@ -1602,7 +1602,7 @@ int SetControl(int loop, int slaveid, unsigned char value, int retry)
         // save debug log
         current_time = time(NULL);
         st_time = localtime(&current_time);
-        if ( have_respond ) {
+        if ( have_respond && (lpdata != NULL) ) {
             sprintf(log, "FWupdate SetControl() get :");
             for (i = 0; i < 8; i++) {
                 sprintf(buf, " %02X", lpdata[i]);
@@ -1735,7 +1735,7 @@ int SetHeader(int loop, int slaveid, unsigned char *header)
         // save debug log
         current_time = time(NULL);
         st_time = localtime(&current_time);
-        if ( have_respond ) {
+        if ( have_respond && (lpdata != NULL) ) {
             sprintf(log, "FWupdate SetHeader() get :");
             for (i = 0; i < 8; i++) {
                 sprintf(buf, " %02X", lpdata[i]);
@@ -2380,7 +2380,7 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
 
         lpdata = GetRespond(gcomportfd, 8, delay_time_2); // uci setting
         // save debug log
-        if ( have_respond ) {
+        if ( have_respond && (lpdata != NULL) ) {
             current_time = time(NULL);
             st_time = localtime(&current_time);
 
@@ -2482,7 +2482,7 @@ int WriteHBData(int slaveid, unsigned char *fwdata, int datasize)
             current_time = time(NULL);
             st_time = localtime(&current_time);
             // save debug log
-            if ( have_respond ) {
+            if ( have_respond && (lpdata != NULL) ) {
                 sprintf(log, "FWupdate WriteHBData() get :");
                 for (i = 0; i < 8; i++) {
                     sprintf(buf, " %02X", lpdata[i]);
@@ -2696,7 +2696,7 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
             // save debug log
             current_time = time(NULL);
             st_time = localtime(&current_time);
-            if ( have_respond ) {
+            if ( have_respond && (lpdata != NULL) ) {
                 sprintf(log, "FWupdate WriteBatData() get :");
                 for (i = 0; i < 8; i++) {
                     sprintf(buf, " %02X", lpdata[i]);
@@ -2817,7 +2817,7 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
                 current_time = time(NULL);
                 st_time = localtime(&current_time);
                 // save debug log
-                if ( have_respond ) {
+                if ( have_respond && (lpdata != NULL) ) {
                     sprintf(log, "FWupdate WriteBatData() get :");
                     for (i = 0; i < 8; i++) {
                         sprintf(buf, " %02X", lpdata[i]);
@@ -2991,7 +2991,7 @@ int WriteBatData(int loop, int slaveid, unsigned short section, unsigned short s
             // save debug log
             current_time = time(NULL);
             st_time = localtime(&current_time);
-            if ( have_respond ) {
+            if ( have_respond && (lpdata != NULL) ) {
                 sprintf(log, "FWupdate WriteBatData() get :");
                 for (i = 0; i < 8; i++) {
                     sprintf(buf, " %02X", lpdata[i]);
@@ -3243,7 +3243,7 @@ int WriteDataV3(char *sn, unsigned char *fwdata, int datasize)
             current_time = time(NULL);
             st_time = localtime(&current_time);
             // save debug log
-            if ( have_respond ) {
+            if ( have_respond && (lpdata != NULL) ) {
                 sprintf(log, "FWupdate WriteDataV3() get :");
                 for (i = 0; i < 8; i++) {
                     sprintf(buf, " %02X", lpdata[i]);
