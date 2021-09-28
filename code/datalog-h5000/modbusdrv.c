@@ -1502,6 +1502,13 @@ unsigned char *GetRespond(int fd, int iSize, int delay)
 
         if ( all_len >= iSize ) {
             DebugPrint(respond_buff, all_len, "Buffer");
+            // add checksum
+            if ( all_len == iSize ) {
+                if ( !CheckCRC(respond_buff, iSize) ) {
+                    printf("#### CRC error! ####\n");
+                    return NULL;
+                }
+            }
             for (i = 0; i < all_len-6; i++) {
                 if ( (respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode) || (respond_buff[i] == waitAddr && respond_buff[i+1] == waitFCode+0x08) ) {
                     switch ( respond_buff[i+1] )
