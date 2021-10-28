@@ -113,6 +113,7 @@ protected:
     bool    GetMiPowerInfoV3(int index);
     void    DumpMiPowerInfo(unsigned char *buf);
 
+// H5000/5001
     bool    GetHybridIDData(int index);
     void    DumpHybridIDData(unsigned char *buf);
     bool    SetHybridIDData(int index);
@@ -145,6 +146,31 @@ protected:
     bool    SetHybridPanasonicModule(int index);
     bool    GetHybridBMSModule(int index, int module);
     bool    SetBMSFile(int index, int module);
+
+// H5500/9600
+    bool    GetHybrid2IDData(int index);
+    void    DumpHybrid2IDData(unsigned char *buf);
+    bool    SetHybrid2IDData(int index);
+    void    ParserHybrid2IDFlags(int flags);
+    void    DumpHybrid2RSInfo(unsigned char *buf);
+    bool    SetHybrid2RSInfo1(int index);
+    bool    SetHybrid2RSInfo2(int index);
+    void    ParserHybrid2RSFunctionFlags(int flags);
+    void    ParserHybrid2RSSoftwareFlags(int flags);
+    void    DumpHybrid2RTInfo(unsigned char *buf);
+    void    ParserHybrid2RTModuleFlags(int flags);
+    void    ParserHybrid2RTFunctionFlags(int flags);
+    void    ParserHybrid2PVInvErrCOD1(int COD1);
+    void    ParserHybrid2PVInvErrCOD2(int COD2);
+    void    ParserHybrid2PVInvErrCOD3(int COD3);
+    void    ParserHybrid2DDErrCOD1(int COD1);
+    void    ParserHybrid2DDErrCOD2(int COD2);
+    void    DumpHybrid2CEValue(unsigned char *buf);
+    void    DumpHybrid2DPInfo(unsigned char *buf);
+    void    ParserHybrid2IconInfo(int Icon_L, int Icon_H);
+    void    DumpHybrid2RTCData(unsigned char *buf);
+    bool    SetHybrid2RTCData(int index);
+    void    DumpHybrid2BMSInfo(unsigned char *buf);
 
     bool    GetTimezone();
     void    SetTimezone(char *zonename, char *timazone);
@@ -198,6 +224,12 @@ protected:
     bool    m_save_hb_rt_info;
     bool    m_save_hb_bms_info;
     int     read_size;
+    bool    m_save_hb2_id_data;
+    bool    m_save_hb2_rs_info;
+    bool    m_save_hb2_rt_info;
+    bool    m_save_hb2_ce_value;
+    bool    m_save_hb2_dp_info;
+    bool    m_save_hb2_bms_info;
 
     MI_ID_INFO      m_mi_id_info;
     MI_POWER_INFO   m_mi_power_info;
@@ -217,6 +249,25 @@ protected:
     HB_ICON_INFO    m_hb_icon_info;
     HB_BMS_INFO     m_hb_bms_info;
     unsigned short  m_hb_bms_ver;
+
+    HB2_ID_DATA     m_hb2_id_data;
+    HB2_ID_FLAGS    m_hb2_id_flags;
+    HB2_RS_INFO     m_hb2_rs_info;
+    HB2_RS_F_FLAGS  m_hb2_rs_f_flags;
+    HB2_RS_S_FLAGS  m_hb2_rs_s_flags;
+    HB2_RT_INFO     m_hb2_rt_info;
+    HB2_RT_M_FLAGS  m_hb2_rt_m_flags;
+    HB2_RT_F_FLAGS  m_hb2_rt_f_flags;
+    HB2_PVINV_ERR_COD1  m_hb2_pvinv_err_cod1;
+    HB2_PVINV_ERR_COD2  m_hb2_pvinv_err_cod2;
+    HB2_PVINV_ERR_COD3  m_hb2_pvinv_err_cod3;
+    HB2_DD_ERR_COD1 m_hb2_dd_err_cod1;
+    HB2_DD_ERR_COD2 m_hb2_dd_err_cod2;
+    HB2_CE_VALUE    m_hb2_ce_value;
+    HB2_DP_INFO     m_hb2_dp_info;
+    HB2_ICON_INFO   m_hb2_icon_info;
+    HB2_RTC_DATA    m_hb2_rtc_data;
+    HB2_BMS_INFO    m_hb2_bms_info;
 
     DL_CMD          m_dl_cmd;
     DL_CONFIG       m_dl_config;

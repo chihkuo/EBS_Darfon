@@ -43,6 +43,22 @@
 #define COUNT_RRSINFO           32
 #define COUNT_RTINFO            160
 
+#define HB2_START_ADDRESS_ID        0x01
+#define HB2_START_ADDRESS_RSINFO    0xB0
+#define HB2_START_ADDRESS_RSINFO2   0xC0
+#define HB2_START_ADDRESS_RTINFO    0x100
+#define HB2_START_ADDRESS_CEVALUE   0x160
+#define HB2_START_ADDRESS_DPINFO    0x1A0
+#define HB2_START_ADDRESS_RTC       0x1D0
+#define HB2_START_ADDRESS_BMSINFO   0x200
+#define HB2_COUNT_ID                30
+#define HB2_COUNT_RSINFO            128
+#define HB2_COUNT_RTINFO            96
+#define HB2_COUNT_CEVALUE           128
+#define HB2_COUNT_DPINFO            32
+#define HB2_COUNT_RTC               16
+#define HB2_COUNT_BMSINFO           64
+
 extern "C"
 {
     #include "../common/SaveLog.h"
@@ -116,6 +132,30 @@ CG320::CG320()
     m_save_hb_rt_info= false;
     m_save_hb_bms_info= false;
     read_size = 100;
+    m_hb2_id_data = {0};
+    m_hb2_id_flags = {0};
+    m_hb2_rs_info = {0};
+    m_hb2_rs_f_flags = {0};
+    m_hb2_rs_s_flags = {0};
+    m_hb2_rt_info = {0};
+    m_hb2_rt_m_flags = {0};
+    m_hb2_rt_f_flags = {0};
+    m_hb2_pvinv_err_cod1 = {0};
+    m_hb2_pvinv_err_cod2 = {0};
+    m_hb2_pvinv_err_cod3 = {0};
+    m_hb2_dd_err_cod1 = {0};
+    m_hb2_dd_err_cod2 = {0};
+    m_hb2_ce_value = {0};
+    m_hb2_dp_info = {0};
+    m_hb2_icon_info = {0};
+    m_hb2_rtc_data = {0};
+    m_hb2_bms_info = {0};
+    m_save_hb2_id_data = false;
+    m_save_hb2_rs_info = false;
+    m_save_hb2_rt_info = false;
+    m_save_hb2_ce_value = false;
+    m_save_hb2_dp_info = false;
+    m_save_hb2_bms_info = false;
     memset(m_log_buf, 0x00, LOG_BUF_SIZE);
     memset(m_log_filename, 0x00, 128);
     memset(m_errlog_buf, 0x00, LOG_BUF_SIZE);
@@ -129,6 +169,7 @@ CG320::CG320()
         arySNobj[i].m_Addr=i+m_addr; // address range 1 ~ 253
         memset(arySNobj[i].m_Sn, 0x00, 17);
         arySNobj[i].m_Device = -2;
+        arySNobj[i].m_Model = 0;
         arySNobj[i].m_Err = 0;
         arySNobj[i].m_state = 0;
         arySNobj[i].m_FWver = 0;
@@ -175,6 +216,7 @@ int CG320::Init(int addr, int com, bool open_com, bool first, int busfd)
             arySNobj[i].m_Addr = 253;
         memset(arySNobj[i].m_Sn, 0x00, 17);
         arySNobj[i].m_Device = -2;
+        arySNobj[i].m_Model = 0;
         arySNobj[i].m_Err = 0;
         arySNobj[i].m_state = 0;
         arySNobj[i].m_FWver = 0;
@@ -1027,129 +1069,43 @@ int CG320::GetData(time_t data_time, bool first, bool last)
 
                 } else {
                 // Hybrid part
-                    // clean
+                    // clean, all function done, to modify.
                     CleanParameter();
 
-                    // first set rtc time, and one day set one time
-                    if ( m_loopstate == 1 ) {
-                        GetHybridBMSVer(i);
-                        SetHybridRTCData(i);
-                    } else if ( m_loopstate == 2 ) {
-                        if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) ) {
+                    if ( arySNobj[i].m_Model < 16 ) { // H5000/5001
+                        printf("H5000/5001 series\n");
+
+                        // first set rtc time, and one day set one time
+                        if ( m_loopstate == 1 ) {
                             GetHybridBMSVer(i);
                             SetHybridRTCData(i);
+                        } else if ( m_loopstate == 2 ) {
+                            if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) ) {
+                                GetHybridBMSVer(i);
+                                SetHybridRTCData(i);
+                            }
                         }
-                    }
 
-                    // get time
-                    current_time = time(NULL);
-                    m_st_time = localtime(&current_time);
-                    // get data time not 0 min. current time is 0 min.
-                    //if ( m_data_st_time.tm_min != 0 )
-                    //    if ( m_st_time->tm_min == 0 )
-                    //        return -1;
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+                        // get data time not 0 min. current time is 0 min.
+                        //if ( m_data_st_time.tm_min != 0 )
+                        //    if ( m_st_time->tm_min == 0 )
+                        //        return -1;
 
-                    // get power data
-                    if ( GetHybridIDData(i) ) {
-                        arySNobj[i].m_Err = 0;
-                        arySNobj[i].m_state = 1;
-                        m_save_hb_id_data = true;
-                    } else {
-                        if ( m_loopflag == 0 )
-                            arySNobj[i].m_Err++;
-                        m_loopflag++;
-                        m_save_hb_id_data = false;
-                    }
+                        // get power data
+                        if ( GetHybridIDData(i) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb_id_data = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb_id_data = false;
+                        }
 
-                    // get time
-                    //current_time = time(NULL);
-                    //m_st_time = localtime(&current_time);
-                    // get data time not 0 min. current time is 0 min.
-                    //if ( m_data_st_time.tm_min != 0 )
-                    //    if ( m_st_time->tm_min == 0 )
-                    //        return -1;
-
-                    /*if ( GetHybridRTCData(i) )
-                        arySNobj[i].m_Err = 0;
-                    else {
-                        if ( m_loopflag == 0 )
-                            arySNobj[i].m_Err++;
-                        m_loopflag++;
-                    }*/
-
-                    // get time
-                    current_time = time(NULL);
-                    m_st_time = localtime(&current_time);
-                    // get data time not 0 min. current time is 0 min.
-                    //if ( m_data_st_time.tm_min != 0 )
-                    //    if ( m_st_time->tm_min == 0 )
-                    //        return -1;
-
-                    if ( GetHybridRSInfo(i) ) {
-                        arySNobj[i].m_Err = 0;
-                        arySNobj[i].m_state = 1;
-                        m_save_hb_rs_info = true;
-                    } else {
-                        if ( m_loopflag == 0 )
-                            arySNobj[i].m_Err++;
-                        m_loopflag++;
-                        m_save_hb_rs_info = false;
-                    }
-
-                    // get time
-                    current_time = time(NULL);
-                    m_st_time = localtime(&current_time);
-                    // get data time not 0 min. current time is 0 min.
-                    //if ( m_data_st_time.tm_min != 0 )
-                    //    if ( m_st_time->tm_min == 0 )
-                    //        return -1;
-
-                    if ( GetHybridRRSInfo(i) ) {
-                        arySNobj[i].m_Err = 0;
-                        arySNobj[i].m_state = 1;
-                        m_save_hb_rrs_info = true;
-                    } else {
-                        if ( m_loopflag == 0 )
-                            arySNobj[i].m_Err++;
-                        m_loopflag++;
-                        m_save_hb_rrs_info = false;
-                    }
-
-                    // get time
-                    current_time = time(NULL);
-                    m_st_time = localtime(&current_time);
-                    // get data time not 0 min. current time is 0 min.
-                    //if ( m_data_st_time.tm_min != 0 )
-                    //    if ( m_st_time->tm_min == 0 )
-                    //        return -1;
-
-                    // for test only
-                    //GetHybridData(i, START_ADDRESS_ID, COUNT_ID);
-                    //GetHybridData(i, START_ADDRESS_RTC, COUNT_RTC);
-                    //GetHybridData(i, START_ADDRESS_RSINFO, COUNT_RSINFO);
-                    //GetHybridData(i, START_ADDRESS_RRSINFO, COUNT_RRSINFO);
-                    //if ( GetHybridRTInfo2(i) ) {
-                    if ( GetHybridData(i, START_ADDRESS_RTINFO, COUNT_RTINFO) ) {
-                        arySNobj[i].m_Err = 0;
-                        arySNobj[i].m_state = 1;
-                        m_save_hb_rt_info = true;
-                    } else {
-                        if ( m_loopflag == 0 )
-                            arySNobj[i].m_Err++;
-                        m_loopflag++;
-                        m_save_hb_rt_info = false;
-                    }
-
-                    // get time
-                    current_time = time(NULL);
-                    m_st_time = localtime(&current_time);
-                    // get data time not 0 min. current time is 0 min.
-                    //if ( m_data_st_time.tm_min != 0 )
-                    //    if ( m_st_time->tm_min == 0 )
-                    //        return -1;
-
-                    SetBMSPath(i);
-                    if ( GetHybridBMSInfo(i) ) {
                         // get time
                         //current_time = time(NULL);
                         //m_st_time = localtime(&current_time);
@@ -1158,33 +1114,244 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                         //    if ( m_st_time->tm_min == 0 )
                         //        return -1;
 
-                        arySNobj[i].m_Err = 0;
-                        arySNobj[i].m_state = 1;
-                        //SetHybridBMSModule(i);
-                        //SaveBMS();
-                        m_save_hb_bms_info = true;
-                    } else {
-                        if ( m_loopflag == 0 )
-                            arySNobj[i].m_Err++;
-                        m_loopflag++;
-                        m_save_hb_bms_info = false;
-                    }
+                        /*if ( GetHybridRTCData(i) )
+                            arySNobj[i].m_Err = 0;
+                        else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                        }*/
 
-                    // get time
-                    current_time = time(NULL);
-                    m_st_time = localtime(&current_time);
-                    // get data time not 0 min. current time is 0 min.
-                    //if ( m_data_st_time.tm_min != 0 )
-                    //    if ( m_st_time->tm_min == 0 )
-                    //        return -1;
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+                        // get data time not 0 min. current time is 0 min.
+                        //if ( m_data_st_time.tm_min != 0 )
+                        //    if ( m_st_time->tm_min == 0 )
+                        //        return -1;
 
-                    WriteLogXML(i);
-                    if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.PV_Inv_Error_COD3_Record ||
-                         m_hb_rt_info.DD_Error_COD_Record || m_hb_rt_info.DD_Error_COD2_Record || m_inverter_state ||
-                        (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
-                        WriteErrorLogXML(i);
+                        if ( GetHybridRSInfo(i) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb_rs_info = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb_rs_info = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+                        // get data time not 0 min. current time is 0 min.
+                        //if ( m_data_st_time.tm_min != 0 )
+                        //    if ( m_st_time->tm_min == 0 )
+                        //        return -1;
+
+                        if ( GetHybridRRSInfo(i) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb_rrs_info = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb_rrs_info = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+                        // get data time not 0 min. current time is 0 min.
+                        //if ( m_data_st_time.tm_min != 0 )
+                        //    if ( m_st_time->tm_min == 0 )
+                        //        return -1;
+
+                        // for test only
+                        //GetHybridData(i, START_ADDRESS_ID, COUNT_ID);
+                        //GetHybridData(i, START_ADDRESS_RTC, COUNT_RTC);
+                        //GetHybridData(i, START_ADDRESS_RSINFO, COUNT_RSINFO);
+                        //GetHybridData(i, START_ADDRESS_RRSINFO, COUNT_RRSINFO);
+                        //if ( GetHybridRTInfo2(i) ) {
+                        if ( GetHybridData(i, START_ADDRESS_RTINFO, COUNT_RTINFO) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb_rt_info = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb_rt_info = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+                        // get data time not 0 min. current time is 0 min.
+                        //if ( m_data_st_time.tm_min != 0 )
+                        //    if ( m_st_time->tm_min == 0 )
+                        //        return -1;
+
+                        SetBMSPath(i);
+                        if ( GetHybridBMSInfo(i) ) {
+                            // get time
+                            //current_time = time(NULL);
+                            //m_st_time = localtime(&current_time);
+                            // get data time not 0 min. current time is 0 min.
+                            //if ( m_data_st_time.tm_min != 0 )
+                            //    if ( m_st_time->tm_min == 0 )
+                            //        return -1;
+
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            //SetHybridBMSModule(i);
+                            //SaveBMS();
+                            m_save_hb_bms_info = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb_bms_info = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+                        // get data time not 0 min. current time is 0 min.
+                        //if ( m_data_st_time.tm_min != 0 )
+                        //    if ( m_st_time->tm_min == 0 )
+                        //        return -1;
+
+                        WriteLogXML(i);
+                        if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.PV_Inv_Error_COD3_Record ||
+                             m_hb_rt_info.DD_Error_COD_Record || m_hb_rt_info.DD_Error_COD2_Record || m_inverter_state ||
+                            (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
+                            WriteErrorLogXML(i);
+                        }
+                        dosave = true;
+                    } else { // H5500/9600
+                        printf("H5500/9600 series\n");
+
+                        //GetHybridData(i, HB2_START_ADDRESS_RTC, HB2_COUNT_RTC);
+                        // first set rtc time, and one day set one time
+                        if ( m_loopstate == 1 ) {
+                            GetHybridBMSVer(i);
+                            SetHybrid2RTCData(i);
+                        } else if ( m_loopstate == 2 ) {
+                            if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) ) {
+                                GetHybridBMSVer(i);
+                                SetHybrid2RTCData(i);
+                            }
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+
+                        // get power data
+                        //if ( GetHybrid2IDData(i) ) {
+                        if ( GetHybridData(i, HB2_START_ADDRESS_ID, HB2_COUNT_ID) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb2_id_data = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb2_id_data = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+
+                        if ( GetHybridData(i, HB2_START_ADDRESS_RSINFO, HB2_COUNT_RSINFO) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb2_rs_info = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb2_rs_info = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+
+                        if ( GetHybridData(i, HB2_START_ADDRESS_RTINFO, HB2_COUNT_RTINFO) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb2_rt_info = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb2_rt_info = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+
+                        if ( GetHybridData(i, HB2_START_ADDRESS_CEVALUE, HB2_COUNT_CEVALUE) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb2_ce_value = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb2_ce_value = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+
+                        if ( GetHybridData(i, HB2_START_ADDRESS_DPINFO, HB2_COUNT_DPINFO) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb2_dp_info = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb2_dp_info = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+
+                        SetBMSPath(i);
+                        if ( GetHybridData(i, HB2_START_ADDRESS_BMSINFO, HB2_COUNT_BMSINFO) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            //SetHybridBMSModule(i);
+                            //SaveBMS();
+                            m_save_hb2_bms_info = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb2_bms_info = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+
+                        WriteLogXML(i);
+                        if ( m_hb2_rt_info.Error_Code || m_hb2_rt_info.PV_Inv_Error_COD1_Record || m_hb2_rt_info.PV_Inv_Error_COD2_Record || m_hb2_rt_info.PV_Inv_Error_COD3_Record ||
+                             m_hb2_rt_info.DD_Error_COD1_Record || m_hb2_rt_info.DD_Error_COD2_Record || m_inverter_state ||
+                            (m_sys_error && (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0)) ) {
+                            WriteErrorLogXML(i);
+                        }
+                        dosave = true;
                     }
-                    dosave = true;
                 }
             } else {
                 printf("Addr %d SN %s Error 3 times, call ReRegister() later\n", arySNobj[i].m_Addr, arySNobj[i].m_Sn);
@@ -1663,7 +1830,36 @@ void CG320::CleanParameter()
     m_hb_dd_err_cod = {0};
     m_hb_dd_err_cod2 = {0};
     m_hb_icon_info = {0};
+    m_save_hb_id_data = false;
+    m_save_hb_rs_info = false;
+    m_save_hb_rrs_info = false;
+    m_save_hb_rt_info = false;
+    m_save_hb_bms_info = false;
     m_inverter_state = 0;
+    m_hb2_id_data = {0};
+    m_hb2_id_flags = {0};
+    m_hb2_rs_info = {0};
+    m_hb2_rs_f_flags = {0};
+    m_hb2_rs_s_flags = {0};
+    m_hb2_rt_info = {0};
+    m_hb2_rt_m_flags = {0};
+    m_hb2_rt_f_flags = {0};
+    m_hb2_pvinv_err_cod1 = {0};
+    m_hb2_pvinv_err_cod2 = {0};
+    m_hb2_pvinv_err_cod3 = {0};
+    m_hb2_dd_err_cod1 = {0};
+    m_hb2_dd_err_cod2 = {0};
+    m_hb2_ce_value = {0};
+    m_hb2_dp_info = {0};
+    m_hb2_icon_info = {0};
+    m_hb_rtc_data = {0};
+    m_hb2_bms_info = {0};
+    m_save_hb2_id_data = false;
+    m_save_hb2_rs_info = false;
+    m_save_hb2_rt_info = false;
+    m_save_hb2_ce_value = false;
+    m_save_hb2_dp_info = false;
+    m_save_hb2_bms_info = false;
 
     return;
 }
@@ -1759,70 +1955,138 @@ bool CG320::RunTODOList()
                     // check device type
                     if ( arySNobj[i].m_Device >= 0x0A ) {
                         // Hybrid
-                        switch (m_dl_cmd.m_addr)
-                        {
-                            case 0x01:
-                                m_hb_id_data.Grid_Voltage = m_dl_cmd.m_data[0];
-                                m_hb_id_data.Model = m_dl_cmd.m_data[1] & 0x00FF;
-                                m_hb_id_data.HW_Ver = (m_dl_cmd.m_data[1] >> 8) & 0xFF;
-                                m_hb_id_data.SN_Hi = m_dl_cmd.m_data[2];
-                                m_hb_id_data.SN_Lo = m_dl_cmd.m_data[3];
-                                m_hb_id_data.Year = m_dl_cmd.m_data[4];
-                                m_hb_id_data.Month = m_dl_cmd.m_data[5];
-                                m_hb_id_data.Date = m_dl_cmd.m_data[6];
-                                m_hb_id_data.Inverter_Ver = m_dl_cmd.m_data[7];
-                                m_hb_id_data.DD_Ver = m_dl_cmd.m_data[8];
-                                m_hb_id_data.EEPROM_Ver = m_dl_cmd.m_data[9];
-                                m_hb_id_data.Display_Ver = m_dl_cmd.m_data[10];
-                                m_hb_id_data.Flags1 = m_dl_cmd.m_data[12];
-                                m_hb_id_data.Flags2 = m_dl_cmd.m_data[13];
-                                SaveLog((char *)"DataLogger RunTODOList() : run SetHybridIDData()", m_st_time);
-                                SetHybridIDData(i);
-                                break;
-                            case 0x90:
-                                m_hb_rs_info.Mode = m_dl_cmd.m_data[0];
-                                m_hb_rs_info.StarHour = m_dl_cmd.m_data[1];
-                                m_hb_rs_info.StarMin = m_dl_cmd.m_data[2];
-                                m_hb_rs_info.EndHour = m_dl_cmd.m_data[3];
-                                m_hb_rs_info.EndMin = m_dl_cmd.m_data[4];
-                                m_hb_rs_info.MultiModuleSetting = m_dl_cmd.m_data[5];
-                                m_hb_rs_info.BatteryType = m_dl_cmd.m_data[6];
-                                m_hb_rs_info.BatteryCurrent = m_dl_cmd.m_data[7];
-                                m_hb_rs_info.BatteryShutdownVoltage = m_dl_cmd.m_data[8];
-                                m_hb_rs_info.BatteryFloatingVoltage = m_dl_cmd.m_data[9];
-                                m_hb_rs_info.BatteryReservePercentage = m_dl_cmd.m_data[10];
-                                m_hb_rs_info.PeakShavingPower = m_dl_cmd.m_data[11];
-                                m_hb_rs_info.StartFrequency = m_dl_cmd.m_data[12];
-                                m_hb_rs_info.EndFrequency = m_dl_cmd.m_data[13];
-                                m_hb_rs_info.FeedinPower = m_dl_cmd.m_data[14];
-                                SaveLog((char *)"DataLogger RunTODOList() : run SetHybridRSInfo()", m_st_time);
-                                SetHybridRSInfo(i);
-                                break;
-                            case 0xA0:
-                                // now not work (read ok, write fail)
-                                m_hb_rrs_info.ChargeSetting = m_dl_cmd.m_data[0];
-                                m_hb_rrs_info.ChargePower = m_dl_cmd.m_data[1];
-                                m_hb_rrs_info.DischargePower = m_dl_cmd.m_data[2];
-                                m_hb_rrs_info.RampRatePercentage = m_dl_cmd.m_data[3];
-                                m_hb_rrs_info.DegreeLeadLag = m_dl_cmd.m_data[4];
-                                m_hb_rrs_info.Volt_VAr = m_dl_cmd.m_data[5];
-                                m_hb_rrs_info.AC_Coupling_Power = m_dl_cmd.m_data[6];
-                                m_hb_rrs_info.SunSpec_Write_All = m_dl_cmd.m_data[7];
-                                m_hb_rrs_info.Remote_Control = m_dl_cmd.m_data[8];
-                                if ( m_hb_rrs_info.Remote_Control & 0x0001 )
-                                    flag = 1;
-                                else
-                                    flag = 0;
-                                SaveLog((char *)"DataLogger RunTODOList() : run SetHybridRRSInfo()", m_st_time);
-                                SetHybridRRSInfo(i);
-                                if ( flag ) {
-                                    printf("sleep 10 sec. wait inverter restart\n");
-                                    usleep(10000000);
-                                    printf("run ReRegister %d\n", i);
-                                    ReRegister(i);
-                                }
+                        if ( arySNobj[i].m_Model < 16 ) { // H5000/5001
+                            printf("RunTODOList H5000/5001 part\n");
+                            switch (m_dl_cmd.m_addr)
+                            {
+                                case 0x01:
+                                    m_hb_id_data.Grid_Voltage = m_dl_cmd.m_data[0];
+                                    m_hb_id_data.Model = m_dl_cmd.m_data[1] & 0x00FF;
+                                    m_hb_id_data.HW_Ver = (m_dl_cmd.m_data[1] >> 8) & 0xFF;
+                                    m_hb_id_data.SN_Hi = m_dl_cmd.m_data[2];
+                                    m_hb_id_data.SN_Lo = m_dl_cmd.m_data[3];
+                                    m_hb_id_data.Year = m_dl_cmd.m_data[4];
+                                    m_hb_id_data.Month = m_dl_cmd.m_data[5];
+                                    m_hb_id_data.Date = m_dl_cmd.m_data[6];
+                                    m_hb_id_data.Inverter_Ver = m_dl_cmd.m_data[7];
+                                    m_hb_id_data.DD_Ver = m_dl_cmd.m_data[8];
+                                    m_hb_id_data.EEPROM_Ver = m_dl_cmd.m_data[9];
+                                    m_hb_id_data.Display_Ver = m_dl_cmd.m_data[10];
+                                    m_hb_id_data.Flags1 = m_dl_cmd.m_data[12];
+                                    m_hb_id_data.Flags2 = m_dl_cmd.m_data[13];
+                                    SaveLog((char *)"DataLogger RunTODOList() : run SetHybridIDData()", m_st_time);
+                                    SetHybridIDData(i);
+                                    break;
+                                case 0x90:
+                                    m_hb_rs_info.Mode = m_dl_cmd.m_data[0];
+                                    m_hb_rs_info.StarHour = m_dl_cmd.m_data[1];
+                                    m_hb_rs_info.StarMin = m_dl_cmd.m_data[2];
+                                    m_hb_rs_info.EndHour = m_dl_cmd.m_data[3];
+                                    m_hb_rs_info.EndMin = m_dl_cmd.m_data[4];
+                                    m_hb_rs_info.MultiModuleSetting = m_dl_cmd.m_data[5];
+                                    m_hb_rs_info.BatteryType = m_dl_cmd.m_data[6];
+                                    m_hb_rs_info.BatteryCurrent = m_dl_cmd.m_data[7];
+                                    m_hb_rs_info.BatteryShutdownVoltage = m_dl_cmd.m_data[8];
+                                    m_hb_rs_info.BatteryFloatingVoltage = m_dl_cmd.m_data[9];
+                                    m_hb_rs_info.BatteryReservePercentage = m_dl_cmd.m_data[10];
+                                    m_hb_rs_info.PeakShavingPower = m_dl_cmd.m_data[11];
+                                    m_hb_rs_info.StartFrequency = m_dl_cmd.m_data[12];
+                                    m_hb_rs_info.EndFrequency = m_dl_cmd.m_data[13];
+                                    m_hb_rs_info.FeedinPower = m_dl_cmd.m_data[14];
+                                    SaveLog((char *)"DataLogger RunTODOList() : run SetHybridRSInfo()", m_st_time);
+                                    SetHybridRSInfo(i);
+                                    break;
+                                case 0xA0:
+                                    // now not work (read ok, write fail)
+                                    m_hb_rrs_info.ChargeSetting = m_dl_cmd.m_data[0];
+                                    m_hb_rrs_info.ChargePower = m_dl_cmd.m_data[1];
+                                    m_hb_rrs_info.DischargePower = m_dl_cmd.m_data[2];
+                                    m_hb_rrs_info.RampRatePercentage = m_dl_cmd.m_data[3];
+                                    m_hb_rrs_info.DegreeLeadLag = m_dl_cmd.m_data[4];
+                                    m_hb_rrs_info.Volt_VAr = m_dl_cmd.m_data[5];
+                                    m_hb_rrs_info.AC_Coupling_Power = m_dl_cmd.m_data[6];
+                                    m_hb_rrs_info.SunSpec_Write_All = m_dl_cmd.m_data[7];
+                                    m_hb_rrs_info.Remote_Control = m_dl_cmd.m_data[8];
+                                    if ( m_hb_rrs_info.Remote_Control & 0x0001 )
+                                        flag = 1;
+                                    else
+                                        flag = 0;
+                                    SaveLog((char *)"DataLogger RunTODOList() : run SetHybridRRSInfo()", m_st_time);
+                                    SetHybridRRSInfo(i);
+                                    if ( flag ) {
+                                        printf("sleep 10 sec. wait inverter restart\n");
+                                        usleep(10000000);
+                                        printf("run ReRegister %d\n", i);
+                                        ReRegister(i);
+                                    }
 
-                                break;
+                                    break;
+                            }
+                        } else { // H5500/9600
+                            printf("RunTODOList H5500/9600 part\n");
+                            switch (m_dl_cmd.m_addr)
+                            {
+                                case HB2_START_ADDRESS_ID:
+                                    m_hb2_id_data.Grid_Voltage = m_dl_cmd.m_data[0];
+                                    m_hb2_id_data.Model = m_dl_cmd.m_data[1];
+                                    m_hb2_id_data.SN_Hi = m_dl_cmd.m_data[2];
+                                    m_hb2_id_data.SN_Lo = m_dl_cmd.m_data[3];
+                                    m_hb2_id_data.Year = m_dl_cmd.m_data[4];
+                                    m_hb2_id_data.Month = m_dl_cmd.m_data[5];
+                                    m_hb2_id_data.Date = m_dl_cmd.m_data[6];
+                                    m_hb2_id_data.Inverter_Ver = m_dl_cmd.m_data[7];
+                                    m_hb2_id_data.DD_Ver = m_dl_cmd.m_data[8];
+                                    m_hb2_id_data.Parameter_Ver = m_dl_cmd.m_data[9];
+                                    m_hb2_id_data.Display_Ver = m_dl_cmd.m_data[10];
+                                    m_hb2_id_data.HW_Ver = m_dl_cmd.m_data[11];
+                                    m_hb2_id_data.Safety_Control = m_dl_cmd.m_data[12];
+                                    SaveLog((char *)"DataLogger RunTODOList() : run SetHybrid2IDData()", m_st_time);
+                                    SetHybrid2IDData(i);
+                                    break;
+                                case HB2_START_ADDRESS_RSINFO:
+                                    m_hb2_rs_info.Mode = m_dl_cmd.m_data[0];
+                                    m_hb2_rs_info.BatteryPolic = m_dl_cmd.m_data[1];
+                                    m_hb2_rs_info.MultiModuleSetting = m_dl_cmd.m_data[2];
+                                    m_hb2_rs_info.BatteryType = m_dl_cmd.m_data[3];
+                                    m_hb2_rs_info.ChargePower = m_dl_cmd.m_data[4];
+                                    m_hb2_rs_info.DischargePower = m_dl_cmd.m_data[5];
+                                    m_hb2_rs_info.FeedinPower = m_dl_cmd.m_data[6];
+                                    m_hb2_rs_info.BatteryPowerRating = m_dl_cmd.m_data[7];
+                                    m_hb2_rs_info.MaxBatteryChargingCurrent = m_dl_cmd.m_data[8];
+                                    m_hb2_rs_info.BatteryShutdownVoltage = m_dl_cmd.m_data[9];
+                                    m_hb2_rs_info.BatteryAbsorptionChargingVoltage = m_dl_cmd.m_data[10];
+                                    m_hb2_rs_info.BatteryReservePercentage = m_dl_cmd.m_data[11];
+                                    m_hb2_rs_info.GridTiedMaxSOC = m_dl_cmd.m_data[12];
+                                    m_hb2_rs_info.PeakShavingPower = m_dl_cmd.m_data[13];
+                                    m_hb2_rs_info.StartFrequency = m_dl_cmd.m_data[14];
+                                    m_hb2_rs_info.EndFrequency = m_dl_cmd.m_data[15];
+                                    SaveLog((char *)"DataLogger RunTODOList() : run SetHybrid2RSInfo1()", m_st_time);
+                                    SetHybrid2RSInfo1(i);
+                                    break;
+                                case HB2_START_ADDRESS_RSINFO2:
+                                    m_hb2_rs_info.RampRatePercentage = m_dl_cmd.m_data[0];
+                                    m_hb2_rs_info.DegreeLeadLag = m_dl_cmd.m_data[1];
+                                    m_hb2_rs_info.PowerFactorControl = m_dl_cmd.m_data[2];
+                                    m_hb2_rs_info.TMP_C3 = m_dl_cmd.m_data[3];
+                                    m_hb2_rs_info.SpecifiedModbusSlaveID = m_dl_cmd.m_data[4];
+                                    m_hb2_rs_info.FunctionControl1 = m_dl_cmd.m_data[5];
+                                    m_hb2_rs_info.FunctionControl2 = m_dl_cmd.m_data[6];
+                                    m_hb2_rs_info.SunSpecWritable = m_dl_cmd.m_data[7];
+                                    m_hb2_rs_info.SoftwareControl = m_dl_cmd.m_data[8];
+                                    if ( m_hb2_rs_info.SoftwareControl & 0x0001 )
+                                        flag = 1;
+                                    else
+                                        flag = 0;
+                                    SaveLog((char *)"DataLogger RunTODOList() : run SetHybrid2RSInfo2()", m_st_time);
+                                    SetHybrid2RSInfo2(i);
+                                    if ( flag ) {
+                                        printf("sleep 10 sec. wait inverter restart\n");
+                                        usleep(10000000);
+                                        printf("run ReRegister %d\n", i);
+                                        ReRegister(i);
+                                    }
+                                    break;
+                            }
                         }
                     } else {
                         // MI
@@ -2603,7 +2867,7 @@ bool CG320::LoadWhiteList()
 
     for (num = 0; num < m_wl_count; num++) {
         fgets(buf, 256, pFile);
-        sscanf(buf, "%02X%02X%02X%02X%02X%02X%02X%02X %08X %010ld", &tmp1, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7, &tmp8, &arySNobj[num].m_Device, &arySNobj[num].m_ok_time);
+        sscanf(buf, "%02X%02X%02X%02X%02X%02X%02X%02X %08X %08X %010ld", &tmp1, &tmp2, &tmp3, &tmp4, &tmp5, &tmp6, &tmp7, &tmp8, &arySNobj[num].m_Device, &arySNobj[num].m_Model, &arySNobj[num].m_ok_time);
         m_white_list_buf[0 + num*8] = (unsigned char)tmp1;
         m_white_list_buf[1 + num*8] = (unsigned char)tmp2;
         m_white_list_buf[2 + num*8] = (unsigned char)tmp3;
@@ -2612,6 +2876,8 @@ bool CG320::LoadWhiteList()
         m_white_list_buf[5 + num*8] = (unsigned char)tmp6;
         m_white_list_buf[6 + num*8] = (unsigned char)tmp7;
         m_white_list_buf[7 + num*8] = (unsigned char)tmp8;
+        // debug info.
+        printf("[%d] Model = 0x%02X\n", num, arySNobj[num].m_Model);
     }
     fclose(pFile);
 
@@ -2756,7 +3022,7 @@ bool CG320::SaveWhiteList()
 
     for ( i = 0; i < m_snCount; i++) {
         if ( strlen(arySNobj[i].m_Sn) ) {
-            sprintf(buf, "%s %08X %010ld\n", arySNobj[i].m_Sn, arySNobj[i].m_Device, arySNobj[i].m_ok_time);
+            sprintf(buf, "%s %08X %08X %010ld\n", arySNobj[i].m_Sn, arySNobj[i].m_Device, arySNobj[i].m_Model, arySNobj[i].m_ok_time);
             fputs(buf, pFile);
         }
     }
@@ -2772,7 +3038,7 @@ bool CG320::SaveWhiteList()
 bool CG320::SaveDeviceList(bool first, bool last)
 {
     FILE *pFile;
-    char buf[4096] = {0}, device[32] = {0};
+    char buf[LOG_BUF_SIZE] = {0}, device[32] = {0};
     int i = 0, offset = 0, model = 0;
     char *index_tmp = NULL, *index_start = NULL, *index_end = NULL;
 
@@ -3456,7 +3722,7 @@ bool CG320::GetDevice(int index)
     }
 
     char buf[256] = {0};
-    unsigned char szDevice[] = {0x00, 0x03, 0x00, 0x08, 0x00, 0x01, 0x00, 0x00};
+    unsigned char szDevice[] = {0x00, 0x03, 0x00, 0x02, 0x00, 0x07, 0x00, 0x00}; // default 0x00, 0x03, 0x00, 0x08, 0x00, 0x01, 0x00, 0x00
     szDevice[0] = arySNobj[index].m_Addr;
     MakeReadDataCRC(szDevice,8);
 
@@ -3473,10 +3739,10 @@ bool CG320::GetDevice(int index)
         current_time = time(NULL);
         log_time = localtime(&current_time);
 
-        lpdata = GetRespond(m_busfd, 7, m_dl_config.m_delay_time_1);
+        lpdata = GetRespond(m_busfd, 19, m_dl_config.m_delay_time_1);
         if ( lpdata ) {
             printf("#### GetDevice OK ####\n");
-            arySNobj[index].m_Device = (*(lpdata+3) << 8) + *(lpdata+4);
+            arySNobj[index].m_Device = (*(lpdata+15) << 8) + *(lpdata+16);
             arySNobj[index].m_ok_time = time(NULL);
             if ( arySNobj[index].m_Device < 0x0A ) {
                 printf("#### Address %d, Device 0x%04X ==> MI ####\n", arySNobj[index].m_Addr, arySNobj[index].m_Device);
@@ -3484,8 +3750,10 @@ bool CG320::GetDevice(int index)
                 SaveLog(buf, log_time);
             }
             else {
-                printf("#### Address %d, Device 0x%04X ==> Hybrid ####\n", arySNobj[index].m_Addr, arySNobj[index].m_Device);
-                sprintf(buf, "DataLogger GetDevice() : Address %d, Device 0x%04X ==> Hybrid", arySNobj[index].m_Addr, arySNobj[index].m_Device);
+                arySNobj[index].m_Model = *(lpdata+4);
+
+                printf("#### Address %d, Device 0x%04X ==> Hybrid, Model %d ####\n", arySNobj[index].m_Addr, arySNobj[index].m_Device, arySNobj[index].m_Model);
+                sprintf(buf, "DataLogger GetDevice() : Address %d, Device 0x%04X ==> Hybrid, Model %d", arySNobj[index].m_Addr, arySNobj[index].m_Device, arySNobj[index].m_Model);
                 SaveLog(buf, log_time);
             }
             return true;
@@ -4737,7 +5005,7 @@ void CG320::DumpHybridRRSInfo(unsigned char *buf)
     printf("Discharge Power = %d W\n", m_hb_rrs_info.DischargePower*100);
     printf("Ramp Rate Percentage = %d %%\n", m_hb_rrs_info.RampRatePercentage);
     printf("Degree Lead/Lag = %d\n ==> A = ", m_hb_rrs_info.DegreeLeadLag);
-    switch (m_hb_rrs_info.DegreeLeadLag/100)
+    switch (m_hb_rrs_info.DegreeLeadLag/256)
     {
         case 0:
             printf("0 : Disable");
@@ -4974,12 +5242,22 @@ bool CG320::GetHybridData(int index, int star_address, int data_count)
 {
     printf("#### GetHybridData start ####, star_address = 0x%x, data_count = %d\n", star_address, data_count);
 
-    int err = 0, read_data_size = 0, read_count = 0;
+    int err = 0, read_data_size = 0, read_count = 0, address = 0;
     //int flag = 0;
     byte *lpdata = NULL;
-    unsigned char data_buf[160] = {0};
-    unsigned char szHBData[]={0x00, 0x03, 0x00, (unsigned char)star_address, 0x00, (unsigned char)data_count, 0x00, 0x00};
+    char msg[256] = {0};
+    unsigned char data_buf[1024] = {0};
+    //unsigned char szHBData[]={0x00, 0x03, 0x00, (unsigned char)star_address, 0x00, (unsigned char)data_count, 0x00, 0x00};
+    unsigned char szHBData[]={0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    unsigned char addrh = 0, addrl = 0;
+
     szHBData[0]=arySNobj[index].m_Addr;
+    address = star_address;
+    addrh = (unsigned char)((address>>8) & 0xFF);
+    szHBData[2] = addrh;
+    addrl = (unsigned char)(address & 0xFF);
+    szHBData[3] = addrl;
+
     time_t current_time;
 	struct tm *log_time;
 
@@ -4989,10 +5267,11 @@ bool CG320::GetHybridData(int index, int star_address, int data_count)
             read_data_size = read_size;
         else
             read_data_size = data_count - read_count;
-        printf("read_count = %d\n", read_count);
         printf("read_size = %d\n", read_size);
+        printf("read_count = %d\n", read_count);
+        printf("address = 0x%04X\n", address);
         printf("read_data_size = %d\n", read_data_size);
-        szHBData[3] = star_address + read_count/2;
+        //szHBData[3] = star_address + read_count/2;
         szHBData[5] = read_data_size/2;
         MakeReadDataCRC(szHBData,8);
 
@@ -5012,47 +5291,105 @@ bool CG320::GetHybridData(int index, int star_address, int data_count)
             memcpy(data_buf+read_count, lpdata+3, read_data_size);
             read_count += read_data_size;
             printf("#### GetHybridData OK ####, read_count = %d\n", read_count);
+            address += read_count/2;
+            addrh = (unsigned char)((address>>8) & 0xFF);
+            szHBData[2] = addrh;
+            addrl = (unsigned char)(address & 0xFF);
+            szHBData[3] = addrl;
             arySNobj[index].m_ok_time = time(NULL);
 
             if ( read_count == data_count ) {
-                switch ( star_address )
-                {
-                    case START_ADDRESS_ID:
-                        DumpHybridIDData(data_buf);
-                        ParserHybridIDFlags1(m_hb_id_data.Flags1);
-                        ParserHybridIDFlags2(m_hb_id_data.Flags2);
-                        break;
-                    case START_ADDRESS_RTC:
-                        DumpHybridRTCData(data_buf);
-                        break;
-                    case START_ADDRESS_RSINFO:
-                        DumpHybridRSInfo(data_buf);
-                        break;
-                    case START_ADDRESS_RRSINFO:
-                        DumpHybridRRSInfo(data_buf);
-                        break;
-                    case START_ADDRESS_RTINFO:
-                        DumpHybridRTInfo(data_buf);
-                        ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1_Record);
-                        ParserHybridPVInvErrCOD2(m_hb_rt_info.PV_Inv_Error_COD2_Record);
-                        ParserHybridDDErrCOD(m_hb_rt_info.DD_Error_COD_Record);
-                        ParserHybridIconInfo(m_hb_rt_info.Hybrid_IconL, m_hb_rt_info.Hybrid_IconH);
-                        ParserHybridPVInvErrCOD3(m_hb_rt_info.PV_Inv_Error_COD3_Record);
-                        ParserHybridDDErrCOD2(m_hb_rt_info.DD_Error_COD2_Record);
-                        break;
-                    default:
-                        printf("wrong address\n");
+                if ( arySNobj[index].m_Model < 16 ) { // H5000/5001
+                    switch ( star_address )
+                    {
+                        case START_ADDRESS_ID:
+                            DumpHybridIDData(data_buf);
+                            ParserHybridIDFlags1(m_hb_id_data.Flags1);
+                            ParserHybridIDFlags2(m_hb_id_data.Flags2);
+                            break;
+                        case START_ADDRESS_RTC:
+                            DumpHybridRTCData(data_buf);
+                            break;
+                        case START_ADDRESS_RSINFO:
+                            DumpHybridRSInfo(data_buf);
+                            break;
+                        case START_ADDRESS_RRSINFO:
+                            DumpHybridRRSInfo(data_buf);
+                            break;
+                        case START_ADDRESS_RTINFO:
+                            DumpHybridRTInfo(data_buf);
+                            ParserHybridPVInvErrCOD1(m_hb_rt_info.PV_Inv_Error_COD1_Record);
+                            ParserHybridPVInvErrCOD2(m_hb_rt_info.PV_Inv_Error_COD2_Record);
+                            ParserHybridDDErrCOD(m_hb_rt_info.DD_Error_COD_Record);
+                            ParserHybridIconInfo(m_hb_rt_info.Hybrid_IconL, m_hb_rt_info.Hybrid_IconH);
+                            ParserHybridPVInvErrCOD3(m_hb_rt_info.PV_Inv_Error_COD3_Record);
+                            ParserHybridDDErrCOD2(m_hb_rt_info.DD_Error_COD2_Record);
+                            break;
+                        default:
+                            printf("wrong address\n");
+                    }
+                } else { // H5500/9600
+                    switch ( star_address )
+                    {
+                        case HB2_START_ADDRESS_ID:
+                            DumpHybrid2IDData(data_buf);
+                            ParserHybrid2IDFlags(m_hb2_id_data.Safety_Control);
+                            break;
+                        case HB2_START_ADDRESS_RSINFO:
+                            DumpHybrid2RSInfo(data_buf);
+                            ParserHybrid2RSFunctionFlags(m_hb2_rs_info.FunctionControl1);
+                            ParserHybrid2RSSoftwareFlags(m_hb2_rs_info.SoftwareControl);
+                            break;
+                        //case START_ADDRESS_RRSINFO:
+                        //    DumpHybridRRSInfo(data_buf);
+                        //    break;
+                        case HB2_START_ADDRESS_RTINFO:
+                            DumpHybrid2RTInfo(data_buf);
+                            ParserHybrid2RTModuleFlags(m_hb2_rt_info.Module_Status);
+                            ParserHybrid2RTFunctionFlags(m_hb2_rt_info.Function_Status);
+                            ParserHybrid2PVInvErrCOD1(m_hb2_rt_info.PV_Inv_Error_COD1_Record);
+                            ParserHybrid2PVInvErrCOD2(m_hb2_rt_info.PV_Inv_Error_COD2_Record);
+                            ParserHybrid2PVInvErrCOD3(m_hb2_rt_info.PV_Inv_Error_COD3_Record);
+                            ParserHybrid2DDErrCOD1(m_hb2_rt_info.DD_Error_COD1_Record);
+                            ParserHybrid2DDErrCOD2(m_hb2_rt_info.DD_Error_COD2_Record);
+                            //ParserHybridIconInfo(m_hb_rt_info.Hybrid_IconL, m_hb_rt_info.Hybrid_IconH);
+                            break;
+                        case HB2_START_ADDRESS_CEVALUE:
+                            DumpHybrid2CEValue(data_buf);
+                            break;
+                        case HB2_START_ADDRESS_DPINFO:
+                            DumpHybrid2DPInfo(data_buf);
+                            ParserHybrid2IconInfo(m_hb2_dp_info.Hybrid_IconL, m_hb2_dp_info.Hybrid_IconH);
+                            break;
+                        case HB2_START_ADDRESS_RTC:
+                            DumpHybrid2RTCData(data_buf);
+                            break;
+                        case HB2_START_ADDRESS_BMSINFO:
+                            DumpHybrid2BMSInfo(data_buf);
+                            break;
+                        default:
+                            printf("wrong address\n");
+                    }
                 }
+                sprintf(msg, "DataLogger GetHybridData OK : Address = 0x%04X", star_address);
+                printf(msg);
+                printf("\n");
+                SaveLog(msg, log_time);
+
                 return true;
             }
         } else {
             if ( have_respond == true ) {
-                printf("#### GetHybridData CRC Error ####\n");
-                SaveLog((char *)"DataLogger GetHybridData() : CRC Error", log_time);
+                sprintf(msg, "DataLogger GetHybridData CRC Error : Address = 0x%04X", address);
+                printf(msg);
+                printf("\n");
+                SaveLog(msg, log_time);
             }
             else {
-                printf("#### GetHybridData No Response ####\n");
-                SaveLog((char *)"DataLogger GetHybridData() : No Response", log_time);
+                sprintf(msg, "DataLogger GetHybridData No Response : Address = 0x%04X", address);
+                printf(msg);
+                printf("\n");
+                SaveLog(msg, log_time);
             }
             err++;
             if (err == 3) {
@@ -5559,6 +5896,10 @@ bool CG320::GetHybridBMSVer(int index)
 
     unsigned char szHBBMSver[]={0x00, 0x03, 0x02, 0x71, 0x00, 0x01, 0x00, 0x00};
     szHBBMSver[0]=arySNobj[index].m_Addr;
+    if ( arySNobj[index].m_Model < 16 )
+        szHBBMSver[3] = 0x71;
+    else
+        szHBBMSver[3] = 0x14;
     MakeReadDataCRC(szHBBMSver,8);
 
     MClearRX();
@@ -5579,8 +5920,13 @@ bool CG320::GetHybridBMSVer(int index)
             printf("#### GetHybridBMSVer OK ####\n");
             //SaveLog((char *)"DataLogger GetHybridBMSVer() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
-            m_hb_bms_ver = (*(lpdata+3) << 8) + *(lpdata+4);
-            printf("m_hb_bms_ver = 0x%04X\n", m_hb_bms_ver);
+            if ( arySNobj[index].m_Model < 16 ) {
+                m_hb_bms_ver = (*(lpdata+3) << 8) + *(lpdata+4);
+                printf("m_hb_bms_ver = 0x%04X\n", m_hb_bms_ver);
+            } else {
+                //m_hb2_bms_ver = (*(lpdata+3) << 8) + *(lpdata+4);
+                //printf("m_hb2_bms_ver = 0x%04X\n", m_hb2_bms_ver);
+            }
             return true;
         } else {
             if ( have_respond == true ) {
@@ -5907,6 +6253,1540 @@ bool CG320::SetBMSFile(int index, int module)
     return true;
 }
 
+bool CG320::GetHybrid2IDData(int index)
+{
+    printf("#### GetHybrid2IDData start ####\n");
+
+    int err = 0;
+    byte *lpdata = NULL;
+
+    struct tm *log_time;
+    // check ok time
+    time_t current_time = 0;
+    current_time = time(NULL);
+    if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_HB ) {
+        printf("Last m_ok_time more then 1200 sec.\n");
+        ReRegister(index);
+    }
+
+    unsigned char szHBIDdata[]={0x00, 0x03, 0x00, 0x01, 0x00, 0x0D, 0x00, 0x00};
+
+    while ( err < 3 ) {
+        // set buf
+        // slave id
+        szHBIDdata[0]=arySNobj[index].m_Addr;
+        // function code
+        szHBIDdata[1]=0x03;
+        // start address 2 byte
+        szHBIDdata[2]=0x00;
+        szHBIDdata[3]=0x01;
+        // no, of data 2 byte
+        szHBIDdata[4]=0x00;
+        szHBIDdata[5]=0x0D;
+        // crc
+        MakeReadDataCRC(szHBIDdata,8);
+
+        MClearRX();
+        txsize=8;
+        waitAddr = arySNobj[index].m_Addr;
+        waitFCode = 0x03;
+        memcpy(txbuffer, szHBIDdata, 8);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        current_time = time(NULL);
+		log_time = localtime(&current_time);
+
+        lpdata = GetRespond(m_busfd, 31, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            printf("#### GetHybrid2IDData OK ####\n");
+            //SaveLog((char *)"DataLogger GetHybrid2IDData() : OK", log_time);
+            DumpHybrid2IDData(lpdata+3);
+            arySNobj[index].m_ok_time = time(NULL);
+            ParserHybrid2IDFlags(m_hb2_id_data.Safety_Control);
+            return true;
+        } else {
+            if ( have_respond == true ) {
+                printf("#### GetHybrid2IDData CRC Error ####\n");
+                SaveLog((char *)"DataLogger GetHybrid2IDData() : CRC Error", log_time);
+            }
+            else {
+                printf("#### GetHybrid2IDData No Response ####\n");
+                SaveLog((char *)"DataLogger GetHybrid2IDData() : No Response", log_time);
+                //SaveLog((char *)"DataLogger GetHybrid2IDData() : run reregister()", log_time);
+                //ReRegister(index);
+            }
+            err++;
+        }
+    }
+
+    return false;
+}
+
+void CG320::DumpHybrid2IDData(unsigned char *buf)
+{
+    m_hb2_id_data.Grid_Voltage = (*(buf) << 8) + *(buf+1);
+    m_hb2_id_data.Model = (*(buf+2) << 8) + *(buf+3);
+    m_hb2_id_data.SN_Hi = (*(buf+4) << 8) + *(buf+5);
+    m_hb2_id_data.SN_Lo = (*(buf+6) << 8) + *(buf+7);
+    m_hb2_id_data.Year = (*(buf+8) << 8) + *(buf+9);
+    m_hb2_id_data.Month = (*(buf+10) << 8) + *(buf+11);
+    m_hb2_id_data.Date = (*(buf+12) << 8) + *(buf+13);
+    m_hb2_id_data.Inverter_Ver = (*(buf+14) << 8) + *(buf+15);
+    m_hb2_id_data.DD_Ver = (*(buf+16) << 8) + *(buf+17);
+    m_hb2_id_data.Parameter_Ver = (*(buf+18) << 8) + *(buf+19);
+    m_hb2_id_data.Display_Ver = (*(buf+20) << 8) + *(buf+21);
+    m_hb2_id_data.HW_Ver = (*(buf+22) << 8) + *(buf+23);
+    m_hb2_id_data.Safety_Control = (*(buf+24) << 8) + *(buf+25);
+
+    printf("#### Dump Hybrid2 ID Data ####\n");
+    printf("Grid_Voltage   = %d ==> ", m_hb2_id_data.Grid_Voltage);
+    switch (m_hb2_id_data.Grid_Voltage)
+    {
+        case 0:
+            printf("240V\n");
+            break;
+        case 1:
+            printf("230V\n");
+            break;
+        case 2:
+            printf("220V\n");
+            break;
+        case 3:
+            printf("208V\n");
+            break;
+        case 4:
+            printf("208V ~ 240V\n");
+            break;
+        case 5:
+            printf("200V\n");
+            break;
+        default:
+            printf("other\n");
+            break;
+    }
+    printf("Model          = %d ==> ", m_hb2_id_data.Model);
+    switch (m_hb_id_data.Model)
+    {
+        case 1:
+            printf("H5000\n");
+            break;
+        case 2:
+            printf("H5001\n");
+            break;
+        case 3:
+            printf("HB5\n");
+            break;
+        case 4:
+            printf("HB51\n");
+            break;
+        case 5:
+            printf("H5001 for P\n");
+            break;
+        case 6:
+            printf("HB51 for P\n");
+            break;
+        case 7:
+            printf("H5001 STK\n");
+            break;
+        case 8:
+            printf("HB51 STK\n");
+            break;
+        case 9:
+            printf("H5001 for E\n");
+            break;
+        case 10:
+            printf("HB51 for E\n");
+            break;
+        case 16:
+            printf("H5500\n");
+            break;
+        case 17:
+            printf("H9600\n");
+            break;
+        default:
+            printf("Other\n");
+    }
+    printf("SN_Hi          = 0x%04X\n", m_hb2_id_data.SN_Hi);
+    printf("SN_Lo          = 0x%04X\n", m_hb2_id_data.SN_Lo);
+    printf("Year           = %d\n", m_hb2_id_data.Year);
+    printf("Month          = %02d\n", m_hb2_id_data.Month);
+    printf("Date           = %02d\n", m_hb2_id_data.Date);
+    printf("Inverter_Ver   = 0x%04X\n", m_hb2_id_data.Inverter_Ver);
+    printf("DD_Ver         = %d\n", m_hb2_id_data.DD_Ver);
+    printf("Parameter_Ver  = %d\n", m_hb2_id_data.Parameter_Ver);
+    printf("Display_Ver    = %d\n", m_hb2_id_data.Display_Ver);
+    printf("HW_Ver         = 0x%02X\n", m_hb2_id_data.HW_Ver);
+    printf("Safety_Control = 0x%02X\n", m_hb2_id_data.Safety_Control);
+    printf("#############################\n");
+}
+
+bool CG320::SetHybrid2IDData(int index)
+{
+    printf("#### SetHybrid2IDData Start ####\n");
+
+    int err = 0;
+    unsigned short crc;
+    byte *lpdata = NULL;
+
+    unsigned char szIDData[39]={0};
+    szIDData[0] = arySNobj[index].m_Addr;
+    szIDData[1] = 0x10; // function code
+    szIDData[2] = 0x00;
+    szIDData[3] = 0x01; // star address
+    szIDData[4] = 0x00;
+    szIDData[5] = 0x0F; // number of data
+    szIDData[6] = 0x1E; // bytes
+    // data 0x01 ~ 0x0B, & flags at 0x0D, 0x0E
+    szIDData[7] = 0x00;
+    szIDData[8] = (unsigned char)m_hb2_id_data.Grid_Voltage;
+    szIDData[9] = 0x00; //(unsigned char)m_hb_id_data.HW_Ver;
+    szIDData[10] = (unsigned char)m_hb2_id_data.Model;
+    szIDData[11] = (unsigned char)((m_hb2_id_data.SN_Hi >> 8) & 0x00FF);
+    szIDData[12] = (unsigned char)(m_hb2_id_data.SN_Hi & 0x00FF);
+    szIDData[13] = (unsigned char)((m_hb2_id_data.SN_Lo >> 8) & 0x00FF);
+    szIDData[14] = (unsigned char)(m_hb2_id_data.SN_Lo & 0x00FF);
+    szIDData[15] = (unsigned char)((m_hb2_id_data.Year >> 8) & 0x00FF);
+    szIDData[16] = (unsigned char)(m_hb2_id_data.Year & 0x00FF);
+    szIDData[17] = 0x00;
+    szIDData[18] = (unsigned char)m_hb2_id_data.Month;
+    szIDData[19] = 0x00;
+    szIDData[20] = (unsigned char)m_hb2_id_data.Date;
+    szIDData[21] = (unsigned char)((m_hb2_id_data.Inverter_Ver >> 8) & 0x00FF);
+    szIDData[22] = (unsigned char)(m_hb2_id_data.Inverter_Ver & 0xFF);
+    szIDData[23] = (unsigned char)((m_hb2_id_data.DD_Ver >> 8) & 0x00FF);
+    szIDData[24] = (unsigned char)(m_hb2_id_data.DD_Ver & 0xFF);
+    szIDData[25] = (unsigned char)((m_hb2_id_data.Parameter_Ver >> 8) & 0x00FF);
+    szIDData[26] = (unsigned char)(m_hb2_id_data.Parameter_Ver & 0xFF);
+    szIDData[27] = (unsigned char)((m_hb2_id_data.Display_Ver >> 8) & 0x00FF);
+    szIDData[28] = (unsigned char)(m_hb2_id_data.Display_Ver & 0xFF);
+    szIDData[29] = (unsigned char)((m_hb2_id_data.HW_Ver >> 8) & 0x00FF);
+    szIDData[30] = (unsigned char)(m_hb2_id_data.HW_Ver & 0xFF);
+    // Safety_Control flag 0x0D
+    szIDData[31] = (unsigned char)((m_hb2_id_data.Safety_Control >> 8) & 0x00FF);
+    szIDData[32] = (unsigned char)(m_hb2_id_data.Safety_Control & 0xFF);
+    // empty
+    szIDData[33] = 0x00;
+    szIDData[34] = 0x00;
+    // data crc 0x0F
+    crc = CalculateCRC(szIDData+7, 28);
+    szIDData[35] = (unsigned char) (crc >> 8); // data crc hi
+    szIDData[36] = (unsigned char) (crc & 0xFF); // data crc lo
+    szIDData[37] = 0x00; // cmd crc hi
+    szIDData[38] = 0x00; // cmd crc lo
+    MakeReadDataCRC(szIDData,39);
+    MClearRX();
+    txsize=39;
+    waitAddr = arySNobj[index].m_Addr;
+    waitFCode = 0x10;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, szIDData, 39);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            if ( CheckCRC(lpdata, 8) ) {
+                printf("#### SetHybrid2IDData OK ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2IDData() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
+                //free(lpdata);
+                return true;
+            } else {
+                printf("#### SetHybrid2IDData CRC Error ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2IDData() : CRC Error", m_st_time);
+                err++;
+            }
+            //free(lpdata);
+        } else {
+            printf("#### SetHybrid2IDData No Response ####\n");
+            SaveLog((char *)"DataLogger SetHybrid2IDData() : No Response", m_st_time);
+            err++;
+        }
+
+        usleep(1000000);
+    }
+
+    return false;
+}
+
+void CG320::ParserHybrid2IDFlags(int flags)
+{
+    int tmp = flags;
+
+    m_hb2_id_flags.B0_Rule21 = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_id_flags.B1_SunSpec = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_id_flags.B2_Heco1 = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_id_flags.B3_Heco2 = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_id_flags.B4_PREPA = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_id_flags.B5_Dominion = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_id_flags.B6_MA = tmp & 0x01;
+
+    printf("#### Parser Hybrid2 ID Flags2 ####\n");
+    printf("Bit0 : Rule21              = %d\n", m_hb2_id_flags.B0_Rule21);
+    printf("Bit1 : SunSpec             = %d\n", m_hb2_id_flags.B1_SunSpec);
+    printf("Bit2 : Heco1               = %d\n", m_hb2_id_flags.B2_Heco1);
+    printf("Bit3 : Heco2               = %d\n", m_hb2_id_flags.B3_Heco2);
+    printf("Bit4 : PREPA               = %d\n", m_hb2_id_flags.B4_PREPA);
+    printf("Bit5 : Dominion            = %d\n", m_hb2_id_flags.B5_Dominion);
+    printf("Bit6 : MA                  = %d\n", m_hb2_id_flags.B6_MA);
+    printf("################################\n");
+}
+
+void CG320::DumpHybrid2RSInfo(unsigned char *buf)
+{
+// 0x00B0
+    m_hb2_rs_info.Mode = (*(buf) << 8) + *(buf+1);
+    m_hb2_rs_info.BatteryPolic = (*(buf+2) << 8) + *(buf+3);
+    m_hb2_rs_info.MultiModuleSetting = (*(buf+4) << 8) + *(buf+5);
+    m_hb2_rs_info.BatteryType = (*(buf+6) << 8) + *(buf+7);
+    m_hb2_rs_info.ChargePower = (*(buf+8) << 8) + *(buf+9);
+    m_hb2_rs_info.DischargePower = (*(buf+10) << 8) + *(buf+11);
+    m_hb2_rs_info.FeedinPower = (*(buf+12) << 8) + *(buf+13);
+    m_hb2_rs_info.BatteryPowerRating = (*(buf+14) << 8) + *(buf+15);
+    m_hb2_rs_info.MaxBatteryChargingCurrent = (*(buf+16) << 8) + *(buf+17);
+    m_hb2_rs_info.BatteryShutdownVoltage = (*(buf+18) << 8) + *(buf+19);
+    m_hb2_rs_info.BatteryAbsorptionChargingVoltage = (*(buf+20) << 8) + *(buf+21);
+    m_hb2_rs_info.BatteryReservePercentage = (*(buf+22) << 8) + *(buf+23);
+    m_hb2_rs_info.GridTiedMaxSOC = (*(buf+24) << 8) + *(buf+25);
+    m_hb2_rs_info.PeakShavingPower = (*(buf+26) << 8) + *(buf+27);
+    m_hb2_rs_info.StartFrequency = (*(buf+28) << 8) + *(buf+29);
+    m_hb2_rs_info.EndFrequency = (*(buf+30) << 8) + *(buf+31);
+// 0x00C0
+    m_hb2_rs_info.RampRatePercentage = (*(buf+32) << 8) + *(buf+33);
+    m_hb2_rs_info.DegreeLeadLag = (*(buf+34) << 8) + *(buf+35);
+    m_hb2_rs_info.PowerFactorControl = (*(buf+36) << 8) + *(buf+37);
+    // 0x00C3 empty
+    m_hb2_rs_info.TMP_C3 = (*(buf+38) << 8) + *(buf+39);
+    m_hb2_rs_info.SpecifiedModbusSlaveID = (*(buf+40) << 8) + *(buf+41);
+    m_hb2_rs_info.FunctionControl1 = (*(buf+42) << 8) + *(buf+43);
+    m_hb2_rs_info.FunctionControl2 = (*(buf+44) << 8) + *(buf+45);
+    m_hb2_rs_info.SunSpecWritable = (*(buf+46) << 8) + *(buf+47);
+    m_hb2_rs_info.SoftwareControl = (*(buf+48) << 8) + *(buf+49);
+    // 0x00C9 ~ 0x00CF empty
+// 0x00D0
+    m_hb2_rs_info.TOU_Season1_Operation_Mode = (*(buf+64) << 8) + *(buf+65);
+    m_hb2_rs_info.TOU_OtherSeason_Operation_Mode = (*(buf+66) << 8) + *(buf+67);
+    m_hb2_rs_info.TOU_Season1_Start_Month = (*(buf+68) << 8) + *(buf+69);
+    m_hb2_rs_info.TOU_Season1_Start_Day = (*(buf+70) << 8) + *(buf+71);
+    m_hb2_rs_info.TOU_Season1_End_Month = (*(buf+72) << 8) + *(buf+73);
+    m_hb2_rs_info.TOU_Season1_End_Day = (*(buf+74) << 8) + *(buf+75);
+    m_hb2_rs_info.Peak_Period_Start_Hour1_of_Season1 = (*(buf+76) << 8) + *(buf+77);
+    m_hb2_rs_info.Peak_Period_Start_Minute1_of_Season1 = (*(buf+78) << 8) + *(buf+79);
+    m_hb2_rs_info.Peak_Period_End_Hour1_of_Season1 = (*(buf+80) << 8) + *(buf+81);
+    m_hb2_rs_info.Peak_Period_End_Minute1_of_Season1 = (*(buf+82) << 8) + *(buf+83);
+    m_hb2_rs_info.Peak_Period_Start_Hour2_of_Season1 = (*(buf+84) << 8) + *(buf+85);
+    m_hb2_rs_info.Peak_Period_Start_Minute2_of_Season1 = (*(buf+86) << 8) + *(buf+87);
+    m_hb2_rs_info.Peak_Period_End_Hour2_of_Season1 = (*(buf+88) << 8) + *(buf+89);
+    m_hb2_rs_info.Peak_Period_End_Minute2_of_Season1 = (*(buf+90) << 8) + *(buf+91);
+    m_hb2_rs_info.Peak_Period_Start_Hour1_of_OtherSeason = (*(buf+92) << 8) + *(buf+93);
+    m_hb2_rs_info.Peak_Period_Start_Minute1_of_OtherSeason = (*(buf+94) << 8) + *(buf+95);
+// 0x00E0
+    m_hb2_rs_info.Peak_Period_End_Hour1_of_OtherSeason = (*(buf+96) << 8) + *(buf+97);
+    m_hb2_rs_info.Peak_Period_End_Minute1_of_OtherSeason = (*(buf+98) << 8) + *(buf+99);
+    m_hb2_rs_info.Peak_Period_Start_Hour2_of_OtherSeason = (*(buf+100) << 8) + *(buf+101);
+    m_hb2_rs_info.Peak_Period_Start_Minute2_of_OtherSeason = (*(buf+102) << 8) + *(buf+103);
+    m_hb2_rs_info.Peak_Period_End_Hour2_of_OtherSeason = (*(buf+104) << 8) + *(buf+105);
+    m_hb2_rs_info.Peak_Period_End_Minute2_of_OtherSeason = (*(buf+106) << 8) + *(buf+107);
+
+    printf("#### Dump Hybrid2 RS Info ####\n");
+// 0x00B0
+    printf("Mode = %d ==> ", m_hb2_rs_info.Mode);
+    switch (m_hb2_rs_info.Mode)
+    {
+        case 0:
+            printf("Backup Mode\n");
+            break;
+        case 1:
+            printf("Saving AC Mode\n");
+            break;
+        case 2:
+            printf("TOU Mode\n");
+            break;
+        case 3:
+            printf("Remote Control Mode\n");
+            break;
+        case 4:
+            printf("Off-Grid Mode\n");
+            break;
+        case 5:
+            printf("Calibrarion Mode\n");
+            break;
+    }
+    printf("Battery Polic = %d ==> ", m_hb2_rs_info.BatteryPolic);
+    switch (m_hb2_rs_info.BatteryPolic)
+    {
+        case 0:
+            printf("Standby\n");
+            break;
+        case 1:
+            printf("Charge\n");
+            break;
+        case 2:
+            printf("Discharge\n");
+            break;
+    }
+    printf("Multi Module Setting = %d ==> ", m_hb2_rs_info.MultiModuleSetting);
+    switch (m_hb2_rs_info.MultiModuleSetting)
+    {
+        case 0:
+            printf("Single\n");
+            break;
+        case 1:
+            printf("Parallel\n");
+            break;
+        case 2:
+            printf("Three phase\n");
+            break;
+    }
+    printf("Battery Type = %d ==> ", m_hb2_rs_info.BatteryType);
+    switch (m_hb2_rs_info.BatteryType)
+    {
+        case 0:
+            printf("No communication\n");
+            break;
+        case 1:
+            printf("Darfon HV\n");
+            break;
+    }
+    printf("Charge Power = %d W\n", m_hb2_rs_info.ChargePower*100);
+    printf("Discharge Power = %d W\n", m_hb2_rs_info.DischargePower*100);
+    printf("Feed-in Power = %d W\n", m_hb2_rs_info.FeedinPower*100);
+    printf("Battery Power Rating = %d W\n", m_hb2_rs_info.BatteryPowerRating*100);
+    printf("Max Battery Charging Current = %03.1f A\n", (float)m_hb2_rs_info.MaxBatteryChargingCurrent/10);
+    printf("Battery Shutdown Voltage = %03.1f V\n", ((float)m_hb2_rs_info.BatteryShutdownVoltage)/10);
+    printf("Battery Absorption Charging Voltage = %03.1f V\n", ((float)m_hb2_rs_info.BatteryAbsorptionChargingVoltage)/10);
+    printf("Battery Reserve Percentage = %d%%\n", m_hb2_rs_info.BatteryReservePercentage);
+    printf("Grid Tied Max SOC = %d%%\n", m_hb2_rs_info.GridTiedMaxSOC);
+    printf("Peak Shaving Power = %d W\n", m_hb2_rs_info.PeakShavingPower*100);
+    printf("Start Frequency = %03.1f Hz\n", (float)m_hb2_rs_info.StartFrequency/10);
+    printf("End Frequency = %03.1f Hz\n", (float)m_hb2_rs_info.EndFrequency/10);
+
+// 0x00C0
+    printf("Ramp Rate Percentage = %03.1f%%\n", (float)m_hb2_rs_info.RampRatePercentage/10);
+    printf("Degree LeadLag = %d ==> ", m_hb2_rs_info.DegreeLeadLag);
+    switch (m_hb2_rs_info.DegreeLeadLag/256)
+    {
+        case 0:
+            printf("Disable\n");
+            break;
+        case 1:
+            printf("Lead\n");
+            break;
+        case 2:
+            printf("Lag\n");
+            break;
+    }
+    printf("TMP_C3 = %d\n", m_hb2_rs_info.TMP_C3);
+    printf("Power Factor Control = %d\n", m_hb2_rs_info.PowerFactorControl);
+    printf("Specified Modbus SlaveID = 0x%04X\n", m_hb2_rs_info.SpecifiedModbusSlaveID);
+    printf("Function Control 1 = 0x%04X\n", m_hb2_rs_info.FunctionControl1);
+    printf("Function Control 2 = 0x%04X\n", m_hb2_rs_info.FunctionControl2);
+    printf("SunSpec Writable = 0x%04X\n", m_hb2_rs_info.SunSpecWritable);
+    printf("Software Control = 0x%04X\n", m_hb2_rs_info.SoftwareControl);
+
+// 0x00D0
+    printf("TOU_Season1_Operation_Mode = 0x%04X\n", m_hb2_rs_info.TOU_Season1_Operation_Mode);
+    printf("TOU_OtherSeason_Operation_Mode = 0x%04X\n", m_hb2_rs_info.TOU_OtherSeason_Operation_Mode);
+    printf("TOU_Season1_Start_Month = %d\n", m_hb2_rs_info.TOU_Season1_Start_Month);
+    printf("TOU_Season1_Start_Day = %d\n", m_hb2_rs_info.TOU_Season1_Start_Day);
+    printf("TOU_Season1_End_Month = %d\n", m_hb2_rs_info.TOU_Season1_End_Month);
+    printf("TOU_Season1_End_Day = %d\n", m_hb2_rs_info.TOU_Season1_End_Day);
+    printf("Peak_Period_Start_Hour1_of_Season1 = %d\n", m_hb2_rs_info.Peak_Period_Start_Hour1_of_Season1);
+    printf("Peak_Period_Start_Minute1_of_Season1 = %d\n", m_hb2_rs_info.Peak_Period_Start_Minute1_of_Season1);
+    printf("Peak_Period_End_Hour1_of_Season1 = %d\n", m_hb2_rs_info.Peak_Period_End_Hour1_of_Season1);
+    printf("Peak_Period_End_Minute1_of_Season1 = %d\n", m_hb2_rs_info.Peak_Period_End_Minute1_of_Season1);
+    printf("Peak_Period_Start_Hour2_of_Season1 = %d\n", m_hb2_rs_info.Peak_Period_Start_Hour2_of_Season1);
+    printf("Peak_Period_Start_Minute2_of_Season1 = %d\n", m_hb2_rs_info.Peak_Period_Start_Minute2_of_Season1);
+    printf("Peak_Period_End_Hour2_of_Season1 = %d\n", m_hb2_rs_info.Peak_Period_End_Hour2_of_Season1);
+    printf("Peak_Period_End_Minute2_of_Season1 = %d\n", m_hb2_rs_info.Peak_Period_End_Minute2_of_Season1);
+    printf("Peak_Period_Start_Hour1_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_Start_Hour1_of_OtherSeason);
+    printf("Peak_Period_Start_Minute1_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_Start_Minute1_of_OtherSeason);
+
+// 0x00E0
+    printf("Peak_Period_End_Hour1_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_End_Hour1_of_OtherSeason);
+    printf("Peak_Period_End_Minute1_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_End_Minute1_of_OtherSeason);
+    printf("Peak_Period_Start_Hour2_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_Start_Hour2_of_OtherSeason);
+    printf("Peak_Period_Start_Minute2_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_Start_Minute2_of_OtherSeason);
+    printf("Peak_Period_End_Hour2_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_End_Hour2_of_OtherSeason);
+    printf("Peak_Period_End_Minute2_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_End_Minute2_of_OtherSeason);
+
+    printf("#############################\n");
+}
+
+bool CG320::SetHybrid2RSInfo1(int index)
+{
+    printf("#### SetHybrid2RSInfo1 Start ####\n");
+
+    int err = 0;
+    //unsigned short crc;
+    byte *lpdata = NULL;
+
+    unsigned char szRSInfo[41]={0};
+    szRSInfo[0] = arySNobj[index].m_Addr;
+    szRSInfo[1] = 0x10; // function code
+    szRSInfo[2] = 0x00;
+    szRSInfo[3] = 0xB0; // star address
+    szRSInfo[4] = 0x00;
+    szRSInfo[5] = 0x10; // number of data
+    szRSInfo[6] = 0x20; // bytes
+    // data 0xB0 ~ 0xBF
+    szRSInfo[7] = 0x00;
+    szRSInfo[8] = (unsigned char)m_hb2_rs_info.Mode;
+    szRSInfo[9] = 0x00;
+    szRSInfo[10] = (unsigned char)m_hb2_rs_info.BatteryPolic;
+    szRSInfo[11] = 0x00;
+    szRSInfo[12] = (unsigned char)m_hb2_rs_info.MultiModuleSetting;
+    szRSInfo[13] = 0x00;
+    szRSInfo[14] = (unsigned char)m_hb2_rs_info.BatteryType;
+    szRSInfo[15] = (unsigned char)((m_hb2_rs_info.ChargePower >> 8) & 0xFF);
+    szRSInfo[16] = (unsigned char)(m_hb2_rs_info.ChargePower & 0xFF);
+    szRSInfo[17] = (unsigned char)((m_hb2_rs_info.DischargePower >> 8) & 0xFF);
+    szRSInfo[18] = (unsigned char)(m_hb2_rs_info.DischargePower & 0xFF);
+    szRSInfo[19] = (unsigned char)((m_hb2_rs_info.FeedinPower >> 8) & 0xFF);
+    szRSInfo[20] = (unsigned char)(m_hb2_rs_info.FeedinPower & 0xFF);
+    szRSInfo[21] = (unsigned char)((m_hb2_rs_info.BatteryPowerRating >> 8) & 0xFF);
+    szRSInfo[22] = (unsigned char)(m_hb2_rs_info.BatteryPowerRating & 0xFF);
+    szRSInfo[23] = (unsigned char)((m_hb2_rs_info.MaxBatteryChargingCurrent >> 8) & 0xFF);
+    szRSInfo[24] = (unsigned char)(m_hb2_rs_info.MaxBatteryChargingCurrent & 0xFF);
+    szRSInfo[25] = (unsigned char)((m_hb2_rs_info.BatteryShutdownVoltage >> 8) & 0xFF);
+    szRSInfo[26] = (unsigned char)(m_hb2_rs_info.BatteryShutdownVoltage & 0xFF);
+    szRSInfo[27] = (unsigned char)((m_hb2_rs_info.BatteryAbsorptionChargingVoltage >> 8) & 0xFF);
+    szRSInfo[28] = (unsigned char)(m_hb2_rs_info.BatteryAbsorptionChargingVoltage & 0xFF);
+    szRSInfo[29] = (unsigned char)((m_hb2_rs_info.BatteryReservePercentage >> 8) & 0xFF);
+    szRSInfo[30] = (unsigned char)(m_hb2_rs_info.BatteryReservePercentage & 0xFF);
+    szRSInfo[31] = (unsigned char)((m_hb2_rs_info.GridTiedMaxSOC >> 8) & 0xFF);
+    szRSInfo[32] = (unsigned char)(m_hb2_rs_info.GridTiedMaxSOC & 0xFF);
+    szRSInfo[33] = (unsigned char)((m_hb2_rs_info.PeakShavingPower >> 8) & 0xFF);
+    szRSInfo[34] = (unsigned char)(m_hb2_rs_info.PeakShavingPower & 0xFF);
+    szRSInfo[35] = (unsigned char)((m_hb2_rs_info.StartFrequency >> 8) & 0xFF);
+    szRSInfo[36] = (unsigned char)(m_hb2_rs_info.StartFrequency & 0xFF);
+    szRSInfo[37] = (unsigned char)((m_hb2_rs_info.EndFrequency >> 8) & 0xFF);
+    szRSInfo[38] = (unsigned char)(m_hb2_rs_info.EndFrequency & 0xFF);
+    // data crc 0x9F
+    //crc = CalculateCRC(szRSInfo+7, 30);
+    //szRSInfo[37] = (unsigned char) (crc >> 8); // data crc hi
+    //szRSInfo[38] = (unsigned char) (crc & 0xFF); // data crc lo
+    szRSInfo[39] = 0x00; // cmd crc hi
+    szRSInfo[40] = 0x00; // cmd crc lo
+    MakeReadDataCRC(szRSInfo,41);
+    MClearRX();
+    txsize=41;
+    waitAddr = arySNobj[index].m_Addr;
+    waitFCode = 0x10;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, szRSInfo, 41);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            if ( CheckCRC(lpdata, 8) ) {
+                printf("#### SetHybrid2RSInfo1 OK ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RSInfo1() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
+                //free(lpdata);
+                return true;
+            } else {
+                printf("#### SetHybrid2RSInfo1 CRC Error ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RSInfo1() : CRC Error", m_st_time);
+                err++;
+            }
+            //free(lpdata);
+        } else {
+            printf("#### SetHybrid2RSInfo1 No Response ####\n");
+            SaveLog((char *)"DataLogger SetHybrid2RSInfo1() : No Response", m_st_time);
+            err++;
+        }
+
+        usleep(1000000);
+    }
+
+    return false;
+}
+
+bool CG320::SetHybrid2RSInfo2(int index)
+{
+    printf("#### SetHybrid2RSInfo2 Start ####\n");
+
+    int err = 0;
+    //unsigned short crc;
+    byte *lpdata = NULL;
+
+    unsigned char szRSInfo[27]={0};
+    szRSInfo[0] = arySNobj[index].m_Addr;
+    szRSInfo[1] = 0x10; // function code
+    szRSInfo[2] = 0x00;
+    szRSInfo[3] = 0xC0; // star address
+    szRSInfo[4] = 0x00;
+    szRSInfo[5] = 0x09; // number of data
+    szRSInfo[6] = 0x12; // bytes
+    // data 0xC0 ~ 0xC8
+    szRSInfo[7] = (unsigned char)((m_hb2_rs_info.RampRatePercentage >> 8) & 0xFF);
+    szRSInfo[8] = (unsigned char)(m_hb2_rs_info.RampRatePercentage & 0xFF);
+    szRSInfo[9] = (unsigned char)((m_hb2_rs_info.DegreeLeadLag >> 8) & 0xFF);
+    szRSInfo[10] = (unsigned char)(m_hb2_rs_info.DegreeLeadLag & 0xFF);
+    szRSInfo[11] = 0x00;
+    szRSInfo[12] = (unsigned char)m_hb2_rs_info.PowerFactorControl;
+    szRSInfo[13] = (unsigned char)((m_hb2_rs_info.TMP_C3 >> 8) & 0xFF);
+    szRSInfo[14] = (unsigned char)(m_hb2_rs_info.TMP_C3 & 0xFF);
+    szRSInfo[15] = (unsigned char)((m_hb2_rs_info.SpecifiedModbusSlaveID >> 8) & 0xFF);
+    szRSInfo[16] = (unsigned char)(m_hb2_rs_info.SpecifiedModbusSlaveID & 0xFF);
+    szRSInfo[17] = (unsigned char)((m_hb2_rs_info.FunctionControl1 >> 8) & 0xFF);
+    szRSInfo[18] = (unsigned char)(m_hb2_rs_info.FunctionControl1 & 0xFF);
+    szRSInfo[19] = (unsigned char)((m_hb2_rs_info.FunctionControl2 >> 8) & 0xFF);
+    szRSInfo[20] = (unsigned char)(m_hb2_rs_info.FunctionControl2 & 0xFF);
+    szRSInfo[21] = (unsigned char)((m_hb2_rs_info.SunSpecWritable >> 8) & 0xFF);
+    szRSInfo[22] = (unsigned char)(m_hb2_rs_info.SunSpecWritable & 0xFF);
+    szRSInfo[23] = (unsigned char)((m_hb2_rs_info.SoftwareControl >> 8) & 0xFF);
+    szRSInfo[24] = (unsigned char)(m_hb2_rs_info.SoftwareControl & 0xFF);
+/*    szRSInfo[25] = 0x00;
+    szRSInfo[26] = 0x00;
+    szRSInfo[27] = 0x00;
+    szRSInfo[28] = 0x00;
+    szRSInfo[29] = 0x00;
+    szRSInfo[30] = 0x00;
+    szRSInfo[31] = 0x00;
+    szRSInfo[32] = 0x00;
+    szRSInfo[33] = 0x00;
+    szRSInfo[34] = 0x00;
+    szRSInfo[35] = 0x00;
+    szRSInfo[36] = 0x00;
+    szRSInfo[37] = 0x00;
+    szRSInfo[38] = 0x00;
+    // data crc 0x9F
+    crc = CalculateCRC(szRSInfo+7, 30);
+    szRSInfo[37] = (unsigned char) (crc >> 8); // data crc hi
+    szRSInfo[38] = (unsigned char) (crc & 0xFF); // data crc lo
+*/    szRSInfo[25] = 0x00; // cmd crc hi
+    szRSInfo[26] = 0x00; // cmd crc lo
+    MakeReadDataCRC(szRSInfo,27);
+    MClearRX();
+    txsize=27;
+    waitAddr = arySNobj[index].m_Addr;
+    waitFCode = 0x10;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, szRSInfo, 27);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            if ( CheckCRC(lpdata, 8) ) {
+                printf("#### SetHybrid2RSInfo2 OK ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RSInfo2() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
+                //free(lpdata);
+                return true;
+            } else {
+                printf("#### SetHybrid2RSInfo2 CRC Error ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RSInfo2() : CRC Error", m_st_time);
+                err++;
+            }
+            //free(lpdata);
+        } else {
+            printf("#### SetHybrid2RSInfo2 No Response ####\n");
+            SaveLog((char *)"DataLogger SetHybrid2RSInfo2() : No Response", m_st_time);
+            err++;
+        }
+
+        usleep(1000000);
+    }
+
+    return false;
+}
+
+void CG320::ParserHybrid2RSFunctionFlags(int flags)
+{
+    int tmp = flags;
+
+    m_hb2_rs_f_flags.B0_PV_12Parallel = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rs_f_flags.B1_PV_Off_Grid = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rs_f_flags.B2_AC_Coupling = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rs_f_flags.B3_Frequency_Control = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rs_f_flags.B4_Arc_detection = tmp & 0x01;
+    tmp>>=4;
+    m_hb2_rs_f_flags.B8_9_External_Sensor = tmp & 0x0003;
+    tmp>>=2;
+    m_hb2_rs_f_flags.B10_Generator_charge_battery = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rs_f_flags.B11_Battery_Calibration_Enable = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rs_f_flags.B12_PV_34Parallel = tmp & 0x01;
+
+    printf("#### Parser Hybrid2 RS Function Flags ####\n");
+    printf("Bit0  : PV 1/2 Parallel            = %d\n", m_hb2_rs_f_flags.B0_PV_12Parallel);
+    printf("Bit1  : PV Off Grid                = %d\n", m_hb2_rs_f_flags.B1_PV_Off_Grid);
+    printf("Bit2  : AC Coupling                = %d\n", m_hb2_rs_f_flags.B2_AC_Coupling);
+    printf("Bit3  : Frequency Control          = %d\n", m_hb2_rs_f_flags.B3_Frequency_Control);
+    printf("Bit4  : Arc detection              = %d\n", m_hb2_rs_f_flags.B4_Arc_detection);
+    printf("Bit8&9: External Sensor            = %d\n", m_hb2_rs_f_flags.B8_9_External_Sensor);
+    printf("Bit10 : Generator charge battery   = %d\n", m_hb2_rs_f_flags.B10_Generator_charge_battery);
+    printf("Bit11 : Battery Calibration Enable = %d\n", m_hb2_rs_f_flags.B11_Battery_Calibration_Enable);
+    printf("Bit12 : PV 3/4 Parallel            = %d\n", m_hb2_rs_f_flags.B12_PV_34Parallel);
+    printf("################################\n");
+}
+
+void CG320::ParserHybrid2RSSoftwareFlags(int flags)
+{
+    int tmp = flags;
+
+    m_hb2_rs_s_flags.B0_System_Reset = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rs_s_flags.B1_Off_Grid_Enable = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rs_s_flags.B2_Enable_Disable = tmp & 0x01;
+
+    printf("#### Parser Hybrid2 RS Software Flags ####\n");
+    printf("Bit0 : System Reset            = %d\n", m_hb2_rs_s_flags.B0_System_Reset);
+    printf("Bit1 : Off Grid Enable         = %d\n", m_hb2_rs_s_flags.B1_Off_Grid_Enable);
+    printf("Bit2 : Enable/Disable          = %d\n", m_hb2_rs_s_flags.B2_Enable_Disable);
+    printf("################################\n");
+}
+
+void CG320::DumpHybrid2RTInfo(unsigned char *buf)
+{
+// 0x0100
+    m_hb2_rt_info.Inv_Temp = (*(buf) << 8) + *(buf+1);
+    m_hb2_rt_info.Charger_Temp = (*(buf+2) << 8) + *(buf+3);
+    m_hb2_rt_info.Environment_Temp = (*(buf+4) << 8) + *(buf+5);
+    m_hb2_rt_info.DD_Temp = (*(buf+6) << 8) + *(buf+7);
+    m_hb2_rt_info.PV1_Voltage = (*(buf+8) << 8) + *(buf+9);
+    m_hb2_rt_info.PV1_Current = (*(buf+10) << 8) + *(buf+11);
+    m_hb2_rt_info.PV1_Power = (*(buf+12) << 8) + *(buf+13);
+    m_hb2_rt_info.PV2_Voltage = (*(buf+14) << 8) + *(buf+15);
+    m_hb2_rt_info.PV2_Current = (*(buf+16) << 8) + *(buf+17);
+    m_hb2_rt_info.PV2_Power = (*(buf+18) << 8) + *(buf+19);
+    m_hb2_rt_info.Load_Voltage = (*(buf+20) << 8) + *(buf+21);
+    m_hb2_rt_info.Load_Current = (*(buf+22) << 8) + *(buf+23);
+    m_hb2_rt_info.Load_Power = (*(buf+24) << 8) + *(buf+25);
+    m_hb2_rt_info.Grid_Voltage = (*(buf+26) << 8) + *(buf+27);
+    m_hb2_rt_info.Grid_Current = (*(buf+28) << 8) + *(buf+29);
+    m_hb2_rt_info.Grid_Power = (*(buf+30) << 8) + *(buf+31);
+// 0x0110
+    m_hb2_rt_info.Battery_Voltage = (*(buf+32) << 8) + *(buf+33);
+    m_hb2_rt_info.Battery_Current = (*(buf+34) << 8) + *(buf+35);
+    m_hb2_rt_info.Battery_Power = (*(buf+36) << 8) + *(buf+37);
+    m_hb2_rt_info.Bus_Voltage = (*(buf+38) << 8) + *(buf+39);
+    m_hb2_rt_info.Bus_Current = (*(buf+40) << 8) + *(buf+41);
+    m_hb2_rt_info.PV3_Voltage = (*(buf+42) << 8) + *(buf+43);
+    m_hb2_rt_info.PV3_Current = (*(buf+44) << 8) + *(buf+45);
+    m_hb2_rt_info.PV3_Power = (*(buf+46) << 8) + *(buf+47);
+    m_hb2_rt_info.PV4_Voltage = (*(buf+48) << 8) + *(buf+49);
+    m_hb2_rt_info.PV4_Current = (*(buf+50) << 8) + *(buf+51);
+    m_hb2_rt_info.PV4_Power = (*(buf+52) << 8) + *(buf+53);
+    m_hb2_rt_info.PV_Total_Power = (*(buf+54) << 8) + *(buf+55);
+    m_hb2_rt_info.Battery_SOC = (*(buf+56) << 8) + *(buf+57);
+    // 0x011D empty
+    m_hb2_rt_info.Sys_State = (*(buf+60) << 8) + *(buf+61);
+    m_hb2_rt_info.Module_Status = (*(buf+62) << 8) + *(buf+63);
+// 0x0120
+    m_hb2_rt_info.Function_Status = (*(buf+64) << 8) + *(buf+65);
+    m_hb2_rt_info.PV_Inv_Error_COD1_Record = (*(buf+66) << 8) + *(buf+67);
+    m_hb2_rt_info.PV_Inv_Error_COD2_Record = (*(buf+68) << 8) + *(buf+69);
+    m_hb2_rt_info.PV_Inv_Error_COD3_Record = (*(buf+70) << 8) + *(buf+71);
+    m_hb2_rt_info.DD_Error_COD1_Record = (*(buf+72) << 8) + *(buf+73);
+    m_hb2_rt_info.DD_Error_COD2_Record = (*(buf+74) << 8) + *(buf+75);
+    m_hb2_rt_info.PV_Inv_Error_COD2 = (*(buf+76) << 8) + *(buf+77);
+    m_hb2_rt_info.DD_Error_COD = (*(buf+78) << 8) + *(buf+79);
+    m_hb2_rt_info.Error_Code = (*(buf+80) << 8) + *(buf+81);
+    m_hb2_rt_info.Invert_Frequency = (*(buf+82) << 8) + *(buf+83);
+    m_hb2_rt_info.Grid_Frequency = (*(buf+84) << 8) + *(buf+85);
+    m_hb2_rt_info.Total_Load_Power = (*(buf+86) << 8) + *(buf+87);
+    m_hb2_rt_info.Total_Load_Current = (*(buf+88) << 8) + *(buf+89);
+    m_hb2_rt_info.CT_Power = (*(buf+90) << 8) + *(buf+91);
+    m_hb2_rt_info.CT_Current = (*(buf+92) << 8) + *(buf+93);
+
+    printf("#### Dump Hybrid2 RT Info ####\n");
+// 0x0100
+    printf("Inv_Temp = %03.1f C\n", ((float)m_hb2_rt_info.Inv_Temp)/10);
+    printf("Charger_Temp = %03.1f C\n", ((float)m_hb2_rt_info.Charger_Temp)/10);
+    printf("Environment_Temp = %03.1f C\n", ((float)m_hb2_rt_info.Environment_Temp)/10);
+    printf("DD_Temp = %03.1f C\n", ((float)m_hb2_rt_info.DD_Temp)/10);
+    printf("PV1_Voltage = %d V\n", m_hb2_rt_info.PV1_Voltage);
+    printf("PV1_Current = %04.2f A\n", ((float)m_hb2_rt_info.PV1_Current)/100);
+    printf("PV1_Power = %d W\n", m_hb2_rt_info.PV1_Power);
+    printf("PV2_Voltage = %d V\n", m_hb2_rt_info.PV2_Voltage);
+    printf("PV2_Current = %04.2f A\n", ((float)m_hb2_rt_info.PV2_Current)/100);
+    printf("PV2_Power = %d W\n", m_hb2_rt_info.PV2_Power);
+    printf("Load Voltage = %d V\n", m_hb2_rt_info.Load_Voltage);
+    printf("Load Current = %04.2f A\n", ((float)m_hb2_rt_info.Load_Current)/100);
+    printf("Load Power = %d W\n", m_hb2_rt_info.Load_Power);
+    printf("Grid Voltage = %d V\n", m_hb2_rt_info.Grid_Voltage);
+    printf("Grid Current = %04.2f A\n", ((float)m_hb2_rt_info.Grid_Current)/100);
+    printf("Grid Power = %d W\n", m_hb2_rt_info.Grid_Power);
+// 0x0110
+    printf("Battery Voltage = %03.1f V\n", ((float)m_hb2_rt_info.Battery_Voltage)/10);
+    printf("Battery Current = %03.1f A\n", ((float)m_hb2_rt_info.Battery_Current)/10);
+    printf("Battery_Power = %d W\n", m_hb2_rt_info.Battery_Power);
+    printf("Bus Voltage = %03.1f V\n", ((float)m_hb2_rt_info.Bus_Voltage)/10);
+    printf("Bus Current = %03.1f A\n", ((float)m_hb2_rt_info.Bus_Current)/10);
+    printf("PV3_Voltage = %d V\n", m_hb2_rt_info.PV3_Voltage);
+    printf("PV3_Current = %04.2f A\n", ((float)m_hb2_rt_info.PV3_Current)/100);
+    printf("PV3_Power = %d W\n", m_hb2_rt_info.PV3_Power);
+    printf("PV4_Voltage = %d V\n", m_hb2_rt_info.PV4_Voltage);
+    printf("PV4_Current = %04.2f A\n", ((float)m_hb2_rt_info.PV4_Current)/100);
+    printf("PV4_Power = %d W\n", m_hb2_rt_info.PV4_Power);
+    printf("PV Total Power = %d W\n", m_hb2_rt_info.PV_Total_Power);
+    printf("Battery_SOC = %d %%\n", m_hb2_rt_info.Battery_SOC);
+    printf("Sys_State = 0x%04X\n", m_hb2_rt_info.Sys_State);
+    printf("Module_Status = 0x%04X\n", m_hb2_rt_info.Module_Status);
+// 0x0120
+    printf("Function_Status = 0x%04X\n", m_hb2_rt_info.Function_Status);
+    printf("PV_Inv_Error_COD1_Record = 0x%04X\n", m_hb2_rt_info.PV_Inv_Error_COD1_Record);
+    printf("PV_Inv_Error_COD2_Record = 0x%04X\n", m_hb2_rt_info.PV_Inv_Error_COD2_Record);
+    printf("PV_Inv_Error_COD3_Record = 0x%04X\n", m_hb2_rt_info.PV_Inv_Error_COD3_Record);
+    printf("DD_Error_COD1_Record = 0x%04X\n", m_hb2_rt_info.DD_Error_COD1_Record);
+    printf("DD_Error_COD2_Record = 0x%04X\n", m_hb2_rt_info.DD_Error_COD2_Record);
+    //printf("PV_Inv_Error_COD1 = 0x%04X\n", m_hb2_rt_info.PV_Inv_Error_COD1);
+    printf("PV_Inv_Error_COD2 = 0x%04X\n", m_hb2_rt_info.PV_Inv_Error_COD2);
+    printf("DD_Error_COD = 0x%04X\n", m_hb2_rt_info.DD_Error_COD);
+    printf("Error_Code = 0x%04X\n", m_hb2_rt_info.Error_Code);
+    printf("Invert Frequency = %03.1f Hz\n", ((float)m_hb2_rt_info.Invert_Frequency)/10);
+    printf("Grid Frequency = %03.1f Hz\n", ((float)m_hb2_rt_info.Grid_Frequency)/10);
+    printf("Total_Load_Power = %d W\n", m_hb2_rt_info.Total_Load_Power);
+    printf("Total_Load_Current = %04.2f A\n", ((float)m_hb2_rt_info.Total_Load_Current)/100);
+    printf("CT_Power = %d W\n", m_hb2_rt_info.CT_Power);
+    printf("CT_Current = %04.2f A\n", ((float)m_hb2_rt_info.CT_Current)/100);
+    printf("#############################\n");
+}
+
+void CG320::ParserHybrid2RTModuleFlags(int flags)
+{
+    int tmp = flags;
+
+    m_hb2_rt_m_flags.B0_Relay_status = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_m_flags.B1_Software_offgrid_flag = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_m_flags.B2_InvEnable_flag = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_m_flags.B3_Bypass_flag = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_m_flags.B4_DD_en = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_m_flags.B5_PVEnable_flag = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_rt_m_flags.B6_Generator_state = tmp & 0x0001;
+
+    printf("#### Parser Hybrid2 RT Module Flags ####\n");
+    printf("Bit0 : Relay_status             = %d\n", m_hb2_rt_m_flags.B0_Relay_status);
+    printf("Bit1 : Software_offgrid_flag    = %d\n", m_hb2_rt_m_flags.B1_Software_offgrid_flag);
+    printf("Bit2 : InvEnable_flag           = %d\n", m_hb2_rt_m_flags.B2_InvEnable_flag);
+    printf("Bit3 : Bypass_flag              = %d\n", m_hb2_rt_m_flags.B3_Bypass_flag);
+    printf("Bit4 : DD_en                    = %d\n", m_hb2_rt_m_flags.B4_DD_en);
+    printf("Bit5 : PVEnable_flag            = %d\n", m_hb2_rt_m_flags.B5_PVEnable_flag);
+    printf("Bit6 : Generator_state          = %d\n", m_hb2_rt_m_flags.B6_Generator_state);
+    printf("################################\n");
+}
+
+void CG320::ParserHybrid2RTFunctionFlags(int flags)
+{
+    int tmp = flags;
+
+    m_hb2_rt_f_flags.B0_ADC = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B1_Buzz_flag = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B2_Bat_Protect = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B3_Bat_reserve_flag = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B4_Froce_Charge_flag = tmp & 0x01;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B5_Grid_Char_En = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B6_Grid_flag = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B7_DD_en_Protect = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B8_buck_Dis = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B9_boots_dis = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B10_Info_ready = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_rt_f_flags.B11_Inverter_Delay = tmp & 0x0001;
+
+    printf("#### Parser Hybrid2 RT Function Flags ####\n");
+    printf("Bit0 : ADC                 = %d\n", m_hb2_rt_f_flags.B0_ADC);
+    printf("Bit1 : Buzz_flag           = %d\n", m_hb2_rt_f_flags.B1_Buzz_flag);
+    printf("Bit2 : Bat_Protect         = %d\n", m_hb2_rt_f_flags.B2_Bat_Protect);
+    printf("Bit3 : Bat_reserve_flag    = %d\n", m_hb2_rt_f_flags.B3_Bat_reserve_flag);
+    printf("Bit4 : Froce_Charge_flag   = %d\n", m_hb2_rt_f_flags.B4_Froce_Charge_flag);
+    printf("Bit5 : Grid_Char_En        = %d\n", m_hb2_rt_f_flags.B5_Grid_Char_En);
+    printf("Bit6 : Grid_flag           = %d\n", m_hb2_rt_f_flags.B6_Grid_flag);
+    printf("Bit7 : DD_en_Protect       = %d\n", m_hb2_rt_f_flags.B7_DD_en_Protect);
+    printf("Bit8 : buck_Dis            = %d\n", m_hb2_rt_f_flags.B8_buck_Dis);
+    printf("Bit9 : boots_dis           = %d\n", m_hb2_rt_f_flags.B9_boots_dis);
+    printf("Bit10: Info_ready          = %d\n", m_hb2_rt_f_flags.B10_Info_ready);
+    printf("Bit11: Inverter_Delay      = %d\n", m_hb2_rt_f_flags.B11_Inverter_Delay);
+    printf("################################\n");
+}
+
+void CG320::ParserHybrid2PVInvErrCOD1(int COD1)
+{
+    int tmp = COD1;
+    m_hb2_pvinv_err_cod1.B0_Fac_HL = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B1_CanBus_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B2_Islanding = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B3_Vac_H = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B4_Vac_L = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B5_Fac_H = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B6_Fac_L = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B7_Fac_LL = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B8_Vac_OCP = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B9_Vac_HL = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B10_Vac_LL = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B11_OPP = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B12_Iac_H = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B13_Ipv_H = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B14_ADCINT_OVF = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod1.B15_Vbus_H = tmp & 0x0001;
+
+    printf("#### Parser Hybrid2 PV Inverter Error Code 1 ####\n");
+    printf("Bit0  : Fac_HL = %d\n", m_hb2_pvinv_err_cod1.B0_Fac_HL);
+    printf("Bit1  : CanBus_Fault = %d\n", m_hb2_pvinv_err_cod1.B1_CanBus_Fault);
+    printf("Bit2  : Islanding = %d\n", m_hb2_pvinv_err_cod1.B2_Islanding);
+    printf("Bit3  : Vac_H = %d\n", m_hb2_pvinv_err_cod1.B3_Vac_H);
+    printf("Bit4  : Vac_L = %d\n", m_hb2_pvinv_err_cod1.B4_Vac_L);
+    printf("Bit5  : Fac_H = %d\n", m_hb2_pvinv_err_cod1.B5_Fac_H);
+    printf("Bit6  : Fac_L = %d\n", m_hb2_pvinv_err_cod1.B6_Fac_L);
+    printf("Bit7  : Fac_LL = %d\n", m_hb2_pvinv_err_cod1.B7_Fac_LL);
+    printf("Bit8  : Vac_OCP = %d\n", m_hb2_pvinv_err_cod1.B8_Vac_OCP);
+    printf("Bit9  : Vac_HL = %d\n", m_hb2_pvinv_err_cod1.B9_Vac_HL);
+    printf("Bit10 : Vac_LL = %d\n", m_hb2_pvinv_err_cod1.B10_Vac_LL);
+    printf("Bit11 : OPP = %d\n", m_hb2_pvinv_err_cod1.B11_OPP);
+    printf("Bit12 : Iac_H = %d\n", m_hb2_pvinv_err_cod1.B12_Iac_H);
+    printf("Bit13 : Ipv_H = %d\n", m_hb2_pvinv_err_cod1.B13_Ipv_H);
+    printf("Bit14 : ADCINT_OVF = %d\n", m_hb2_pvinv_err_cod1.B14_ADCINT_OVF);
+    printf("Bit15 : Vbus_H = %d\n", m_hb2_pvinv_err_cod1.B15_Vbus_H);
+    printf("################################################\n");
+}
+
+void CG320::ParserHybrid2PVInvErrCOD2(int COD2)
+{
+    int tmp = COD2;
+    m_hb2_pvinv_err_cod2.B0_Arc = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B1_Para_Check = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B2_Ipv1_Short = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B3_Ipv2_Short = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B4_Vac_Short = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B5_CT_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B6_PV_Over_Power = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B7_NO_GRID = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B8_PV_Input_High = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B9_INV_Overload = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B10_RCMU_30 = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B11_RCMU_60 = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B12_RCMU_150 = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B13_RCMU_300 = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B14_RCMU_Test_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod2.B15_Vac_LM = tmp & 0x0001;
+
+    printf("#### Parser Hybrid2 PV Inverter Error Code 2 ####\n");
+    printf("Bit0  : Arc = %d\n", m_hb2_pvinv_err_cod2.B0_Arc);
+    printf("Bit1  : Para_Check = %d\n", m_hb2_pvinv_err_cod2.B1_Para_Check);
+    printf("Bit2  : Ipv1_Short = %d\n", m_hb2_pvinv_err_cod2.B2_Ipv1_Short);
+    printf("Bit3  : Ipv2_Short = %d\n", m_hb2_pvinv_err_cod2.B3_Ipv2_Short);
+    printf("Bit4  : Vac_Short = %d\n", m_hb2_pvinv_err_cod2.B4_Vac_Short);
+    printf("Bit5  : CT_Fault = %d\n", m_hb2_pvinv_err_cod2.B5_CT_Fault);
+    printf("Bit6  : PV_Over_Power = %d\n", m_hb2_pvinv_err_cod2.B6_PV_Over_Power);
+    printf("Bit7  : NO_GRID = %d\n", m_hb2_pvinv_err_cod2.B7_NO_GRID);
+    printf("Bit8  : PV_Input_High = %d\n", m_hb2_pvinv_err_cod2.B8_PV_Input_High);
+    printf("Bit9  : INV_Overload = %d\n", m_hb2_pvinv_err_cod2.B9_INV_Overload);
+    printf("Bit10 : RCMU_30 = %d\n", m_hb2_pvinv_err_cod2.B10_RCMU_30);
+    printf("Bit11 : RCMU_60 = %d\n", m_hb2_pvinv_err_cod2.B11_RCMU_60);
+    printf("Bit12 : RCMU_150 = %d\n", m_hb2_pvinv_err_cod2.B12_RCMU_150);
+    printf("Bit13 : RCMU_300 = %d\n", m_hb2_pvinv_err_cod2.B13_RCMU_300);
+    printf("Bit14 : RCMU_Test_Fault = %d\n", m_hb2_pvinv_err_cod2.B14_RCMU_Test_Fault);
+    printf("Bit15 : Vac_LM = %d\n", m_hb2_pvinv_err_cod2.B15_Vac_LM);
+    printf("################################################\n");
+}
+
+void CG320::ParserHybrid2PVInvErrCOD3(int COD3)
+{
+    int tmp = COD3;
+    m_hb2_pvinv_err_cod3.B0_External_PV_OPP = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod3.B1_Model123_Reconnected_Delay = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod3.B2_Peak_Shaving_Over_Power = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod3.B3_CLA_Execute_Time_Over = tmp & 0x0001;
+
+    printf("#### Parser Hybrid2 PV Inverter Error Code 3 ####\n");
+    printf("Bit0  : External_PV_OPP = %d\n", m_hb2_pvinv_err_cod3.B0_External_PV_OPP);
+    printf("Bit1  : Model123_Reconnected_Delay = %d\n", m_hb2_pvinv_err_cod3.B1_Model123_Reconnected_Delay);
+    printf("Bit2  : Peak_Shaving_Over_Power = %d\n", m_hb2_pvinv_err_cod3.B2_Peak_Shaving_Over_Power);
+    printf("Bit3  : CLA_Execute_Time_Over = %d\n", m_hb2_pvinv_err_cod3.B3_CLA_Execute_Time_Over);
+    printf("################################################\n");
+}
+
+void CG320::ParserHybrid2DDErrCOD1(int COD1)
+{
+    int tmp = COD1;
+    m_hb2_dd_err_cod1.B0_Vbat_H = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod1.B1_Vbat_L = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod1.B2_Vbus_H = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod1.B3_Vbus_L = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod1.B4_Ibus_H = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod1.B5_Ibat_H = tmp & 0x0001;
+    tmp>>=2;
+    //m_hb2_dd_err_cod1.B6_Charger_T = tmp & 0x0001;
+    //tmp>>=1;
+    m_hb2_dd_err_cod1.B7_Code = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod1.B8_Vbat_Drop = tmp & 0x0001;
+    tmp>>=3;
+    //m_hb2_dd_err_cod1.B9_INV_Fault = tmp & 0x0001;
+    //tmp>>=1;
+    //m_hb2_dd_err_cod1.B10_GND_Fault = tmp & 0x0001;
+    //tmp>>=1;
+    m_hb2_dd_err_cod1.B11_No_bat = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod1.B12_BMS_Comute_Fault = tmp & 0x0001;
+    tmp>>=2;
+    //m_hb2_dd_err_cod1.B13_BMS_Over_Current = tmp & 0x0001;
+    //tmp>>=1;
+    m_hb2_dd_err_cod1.B14_Vbus_High_VBat = tmp & 0x0001;
+    //tmp>>=1;
+    //m_hb2_dd_err_cod1.B15_Bat_Setting_Fault = tmp & 0x0001;
+
+    printf("#### Parser Hybrid2 DD Error Code ####\n");
+    printf("Bit0  : Vbat_H = %d\n", m_hb2_dd_err_cod1.B0_Vbat_H);
+    printf("Bit1  : Vbat_L = %d\n", m_hb2_dd_err_cod1.B1_Vbat_L);
+    printf("Bit2  : Vbus_H = %d\n", m_hb2_dd_err_cod1.B2_Vbus_H);
+    printf("Bit3  : Vbus_L = %d\n", m_hb2_dd_err_cod1.B3_Vbus_L);
+    printf("Bit4  : Ibus_H = %d\n", m_hb2_dd_err_cod1.B4_Ibus_H);
+    printf("Bit5  : Ibat_H = %d\n", m_hb2_dd_err_cod1.B5_Ibat_H);
+    //printf("Bit6  : Charger_T = %d\n", m_hb2_dd_err_cod1.B6_Charger_T);
+    printf("Bit7  : Code = %d\n", m_hb2_dd_err_cod1.B7_Code);
+    printf("Bit8  : Vbat_Drop = %d\n", m_hb2_dd_err_cod1.B8_Vbat_Drop);
+    //printf("Bit9  : INV_Fault = %d\n", m_hb2_dd_err_cod1.B9_INV_Fault);
+    //printf("Bit10 : GND_Fault = %d\n", m_hb2_dd_err_cod1.B10_GND_Fault);
+    printf("Bit11 : No_bat = %d\n", m_hb2_dd_err_cod1.B11_No_bat);
+    printf("Bit12 : BMS_Comute_Fault = %d\n", m_hb2_dd_err_cod1.B12_BMS_Comute_Fault);
+    //printf("Bit13 : BMS_Over_Current = %d\n", m_hb2_dd_err_cod1.B13_BMS_Over_Current);
+    printf("Bit14 : Vbus_High_VBat = %d\n", m_hb2_dd_err_cod1.B14_Vbus_High_VBat);
+    //printf("Bit15 : Bat_Setting_Fault = %d\n", m_hb2_dd_err_cod1.B15_Bat_Setting_Fault);
+    printf("#####################################\n");
+}
+
+void CG320::ParserHybrid2DDErrCOD2(int COD2)
+{
+    int tmp = COD2;
+    m_hb2_dd_err_cod2.B0_EEProm_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B1_Communi_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B2_OT_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B3_Fan_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B4_Low_Battery = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B5_PV3_S = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B6_PV4_S = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B7_PV_Over_Power = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B8_PV_Input_High = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B9_Restart = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B10_GND_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B11_OT_Alarm = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B12_Bat_Wake_Up_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B13_Vbat_Inconsistent = tmp & 0x0001;
+
+    printf("#### Parser Hybrid2 DD Error Code 2 ####\n");
+    printf("Bit0  : EEProm_Fault = %d\n", m_hb2_dd_err_cod2.B0_EEProm_Fault);
+    printf("Bit1  : Communi_Fault = %d\n", m_hb2_dd_err_cod2.B1_Communi_Fault);
+    printf("Bit2  : OT_Fault = %d\n", m_hb2_dd_err_cod2.B2_OT_Fault);
+    printf("Bit3  : Fan_Fault = %d\n", m_hb2_dd_err_cod2.B3_Fan_Fault);
+    printf("Bit4  : Low_Battery = %d\n", m_hb2_dd_err_cod2.B4_Low_Battery);
+    printf("Bit5  : PV3_S = %d\n", m_hb2_dd_err_cod2.B5_PV3_S);
+    printf("Bit6  : PV4_S = %d\n", m_hb2_dd_err_cod2.B6_PV4_S);
+    printf("Bit7  : PV_Over_Power = %d\n", m_hb2_dd_err_cod2.B7_PV_Over_Power);
+    printf("Bit8  : PV_Input_High = %d\n", m_hb2_dd_err_cod2.B8_PV_Input_High);
+    printf("Bit9  : Restart = %d\n", m_hb2_dd_err_cod2.B9_Restart);
+    printf("Bit10 : GND_Fault = %d\n", m_hb2_dd_err_cod2.B10_GND_Fault);
+    printf("Bit10 : OT_Alarm = %d\n", m_hb2_dd_err_cod2.B11_OT_Alarm);
+    printf("Bit10 : Bat_Wake_Up_Fault = %d\n", m_hb2_dd_err_cod2.B12_Bat_Wake_Up_Fault);
+    printf("Bit10 : Vbat_Inconsistent = %d\n", m_hb2_dd_err_cod2.B13_Vbat_Inconsistent);
+    printf("#####################################\n");
+}
+
+void CG320::DumpHybrid2CEValue(unsigned char *buf)
+{
+// 0x0160
+    m_hb2_ce_value.Total_Life_TimeH = (*(buf) << 8) + *(buf+1);
+    m_hb2_ce_value.Total_Life_TimeL = (*(buf+2) << 8) + *(buf+3);
+    m_hb2_ce_value.PV_Total_EnergyH = (*(buf+4) << 8) + *(buf+5);
+    m_hb2_ce_value.PV_Total_EnergyL = (*(buf+6) << 8) + *(buf+7);
+    m_hb2_ce_value.Bat_Charge_Total_EnergyH = (*(buf+8) << 8) + *(buf+9);
+    m_hb2_ce_value.Bat_Charge_Total_EnergyL = (*(buf+10) << 8) + *(buf+11);
+    m_hb2_ce_value.Bat_Discharge_Total_EnergyH = (*(buf+12) << 8) + *(buf+13);
+    m_hb2_ce_value.Bat_Discharge_Total_EnergyL = (*(buf+14) << 8) + *(buf+15);
+    m_hb2_ce_value.Load_Total_EnergyH = (*(buf+16) << 8) + *(buf+17);
+    m_hb2_ce_value.Load_Total_EnergyL = (*(buf+18) << 8) + *(buf+19);
+    m_hb2_ce_value.Negative_Load_Total_EnergyH = (*(buf+20) << 8) + *(buf+21);
+    m_hb2_ce_value.Negative_Load_Total_EnergyL = (*(buf+22) << 8) + *(buf+23);
+    m_hb2_ce_value.GridFeed_TotalH = (*(buf+24) << 8) + *(buf+25);
+    m_hb2_ce_value.GridFeed_TotalL = (*(buf+26) << 8) + *(buf+27);
+    m_hb2_ce_value.GridCharge_TotalH = (*(buf+28) << 8) + *(buf+29);
+    m_hb2_ce_value.GridCharge_TotalL = (*(buf+30) << 8) + *(buf+31);
+// 0x0170
+    m_hb2_ce_value.PV_Today_EnergyH = (*(buf+32) << 8) + *(buf+33);
+    m_hb2_ce_value.PV_Today_EnergyL = (*(buf+34) << 8) + *(buf+35);
+    m_hb2_ce_value.Bat_Charge_Today_EnergyH = (*(buf+36) << 8) + *(buf+37);
+    m_hb2_ce_value.Bat_Charge_Today_EnergyL = (*(buf+38) << 8) + *(buf+39);
+    m_hb2_ce_value.Bat_Discharge_Today_EnergyH = (*(buf+40) << 8) + *(buf+41);
+    m_hb2_ce_value.Bat_Discharge_Today_EnergyL = (*(buf+42) << 8) + *(buf+43);
+    m_hb2_ce_value.Load_Today_EnergyH = (*(buf+44) << 8) + *(buf+45);
+    m_hb2_ce_value.Load_Today_EnergyL = (*(buf+46) << 8) + *(buf+47);
+    m_hb2_ce_value.Negative_Load_Today_EnergyH = (*(buf+48) << 8) + *(buf+49);
+    m_hb2_ce_value.Negative_Load_Today_EnergyL = (*(buf+50) << 8) + *(buf+51);
+    m_hb2_ce_value.GridFeed_TodayH = (*(buf+52) << 8) + *(buf+53);
+    m_hb2_ce_value.GridFeed_TodayL = (*(buf+54) << 8) + *(buf+55);
+    m_hb2_ce_value.GridCharge_TodayH = (*(buf+56) << 8) + *(buf+57);
+    m_hb2_ce_value.GridCharge_TodayL = (*(buf+58) << 8) + *(buf+59);
+    m_hb2_ce_value.PV_Month_EnergyH = (*(buf+60) << 8) + *(buf+61);
+    m_hb2_ce_value.PV_Month_EnergyL = (*(buf+62) << 8) + *(buf+63);
+// 0x0180
+    m_hb2_ce_value.Bat_Charge_Month_EnergyH = (*(buf+64) << 8) + *(buf+65);
+    m_hb2_ce_value.Bat_Charge_Month_EnergyL = (*(buf+66) << 8) + *(buf+67);
+    m_hb2_ce_value.Bat_Discharge_Month_EnergyH = (*(buf+68) << 8) + *(buf+69);
+    m_hb2_ce_value.Bat_Discharge_Month_EnergyL = (*(buf+70) << 8) + *(buf+71);
+    m_hb2_ce_value.Load_Month_EnergyH = (*(buf+72) << 8) + *(buf+73);
+    m_hb2_ce_value.Load_Month_EnergyL = (*(buf+74) << 8) + *(buf+75);
+    m_hb2_ce_value.Negative_Load_Month_EnergyH = (*(buf+76) << 8) + *(buf+77);
+    m_hb2_ce_value.Negative_Load_Month_EnergyL = (*(buf+78) << 8) + *(buf+79);
+    m_hb2_ce_value.GridFeed_MonthH = (*(buf+80) << 8) + *(buf+81);
+    m_hb2_ce_value.GridFeed_MonthL = (*(buf+82) << 8) + *(buf+83);
+    m_hb2_ce_value.GridCharge_MonthH = (*(buf+84) << 8) + *(buf+85);
+    m_hb2_ce_value.GridCharge_MonthL = (*(buf+86) << 8) + *(buf+87);
+    m_hb2_ce_value.CT_Total_Feedin_EnergyH = (*(buf+88) << 8) + *(buf+89);
+    m_hb2_ce_value.CT_Total_Feedin_EnergyL = (*(buf+90) << 8) + *(buf+91);
+    m_hb2_ce_value.CT_Today_Feedin_EnergyH = (*(buf+92) << 8) + *(buf+93);
+    m_hb2_ce_value.CT_Today_Feedin_EnergyL = (*(buf+94) << 8) + *(buf+95);
+// 0x0190
+    m_hb2_ce_value.CT_Total_Charge_EnergyH = (*(buf+96) << 8) + *(buf+97);
+    m_hb2_ce_value.CT_Total_Charge_EnergyL = (*(buf+98) << 8) + *(buf+99);
+    m_hb2_ce_value.CT_Today_Charge_EnergyH = (*(buf+100) << 8) + *(buf+101);
+    m_hb2_ce_value.CT_Today_Charge_EnergyL = (*(buf+102) << 8) + *(buf+103);
+
+    printf("#### Dump Hybrid2 CE Value ####\n");
+// 0x0160
+    printf("Total_Life_TimeH = %d *100KWH\n", m_hb2_ce_value.Total_Life_TimeH);
+    printf("Total_Life_TimeL = %d *0.01KWH\n", m_hb2_ce_value.Total_Life_TimeL);
+    printf("PV_Total_EnergyH = %d *100KWH\n", m_hb2_ce_value.PV_Total_EnergyH);
+    printf("PV_Total_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.PV_Total_EnergyL);
+    printf("Bat_Charge_Total_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Charge_Total_EnergyH);
+    printf("Bat_Charge_Total_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Bat_Charge_Total_EnergyL);
+    printf("Bat_Discharge_Total_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Discharge_Total_EnergyH);
+    printf("Bat_Discharge_Total_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Bat_Discharge_Total_EnergyL);
+    printf("Load_Total_EnergyH = %d *100KWH\n", m_hb2_ce_value.Load_Total_EnergyH);
+    printf("Load_Total_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Load_Total_EnergyL);
+    printf("Negative_Load_Total_EnergyH = %d *100KWH\n", m_hb2_ce_value.Negative_Load_Total_EnergyH);
+    printf("Negative_Load_Total_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Negative_Load_Total_EnergyL);
+    printf("GridFeed_TotalH = %d *100KWH\n", m_hb2_ce_value.GridFeed_TotalH);
+    printf("GridFeed_TotalL = %d *0.01KWH\n", m_hb2_ce_value.GridFeed_TotalL);
+    printf("GridCharge_TotalH = %d *100KWH\n", m_hb2_ce_value.GridCharge_TotalH);
+    printf("GridCharge_TotalL = %d *0.01KWH\n", m_hb2_ce_value.GridCharge_TotalL);
+// 0x0170
+    printf("PV_Today_EnergyH = %d *100KWH\n", m_hb2_ce_value.PV_Today_EnergyH);
+    printf("PV_Today_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.PV_Today_EnergyL);
+    printf("Bat_Charge_Today_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Charge_Today_EnergyH);
+    printf("Bat_Charge_Today_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Bat_Charge_Today_EnergyL);
+    printf("Bat_Discharge_Today_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Discharge_Today_EnergyH);
+    printf("Bat_Discharge_Today_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Bat_Discharge_Today_EnergyL);
+    printf("Load_Today_EnergyH = %d *100KWH\n", m_hb2_ce_value.Load_Today_EnergyH);
+    printf("Load_Today_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Load_Today_EnergyL);
+    printf("Negative_Load_Today_EnergyH = %d *100KWH\n", m_hb2_ce_value.Negative_Load_Today_EnergyH);
+    printf("Negative_Load_Today_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Negative_Load_Today_EnergyL);
+    printf("GridFeed_TodayH = %d *100KWH\n", m_hb2_ce_value.GridFeed_TodayH);
+    printf("GridFeed_TodayL = %d *0.01KWH\n", m_hb2_ce_value.GridFeed_TodayL);
+    printf("GridCharge_TodayH = %d *100KWH\n", m_hb2_ce_value.GridCharge_TodayH);
+    printf("GridCharge_TodayL = %d *0.01KWH\n", m_hb2_ce_value.GridCharge_TodayL);
+    printf("PV_Month_EnergyH = %d *100KWH\n", m_hb2_ce_value.PV_Month_EnergyH);
+    printf("PV_Month_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.PV_Month_EnergyL);
+// 0x0180
+    printf("Bat_Charge_Month_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Charge_Month_EnergyH);
+    printf("Bat_Charge_Month_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Bat_Charge_Month_EnergyL);
+    printf("Bat_Discharge_Month_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Discharge_Month_EnergyH);
+    printf("Bat_Discharge_Month_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Bat_Discharge_Month_EnergyL);
+    printf("Load_Month_EnergyH = %d *100KWH\n", m_hb2_ce_value.Load_Month_EnergyH);
+    printf("Load_Month_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Load_Month_EnergyL);
+    printf("Negative_Load_Month_EnergyH = %d *100KWH\n", m_hb2_ce_value.Negative_Load_Month_EnergyH);
+    printf("Negative_Load_Month_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Negative_Load_Month_EnergyL);
+    printf("GridFeed_MonthH = %d *100KWH\n", m_hb2_ce_value.GridFeed_MonthH);
+    printf("GridFeed_MonthL = %d *0.01KWH\n", m_hb2_ce_value.GridFeed_MonthL);
+    printf("GridCharge_MonthH = %d *100KWH\n", m_hb2_ce_value.GridCharge_MonthH);
+    printf("GridCharge_MonthL = %d *0.01KWH\n", m_hb2_ce_value.GridCharge_MonthL);
+    printf("CT_Total_Feedin_EnergyH = %d *100KWH\n", m_hb2_ce_value.CT_Total_Feedin_EnergyH);
+    printf("CT_Total_Feedin_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.CT_Total_Feedin_EnergyL);
+    printf("CT_Today_Feedin_EnergyH = %d *100KWH\n", m_hb2_ce_value.CT_Today_Feedin_EnergyH);
+    printf("CT_Today_Feedin_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.CT_Today_Feedin_EnergyL);
+// 0x0190
+    printf("CT_Total_Charge_EnergyH = %d *100KWH\n", m_hb2_ce_value.CT_Total_Charge_EnergyH);
+    printf("CT_Total_Charge_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.CT_Total_Charge_EnergyL);
+    printf("CT_Today_Charge_EnergyH = %d *100KWH\n", m_hb2_ce_value.CT_Today_Charge_EnergyH);
+    printf("CT_Today_Charge_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.CT_Today_Charge_EnergyL);
+    printf("#############################\n");
+}
+
+void CG320::DumpHybrid2DPInfo(unsigned char *buf)
+{
+// 0x0160
+    m_hb2_dp_info.Display_Working_State = (*(buf) << 8) + *(buf+1);
+    m_hb2_dp_info.Output_Power_Restraint_Reeson = (*(buf+2) << 8) + *(buf+3);
+    m_hb2_dp_info.Battery_To_Load_Consumption_Time = (*(buf+4) << 8) + *(buf+5);
+    m_hb2_dp_info.OnGrid_CountDown = (*(buf+6) << 8) + *(buf+7);
+    m_hb2_dp_info.Hybrid_IconL = (*(buf+8) << 8) + *(buf+9);
+    m_hb2_dp_info.Hybrid_IconH = (*(buf+10) << 8) + *(buf+11);
+
+    printf("#### Dump Hybrid2 DP Info ####\n");
+    printf("Display_Working_State            = %d\n", m_hb2_dp_info.Display_Working_State);
+    printf("Output_Power_Restraint_Reeson    = %d\n", m_hb2_dp_info.Output_Power_Restraint_Reeson);
+    printf("Battery_To_Load_Consumption_Time = %d\n", m_hb2_dp_info.Battery_To_Load_Consumption_Time);
+    printf("OnGrid_CountDown                 = %d\n", m_hb2_dp_info.OnGrid_CountDown);
+    printf("Hybrid_IconL                     = 0x%04X\n", m_hb2_dp_info.Hybrid_IconL);
+    printf("Hybrid_IconH                     = 0x%04X\n", m_hb2_dp_info.Hybrid_IconH);
+    printf("#############################\n");
+}
+
+void CG320::ParserHybrid2IconInfo(int Icon_L, int Icon_H)
+{
+    int tmp = Icon_L;
+    m_hb2_icon_info.B0_1_PV = tmp & 0x0003;
+    tmp>>=2;
+    m_hb2_icon_info.B2_3_Battery = tmp & 0x0003;
+    tmp>>=2;
+    m_hb2_icon_info.B4_5_Grid = tmp & 0x0003;
+    tmp>>=2;
+    m_hb2_icon_info.B6_7_Load = tmp & 0x0003;
+    tmp>>=2;
+    m_hb2_icon_info.B8_1O_Inverter_System = tmp & 0x0007;
+    tmp>>=3;
+    m_hb2_icon_info.B11_Generator = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B12_DL_Comm = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B13_Cloud_Comm = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B14_Bat_Calibration = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B15_Derate = tmp & 0x0001;
+
+    tmp = Icon_H;
+    m_hb2_icon_info.B16_PV_To_Battery = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B17_PV_To_Grid = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B18_PV_To_Load = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B19_Battery_To_Grid = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B20_Battery_To_Load = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B21_Grid_To_Battery = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B22_Grid_To_Load = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B23_Load_To_Battery = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B24_Load_To_Grid = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_icon_info.B25_26_Mode = tmp & 0x0003;
+    tmp>>=2;
+    m_hb2_icon_info.B27_29_System_Status = tmp & 0x0007;
+
+    printf("#### Parser Hybrid2 Icon ####\n");
+    printf("Bit0-1     : PV = %d\n", m_hb2_icon_info.B0_1_PV);
+    printf("Bit2-3     : Battery = %d\n", m_hb2_icon_info.B2_3_Battery);
+    printf("Bit4-5     : Grid = %d\n", m_hb2_icon_info.B4_5_Grid);
+    printf("Bit6-7     : Load = %d\n", m_hb2_icon_info.B6_7_Load);
+    printf("Bit8-1O    : Inverter_System = %d\n", m_hb2_icon_info.B8_1O_Inverter_System);
+    printf("Bit11      : Generator = %d\n", m_hb2_icon_info.B11_Generator);
+    printf("Bit12      : DL_Comm = %d\n", m_hb2_icon_info.B12_DL_Comm);
+    printf("Bit13      : Cloud_Comm = %d\n", m_hb2_icon_info.B13_Cloud_Comm);
+    printf("Bit14      : Bat_Calibration = %d\n", m_hb2_icon_info.B14_Bat_Calibration);
+    printf("Bit15      : Derate = %d\n", m_hb2_icon_info.B15_Derate);
+    printf("Bit16      : PV_To_Battery = %d\n", m_hb2_icon_info.B16_PV_To_Battery);
+    printf("Bit17      : PV_To_Grid = %d\n", m_hb2_icon_info.B17_PV_To_Grid);
+    printf("Bit18      : PV_To_Load = %d\n", m_hb2_icon_info.B18_PV_To_Load);
+    printf("Bit19      : Battery_To_Grid = %d\n", m_hb2_icon_info.B19_Battery_To_Grid);
+    printf("Bit20      : Battery_To_Load = %d\n", m_hb2_icon_info.B20_Battery_To_Load);
+    printf("Bit21      : Grid_To_Battery = %d\n", m_hb2_icon_info.B21_Grid_To_Battery);
+    printf("Bit22      : Grid_To_Load = %d\n", m_hb2_icon_info.B22_Grid_To_Load);
+    printf("Bit23      : Load_To_Battery = %d\n", m_hb2_icon_info.B23_Load_To_Battery);
+    printf("Bit24      : Load_To_Grid = %d\n", m_hb2_icon_info.B24_Load_To_Grid);
+    printf("Bit25-26   : Mode = %d\n", m_hb2_icon_info.B25_26_Mode);
+    printf("Bit27-29   : System_Status= %d\n", m_hb2_icon_info.B27_29_System_Status);
+    printf("############################\n");
+}
+
+void CG320::DumpHybrid2RTCData(unsigned char *buf)
+{
+// 0x01D0
+    m_hb2_rtc_data.Second = (*(buf) << 8) + *(buf+1);
+    m_hb2_rtc_data.Minute = (*(buf+2) << 8) + *(buf+3);
+    m_hb2_rtc_data.Hour = (*(buf+4) << 8) + *(buf+5);
+    m_hb2_rtc_data.Date = (*(buf+6) << 8) + *(buf+7);
+    m_hb2_rtc_data.Month = (*(buf+8) << 8) + *(buf+9);
+    m_hb2_rtc_data.Year = (*(buf+10) << 8) + *(buf+11);
+
+    printf("#### Dump Hybrid2 RTC Data ####\n");
+    printf("Second = %d\n", m_hb2_rtc_data.Second);
+    printf("Minute = %d\n", m_hb2_rtc_data.Minute);
+    printf("Hour   = %d\n", m_hb2_rtc_data.Hour);
+    printf("Date   = %d\n", m_hb2_rtc_data.Date); //
+    printf("Month  = %d\n", m_hb2_rtc_data.Month);
+    printf("Year   = %d\n", m_hb2_rtc_data.Year);
+    printf("##############################\n");
+    printf("rtc time : %4d/%02d/%02d ", m_hb2_rtc_data.Year, m_hb2_rtc_data.Month, m_hb2_rtc_data.Date);
+    printf("%02d:%02d:%02d\n", m_hb2_rtc_data.Hour, m_hb2_rtc_data.Minute, m_hb2_rtc_data.Second);
+    printf("##############################\n");
+}
+
+bool CG320::SetHybrid2RTCData(int index)
+{
+    time_t  current_time;
+    struct tm   *st_time = NULL;
+
+    //printf("#### SetHybrid2RTCData Start ####\n");
+    current_time = time(NULL);
+    st_time = localtime(&current_time);
+
+    // check ok time
+    if ( current_time - arySNobj[index].m_ok_time >= OFFLINE_SECOND_HB ) {
+        printf("Last m_ok_time more then 1200 sec.\n");
+        ReRegister(index);
+    }
+
+    m_hb_rtc_data.Second = st_time->tm_sec;
+    m_hb_rtc_data.Minute = st_time->tm_min;
+    m_hb_rtc_data.Hour = st_time->tm_hour;
+    m_hb_rtc_data.Date = st_time->tm_mday;
+    m_hb_rtc_data.Month = 1 + st_time->tm_mon; // ptm->tm_mon 0~11, m_hb_rtc_data.Month 1~12
+    m_hb_rtc_data.Year = 1900 + st_time->tm_year;
+    //printf("RTC timebuf : %4d/%02d/%02d ", m_hb_rtc_data.Year, m_hb_rtc_data.Month, m_hb_rtc_data.Date);
+    //printf("%02d:%02d:%02d\n", m_hb_rtc_data.Hour, m_hb_rtc_data.Minute, m_hb_rtc_data.Second);
+    //printf("#######################################\n");
+
+    int err = 0;
+    unsigned short crc;
+    byte *lpdata = NULL;
+
+    unsigned char szRTCData[41]={0};
+
+    while ( err < 3 ) {
+        // set buf
+        szRTCData[0] = arySNobj[index].m_Addr;
+        szRTCData[1] = 0x10; // function code
+        szRTCData[2] = 0x01;
+        szRTCData[3] = 0xD0; // star address
+        szRTCData[4] = 0x00;
+        szRTCData[5] = 0x08; // number of data
+        szRTCData[6] = 0x10; // bytes
+        // data 0x40 ~ 0x45
+        szRTCData[7] = 0x00;
+        szRTCData[8] = (unsigned char)m_hb_rtc_data.Second;
+        szRTCData[9] = 0x00;
+        szRTCData[10] = (unsigned char)m_hb_rtc_data.Minute;
+        szRTCData[11] = 0x00;
+        szRTCData[12] = (unsigned char)m_hb_rtc_data.Hour;
+        szRTCData[13] = 0x00;
+        szRTCData[14] = (unsigned char)m_hb_rtc_data.Date;
+        szRTCData[15] = 0x00;
+        szRTCData[16] = (unsigned char)m_hb_rtc_data.Month;
+        szRTCData[17] = (unsigned char)((m_hb_rtc_data.Year >> 8) & 0xFF);
+        szRTCData[18] = (unsigned char)(m_hb_rtc_data.Year & 0xFF);
+        // zero 0x46 ~ 0x4E
+        szRTCData[19] = 0x00;
+        szRTCData[20] = 0x00;
+        //szRTCData[21] = 0x00;
+        //szRTCData[22] = 0x00;
+        //szRTCData[23] = 0x00;
+        //szRTCData[24] = 0x00;
+        //szRTCData[25] = 0x00;
+        //szRTCData[26] = 0x00;
+        //szRTCData[27] = 0x00;
+        //szRTCData[28] = 0x00;
+        //szRTCData[29] = 0x00;
+        //szRTCData[30] = 0x00;
+        //szRTCData[31] = 0x00;
+        //szRTCData[32] = 0x00;
+        //szRTCData[33] = 0x00;
+        //szRTCData[34] = 0x00;
+        //szRTCData[35] = 0x00;
+        //szRTCData[36] = 0x00;
+        // data crc 0x4F
+        //crc = CalculateCRC(szRTCData+7, 30);
+        crc = CalculateCRC(szRTCData+7, 14);
+        //szRTCData[37] = (unsigned char) (crc >> 8); // data crc hi
+        szRTCData[21] = (unsigned char) (crc >> 8); // data crc hi
+        //szRTCData[38] = (unsigned char) (crc & 0xFF); // data crc lo
+        szRTCData[22] = (unsigned char) (crc & 0xFF); // data crc lo
+        //szRTCData[39] = 0x00; // cmd crc hi
+        szRTCData[23] = 0x00; // cmd crc hi
+        //szRTCData[40] = 0x00; // cmd crc lo
+        szRTCData[24] = 0x00; // cmd crc lo
+        //MakeReadDataCRC(szRTCData,41);
+        MakeReadDataCRC(szRTCData,25);
+        MClearRX();
+        //txsize=41;
+        txsize=25;
+        waitAddr = arySNobj[index].m_Addr;
+        waitFCode = 0x10;
+        //memcpy(txbuffer, szRTCData, 41);
+        memcpy(txbuffer, szRTCData, 25);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            if ( CheckCRC(lpdata, 8) ) {
+                printf("#### SetHybrid2RTCData OK ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RTCData() : OK", st_time);
+                arySNobj[index].m_ok_time = time(NULL);
+                //free(lpdata);
+                return true;
+            } else {
+                printf("#### SetHybrid2RTCData CRC Error ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RTCData() : CRC Error", st_time);
+                err++;
+            }
+            //free(lpdata);
+        } else {
+            printf("#### SetHybrid2RTCData No Response ####\n");
+            SaveLog((char *)"DataLogger SetHybrid2RTCData() : No Response", st_time);
+            //SaveLog((char *)"DataLogger SetHybrid2RTCData() : run reregister()", st_time);
+            //ReRegister(index);
+            err++;
+        }
+
+        usleep(1000000);
+    }
+
+    return false;
+}
+
+void CG320::DumpHybrid2BMSInfo(unsigned char *buf)
+{
+// 0x0200
+    m_hb2_bms_info.Charge_Voltage_Requirement = (*(buf) << 8) + *(buf+1);
+    m_hb2_bms_info.Charge_Current_Requirement = (*(buf+2) << 8) + *(buf+3);
+    m_hb2_bms_info.Number_Of_Module_Warning = (*(buf+4) << 8) + *(buf+5);
+    m_hb2_bms_info.Master_Total_Voltage = (*(buf+6) << 8) + *(buf+7);
+    m_hb2_bms_info.Discharging_Charging_Current = (*(buf+8) << 8) + *(buf+9);
+    m_hb2_bms_info.SOC = (*(buf+10) << 8) + *(buf+11);
+    m_hb2_bms_info.FCC = (*(buf+12) << 8) + *(buf+13);
+    m_hb2_bms_info.RC = (*(buf+14) << 8) + *(buf+15);
+    m_hb2_bms_info.Status_Flag_Register = (*(buf+16) << 8) + *(buf+17);
+    m_hb2_bms_info.IO_Flag_Register = (*(buf+18) << 8) + *(buf+19);
+    m_hb2_bms_info.Warning_Flag_Register = (*(buf+20) << 8) + *(buf+21);
+    m_hb2_bms_info.Alarm_Flag_Register = (*(buf+22) << 8) + *(buf+23);
+    m_hb2_bms_info.Max_Cell_Voltage = (*(buf+24) << 8) + *(buf+25);
+    m_hb2_bms_info.Min_Cell_Voltage = (*(buf+26) << 8) + *(buf+27);
+    m_hb2_bms_info.Max_Cell_Temperature = (*(buf+28) << 8) + *(buf+29);
+    m_hb2_bms_info.Min_Cell_Temperature = (*(buf+30) << 8) + *(buf+31);
+// 0x0210
+    m_hb2_bms_info.Master_Average_Cycle_Count = (*(buf+32) << 8) + *(buf+33);
+    m_hb2_bms_info.Master_Average_SOH = (*(buf+34) << 8) + *(buf+35);
+    m_hb2_bms_info.Battery_Cumulative_Input_Capacity = (*(buf+36) << 8) + *(buf+37);
+    m_hb2_bms_info.Battery_Cumulative_Output_Capacity = (*(buf+38) << 8) + *(buf+39);
+    m_hb2_bms_info.Master_FW_Version = (*(buf+40) << 8) + *(buf+41);
+    m_hb2_bms_info.Master_Manufacture_Data = (*(buf+42) << 8) + *(buf+43);
+    m_hb2_bms_info.Master_Serial_Number = (*(buf+44) << 8) + *(buf+45);
+    m_hb2_bms_info.Number_Of_Whole_Cells = (*(buf+46) << 8) + *(buf+47);
+    m_hb2_bms_info.Number_Of_Module = (*(buf+48) << 8) + *(buf+49);
+
+// 0x0200
+    printf("#### Dump Hybrid2 BMS Info ####\n");
+    printf("Charge_Voltage_Requirement         = %d *10mV\n", m_hb2_bms_info.Charge_Voltage_Requirement);
+    printf("Charge_Current_Requirement         = %d *10mA\n", m_hb2_bms_info.Charge_Current_Requirement);
+    printf("Number_Of_Module_Warning           = %d\n", m_hb2_bms_info.Number_Of_Module_Warning);
+    printf("Master_Total_Voltage               = %d *10mV\n", m_hb2_bms_info.Master_Total_Voltage);
+    printf("Discharging_Charging_Current       = %d *10mA\n", m_hb2_bms_info.Discharging_Charging_Current);
+    printf("SOC                                = %d %% *0.1\n", m_hb2_bms_info.SOC);
+    printf("FCC                                = %d *10mAh\n", m_hb2_bms_info.FCC);
+    printf("RC                                 = %d *10mAh\n", m_hb2_bms_info.RC);
+    printf("Status_Flag_Register               = 0x%04X\n", m_hb2_bms_info.Status_Flag_Register);
+    printf("IO_Flag_Register                   = 0x%04X\n", m_hb2_bms_info.IO_Flag_Register);
+    printf("Warning_Flag_Register              = 0x%04X\n", m_hb2_bms_info.Warning_Flag_Register);
+    printf("Alarm_Flag_Register                = 0x%04X\n", m_hb2_bms_info.Alarm_Flag_Register);
+    printf("Max_Cell_Voltage                   = %d mV\n", m_hb2_bms_info.Max_Cell_Voltage);
+    printf("Min_Cell_Voltage                   = %d mV\n", m_hb2_bms_info.Min_Cell_Voltage);
+    printf("Max_Cell_Temperature               = %d *0.1'C\n", m_hb2_bms_info.Max_Cell_Temperature);
+    printf("Min_Cell_Temperature               = %d *0.1'C\n", m_hb2_bms_info.Min_Cell_Temperature);
+// 0x0210
+    printf("Master_Average_Cycle_Count         = %d\n", m_hb2_bms_info.Master_Average_Cycle_Count);
+    printf("Master_Average_SOH                 = %d %% *0.1\n", m_hb2_bms_info.Master_Average_SOH);
+    printf("Battery_Cumulative_Input_Capacity  = %d KWh\n", m_hb2_bms_info.Battery_Cumulative_Input_Capacity);
+    printf("Battery_Cumulative_Output_Capacity = %d KWh\n", m_hb2_bms_info.Battery_Cumulative_Output_Capacity);
+    printf("Master_FW_Version                  = 0x%04X\n", m_hb2_bms_info.Master_FW_Version);
+    printf("Master_Manufacture_Data            = %d\n", m_hb2_bms_info.Master_Manufacture_Data);
+    printf("Master_Serial_Number               = %d\n", m_hb2_bms_info.Master_Serial_Number);
+    printf("Number_Of_Whole_Cells              = %d\n", m_hb2_bms_info.Number_Of_Whole_Cells);
+    printf("Number_Of_Module                   = %d\n", m_hb2_bms_info.Number_Of_Module);
+    printf("##############################\n");
+}
+
 bool CG320::GetTimezone()
 {
     char buf[1024] = {0};
@@ -5922,12 +7802,12 @@ bool CG320::GetTimezone()
     struct tm *log_time;
     current_time = time(NULL);
     log_time = localtime(&current_time);
-    SaveLog("DataLogger GetTimezone() run.", log_time);
+    SaveLog((char *)"DataLogger GetTimezone() run.", log_time);
 
     m_do_get_TZ = true;
     printf("\n########### Get Timezone ###########\n");
     // get timezone from ip
-    sprintf(buf, "curl %s --max-time 30 > /tmp/timezone", TIMEZONE_URL);
+    sprintf(buf, "curl -k %s --max-time 30 > /tmp/timezone", TIMEZONE_URL);
     //printf("cmd = %s\n", buf);
     system(buf);
     pFile = fopen("/tmp/timezone", "rb");
@@ -5985,7 +7865,7 @@ bool CG320::GetTimezone()
         return false;
 
     // get time offset from openwrt if match timezone
-    sprintf(buf, "curl %s --max-time 30 | grep -i \"%s\" > /tmp/time_offset", TIME_OFFSET_URL, timezone);
+    sprintf(buf, "curl -k %s --max-time 30 | grep -i \"%s\" > /tmp/time_offset", TIME_OFFSET_URL, timezone);
     //printf("cmd = %s\n", buf);
     system(buf);
     pFile = fopen("/tmp/time_offset", "rb");
@@ -6607,18 +8487,35 @@ bool CG320::WriteLogXML(int index)
         //}
 
         // set status
-        if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.PV_Inv_Error_COD3_Record ||
-            m_hb_rt_info.DD_Error_COD_Record || m_hb_rt_info.DD_Error_COD2_Record ) {
-            strcat(m_log_buf, "<Status>2</Status>");
-        } else {
-            if ( m_loopflag == 5 ) {
-                strcat(m_log_buf, "<Status>1</Status>");
-                m_inverter_state = 1;
-                m_sys_error |= SYS_0010_Off_Line;
+        if ( arySNobj[index].m_Model < 16 ) { // H5000/5001
+            if ( m_hb_rt_info.Error_Code || m_hb_rt_info.PV_Inv_Error_COD1_Record || m_hb_rt_info.PV_Inv_Error_COD2_Record || m_hb_rt_info.PV_Inv_Error_COD3_Record ||
+                m_hb_rt_info.DD_Error_COD_Record || m_hb_rt_info.DD_Error_COD2_Record ) {
+                strcat(m_log_buf, "<Status>2</Status>");
             } else {
-                strcat(m_log_buf, "<Status>0</Status>");
-                m_inverter_state = 0;
-                m_sys_error &= ~SYS_0010_Off_Line;
+                if ( m_loopflag == 5 ) {
+                    strcat(m_log_buf, "<Status>1</Status>");
+                    m_inverter_state = 1;
+                    m_sys_error |= SYS_0010_Off_Line;
+                } else {
+                    strcat(m_log_buf, "<Status>0</Status>");
+                    m_inverter_state = 0;
+                    m_sys_error &= ~SYS_0010_Off_Line;
+                }
+            }
+        } else { // H5500/9600
+            if ( m_hb2_rt_info.Error_Code || m_hb2_rt_info.PV_Inv_Error_COD1_Record || m_hb2_rt_info.PV_Inv_Error_COD2_Record || m_hb2_rt_info.PV_Inv_Error_COD3_Record ||
+                m_hb2_rt_info.DD_Error_COD1_Record || m_hb2_rt_info.DD_Error_COD2_Record ) {
+                strcat(m_log_buf, "<Status>2</Status>");
+            } else {
+                if ( m_loopflag == 6 ) {
+                    strcat(m_log_buf, "<Status>1</Status>");
+                    m_inverter_state = 1;
+                    m_sys_error |= SYS_0010_Off_Line;
+                } else {
+                    strcat(m_log_buf, "<Status>0</Status>");
+                    m_inverter_state = 0;
+                    m_sys_error &= ~SYS_0010_Off_Line;
+                }
             }
         }
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -6753,6 +8650,400 @@ bool CG320::WriteLogXML(int index)
                 strcat(m_log_buf, buf);
             }
         //}
+
+            // set id data
+            if ( m_save_hb2_id_data ) {
+            // 0x0001
+                sprintf(buf, "<Grid_Voltage>%d</Grid_Voltage>", m_hb2_id_data.Grid_Voltage);
+                strcat(m_log_buf, buf);
+                // set model
+                sprintf(buf, "<Model>%d</Model>", m_hb2_id_data.Model);
+                strcat(m_log_buf, buf);
+                // set date
+                sprintf(buf, "<Product_Y>%04d</Product_Y>", m_hb2_id_data.Year);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Product_M>%02d</Product_M>", m_hb2_id_data.Month);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Product_D>%02d</Product_D>", m_hb2_id_data.Date);
+                strcat(m_log_buf, buf);
+                // set version
+                sprintf(buf, "<Ver_HW>%d</Ver_HW>", m_hb2_id_data.Inverter_Ver);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Ver_FW>%d</Ver_FW>", m_hb2_id_data.DD_Ver);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Ver_EE>%d</Ver_EE>", m_hb2_id_data.Parameter_Ver);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<DisplayVer>%d</DisplayVer>", m_hb2_id_data.Display_Ver);
+                strcat(m_log_buf, buf);
+                // set hw ver
+                sprintf(buf, "<HWver>%d</HWver>", m_hb2_id_data.HW_Ver);
+                strcat(m_log_buf, buf);
+                // set flags1
+                sprintf(buf, "<Safety_Control>%d</Safety_Control>", m_hb2_id_data.Safety_Control);
+                strcat(m_log_buf, buf);
+            }
+
+            // set remote setting
+            if ( m_save_hb2_rs_info ) {
+            // 0x00B0
+                // remove ori 0x091 ~ 0x94, set 0
+                sprintf(buf, "<StarHour>0</StarHour>");
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<StarMin>0</StarMin>");
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<EndHour>0</EndHour>");
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<EndMin>0</EndMin>");
+                strcat(m_log_buf, buf);
+                //
+                sprintf(buf, "<InverterMode>%d</InverterMode>", m_hb2_rs_info.Mode);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ChargeSetting>%d</ChargeSetting>", m_hb2_rs_info.BatteryPolic);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Multi_Module>%d</Multi_Module>", m_hb2_rs_info.MultiModuleSetting);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Battery_Type>%d</Battery_Type>", m_hb2_rs_info.BatteryType);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ChargePower>%05.3f</ChargePower>", ((float)m_hb2_rs_info.ChargePower)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<DischargePower>%05.3f</DischargePower>", ((float)m_hb2_rs_info.DischargePower)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<FeedInPower>%05.3f</FeedInPower>", ((float)m_hb2_rs_info.FeedinPower)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<AC_Coupling_Power>%d</AC_Coupling_Power>", m_hb2_rs_info.BatteryPowerRating);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ChargeCurrent>%03.1f</ChargeCurrent>", ((float)m_hb2_rs_info.MaxBatteryChargingCurrent)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BatShutdownVolt>%03.1f</BatShutdownVolt>", ((float)m_hb2_rs_info.BatteryShutdownVoltage)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BatFloatingVolt>%03.1f</BatFloatingVolt>", ((float)m_hb2_rs_info.BatteryAbsorptionChargingVoltage)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BatReservePercent>%d</BatReservePercent>", m_hb2_rs_info.BatteryReservePercentage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridTiedMaxSOC>%d</GridTiedMaxSOC>", m_hb2_rs_info.GridTiedMaxSOC);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb2_rs_info.PeakShavingPower)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<StartFrequency>%03.1f</StartFrequency>", ((float)m_hb2_rs_info.StartFrequency)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<EndFrequency>%03.1f</EndFrequency>", ((float)m_hb2_rs_info.EndFrequency)/10);
+                strcat(m_log_buf, buf);
+            // 0x00C0
+                sprintf(buf, "<RampRate>%d</RampRate>", m_hb2_rs_info.RampRatePercentage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Degree>%d</Degree>", m_hb2_rs_info.DegreeLeadLag);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Q_Value>%d</Q_Value>", m_hb2_rs_info.PowerFactorControl);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<TMP_C3>%d</TMP_C3>", m_hb2_rs_info.TMP_C3);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<SpecifiedModbusSlaveID>%d</SpecifiedModbusSlaveID>", m_hb2_rs_info.SpecifiedModbusSlaveID);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<FunctionControl1>%d</FunctionControl1>", m_hb2_rs_info.FunctionControl1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<FunctionControl2>%d</FunctionControl2>", m_hb2_rs_info.FunctionControl2);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<SunSpec_Write_All>%d</SunSpec_Write_All>", m_hb2_rs_info.SunSpecWritable);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Remote_Control>%d</Remote_Control>", m_hb2_rs_info.SoftwareControl);
+                strcat(m_log_buf, buf);
+            // 0x00D0
+                sprintf(buf, "<TOU_Season1_Operation_Mode>%d</TOU_Season1_Operation_Mode>", m_hb2_rs_info.TOU_Season1_Operation_Mode);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<TOU_OtherSeason_Operation_Mode>%d</TOU_OtherSeason_Operation_Mode>", m_hb2_rs_info.TOU_OtherSeason_Operation_Mode);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<TOU_Season1_Start_Month>%d</TOU_Season1_Start_Month>", m_hb2_rs_info.TOU_Season1_Start_Month);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<TOU_Season1_Start_Day>%d</TOU_Season1_Start_Day>", m_hb2_rs_info.TOU_Season1_Start_Day);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<TOU_Season1_End_Month>%d</TOU_Season1_End_Month>", m_hb2_rs_info.TOU_Season1_End_Month);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<TOU_Season1_End_Day>%d</TOU_Season1_End_Day>", m_hb2_rs_info.TOU_Season1_End_Day);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_Start_Hour1_of_Season1>%d</Peak_Period_Start_Hour1_of_Season1>", m_hb2_rs_info.Peak_Period_Start_Hour1_of_Season1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_Start_Minute1_of_Season1>%d</Peak_Period_Start_Minute1_of_Season1>", m_hb2_rs_info.Peak_Period_Start_Minute1_of_Season1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_End_Hour1_of_Season1>%d</Peak_Period_End_Hour1_of_Season1>", m_hb2_rs_info.Peak_Period_End_Hour1_of_Season1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_End_Minute1_of_Season1>%d</Peak_Period_End_Minute1_of_Season1>", m_hb2_rs_info.Peak_Period_End_Minute1_of_Season1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_Start_Hour2_of_Season1>%d</Peak_Period_Start_Hour2_of_Season1>", m_hb2_rs_info.Peak_Period_Start_Hour2_of_Season1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_Start_Minute2_of_Season1>%d</Peak_Period_Start_Minute2_of_Season1>", m_hb2_rs_info.Peak_Period_Start_Minute2_of_Season1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_End_Hour2_of_Season1>%d</Peak_Period_End_Hour2_of_Season1>", m_hb2_rs_info.Peak_Period_End_Hour2_of_Season1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_End_Minute2_of_Season1>%d</Peak_Period_End_Minute2_of_Season1>", m_hb2_rs_info.Peak_Period_End_Minute2_of_Season1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_Start_Hour1_of_OtherSeason>%d</Peak_Period_Start_Hour1_of_OtherSeason>", m_hb2_rs_info.Peak_Period_Start_Hour1_of_OtherSeason);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_Start_Minute1_of_OtherSeason>%d</Peak_Period_Start_Minute1_of_OtherSeason>", m_hb2_rs_info.Peak_Period_Start_Minute1_of_OtherSeason);
+                strcat(m_log_buf, buf);
+            // 0x00E0
+                sprintf(buf, "<Peak_Period_End_Hour1_of_OtherSeason>%d</Peak_Period_End_Hour1_of_OtherSeason>", m_hb2_rs_info.Peak_Period_End_Hour1_of_OtherSeason);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_End_Minute1_of_OtherSeason>%d</Peak_Period_End_Minute1_of_OtherSeason>", m_hb2_rs_info.Peak_Period_End_Minute1_of_OtherSeason);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_Start_Hour2_of_OtherSeason>%d</Peak_Period_Start_Hour2_of_OtherSeason>", m_hb2_rs_info.Peak_Period_Start_Hour2_of_OtherSeason);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_Start_Minute2_of_OtherSeason>%d</Peak_Period_Start_Minute2_of_OtherSeason>", m_hb2_rs_info.Peak_Period_Start_Minute2_of_OtherSeason);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_End_Hour2_of_OtherSeason>%d</Peak_Period_End_Hour2_of_OtherSeason>", m_hb2_rs_info.Peak_Period_End_Hour2_of_OtherSeason);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Peak_Period_End_Minute2_of_OtherSeason>%d</Peak_Period_End_Minute2_of_OtherSeason>", m_hb2_rs_info.Peak_Period_End_Minute2_of_OtherSeason);
+                strcat(m_log_buf, buf);
+            }
+
+            // set real time info
+            if ( m_save_hb2_rt_info ) {
+            // 0x0100
+                sprintf(buf, "<Inv_Temp>%03.1f</Inv_Temp>", ((float)m_hb2_rt_info.Inv_Temp)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV1_Temp>%03.1f</PV1_Temp>", ((float)m_hb2_rt_info.Charger_Temp)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV2_Temp>%03.1f</PV2_Temp>", ((float)m_hb2_rt_info.Environment_Temp)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<DD_Temp>%03.1f</DD_Temp>", ((float)m_hb2_rt_info.DD_Temp)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dcv_1>%d</dcv_1>", m_hb2_rt_info.PV1_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dci_1>%04.2f</dci_1>", ((float)m_hb2_rt_info.PV1_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dc_power_1>%05.3f</dc_power_1>", ((float)m_hb2_rt_info.PV1_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dcv_2>%d</dcv_2>", m_hb2_rt_info.PV2_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dci_2>%04.2f</dci_2>", ((float)m_hb2_rt_info.PV2_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dc_power_2>%05.3f</dc_power_2>", ((float)m_hb2_rt_info.PV2_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<acv_AN>%d</acv_AN>", m_hb2_rt_info.Load_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ac_voltage>%d</ac_voltage>", m_hb2_rt_info.Load_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<aci_A>%04.2f</aci_A>", ((float)m_hb2_rt_info.Load_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ac_current>%04.2f</ac_current>", ((float)m_hb2_rt_info.Load_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ac_power_A>%05.3f</ac_power_A>", ((float)m_hb2_rt_info.Load_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ac_power>%05.3f</ac_power>", ((float)m_hb2_rt_info.Load_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<VGrid_A>%d</VGrid_A>", m_hb2_rt_info.Grid_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<IGrid_A>%04.2f</IGrid_A>", ((float)m_hb2_rt_info.Grid_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PGrid_A>%05.3f</PGrid_A>", ((float)m_hb2_rt_info.Grid_Power)/1000);
+                strcat(m_log_buf, buf);
+            // 0x0110
+                sprintf(buf, "<VBattery>%03.1f</VBattery>", ((float)m_hb2_rt_info.Battery_Voltage)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<IBattery>%03.1f</IBattery>", ((float)m_hb2_rt_info.Battery_Current)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PBattery>%05.3f</PBattery>", ((float)m_hb2_rt_info.Battery_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Vbus>%03.1f</Vbus>", ((float)m_hb2_rt_info.Bus_Voltage)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Ibus>%03.1f</Ibus>", ((float)m_hb2_rt_info.Bus_Current)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dcv_3>%d</dcv_3>", m_hb2_rt_info.PV3_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dci_3>%04.2f</dci_3>", ((float)m_hb2_rt_info.PV3_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dc_power_3>%05.3f</dc_power_3>", ((float)m_hb2_rt_info.PV3_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dcv_4>%d</dcv_4>", m_hb2_rt_info.PV4_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dci_4>%04.2f</dci_4>", ((float)m_hb2_rt_info.PV4_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dc_power_4>%05.3f</dc_power_4>", ((float)m_hb2_rt_info.PV4_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dc_power>%05.3f</dc_power>", ((float)m_hb2_rt_info.PV_Total_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<soc>%d</soc>", m_hb2_rt_info.Battery_SOC);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Sys_State>%d</Sys_State>", m_hb2_rt_info.Sys_State);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Module_Status>%d</Module_Status>", m_hb2_rt_info.Module_Status);
+                strcat(m_log_buf, buf);
+            // 0x0120
+                sprintf(buf, "<Function_Status>%d</Function_Status>", m_hb2_rt_info.Function_Status);
+                strcat(m_log_buf, buf);
+                // 0x0121 ~ 0x0125 error code for debug
+                sprintf(buf, "<PV_Inv_Error_COD1_Record>0x%04X</PV_Inv_Error_COD1_Record>", m_hb2_rt_info.PV_Inv_Error_COD1_Record);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV_Inv_Error_COD2_Record>0x%04X</PV_Inv_Error_COD2_Record>", m_hb2_rt_info.PV_Inv_Error_COD2_Record);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV_Inv_Error_COD3_Record>0x%04X</PV_Inv_Error_COD3_Record>", m_hb2_rt_info.PV_Inv_Error_COD3_Record);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<DD_Error_COD1_Record>0x%04X</DD_Error_COD1_Record>", m_hb2_rt_info.DD_Error_COD1_Record);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<DD_Error_COD2_Record>0x%04X</DD_Error_COD2_Record>", m_hb2_rt_info.DD_Error_COD2_Record);
+                strcat(m_log_buf, buf);
+                //
+                sprintf(buf, "<PV_Inv_Error_COD2_ATE>%d</PV_Inv_Error_COD2_ATE>", m_hb2_rt_info.PV_Inv_Error_COD2);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<DD_Error_COD1_ATE>%d</DD_Error_COD1_ATE>", m_hb2_rt_info.DD_Error_COD);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Error_Code>%d</Error_Code>", m_hb2_rt_info.Error_Code);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Inverterfrequency>%03.1f</Inverterfrequency>", ((float)m_hb2_rt_info.Invert_Frequency)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<frequency>%03.1f</frequency>", ((float)m_hb2_rt_info.Grid_Frequency)/10);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Total_Load_Power>%05.3f</Total_Load_Power>", ((float)m_hb2_rt_info.Total_Load_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Total_Load_Current>%04.2f</Total_Load_Current>", ((float)m_hb2_rt_info.Total_Load_Current)/100);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<ExtPower>%05.3f</ExtPower>", ((float)m_hb2_rt_info.CT_Power)/1000);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<CT_Current>%04.2f</CT_Current>", ((float)m_hb2_rt_info.CT_Current)/100);
+                strcat(m_log_buf, buf);
+            // other
+                sprintf(buf, "<dc_voltage>%03.1f</dc_voltage>", ((float)(m_hb2_rt_info.PV1_Voltage + m_hb2_rt_info.PV2_Voltage + m_hb2_rt_info.PV3_Voltage + m_hb2_rt_info.PV4_Voltage))/4);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<dc_current>%d</dc_current>", m_hb2_rt_info.PV1_Current + m_hb2_rt_info.PV2_Current + m_hb2_rt_info.PV3_Current + m_hb2_rt_info.PV4_Current);
+                strcat(m_log_buf, buf);
+            }
+
+            // set cumulative energy value
+            if ( m_save_hb2_ce_value ) {
+            // 0x0160
+                sprintf(buf, "<Total_Life_Time>%04.2f</Total_Life_Time>", m_hb2_ce_value.Total_Life_TimeH*100 + ((float)m_hb2_ce_value.Total_Life_TimeL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<total_KWH>%04.2f</total_KWH>", m_hb2_ce_value.PV_Total_EnergyH*100 + ((float)m_hb2_ce_value.PV_Total_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Pbat_Total>%04.2f</Pbat_Total>", m_hb2_ce_value.Bat_Charge_Total_EnergyH*100 + ((float)m_hb2_ce_value.Bat_Charge_Total_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Discharge_Total_Energy>%04.2f</Bat_Discharge_Total_Energy>", m_hb2_ce_value.Bat_Discharge_Total_EnergyH*100 + ((float)m_hb2_ce_value.Bat_Discharge_Total_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Pload_Total>%04.2f</Pload_Total>", m_hb2_ce_value.Load_Total_EnergyH*100 + ((float)m_hb2_ce_value.Load_Total_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Negative_Load_Total_Energy>%04.2f</Negative_Load_Total_Energy>", m_hb2_ce_value.Negative_Load_Total_EnergyH*100 + ((float)m_hb2_ce_value.Negative_Load_Total_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridFeed_Total>%04.2f</GridFeed_Total>", m_hb2_ce_value.GridFeed_TotalH*100 + ((float)m_hb2_ce_value.GridFeed_TotalL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridCharge_Total>%04.2f</GridCharge_Total>", m_hb2_ce_value.GridCharge_TotalH*100 + ((float)m_hb2_ce_value.GridCharge_TotalL)*0.01);
+                strcat(m_log_buf, buf);
+            // 0x0170
+                sprintf(buf, "<PV_Today_Energy>%04.2f</PV_Today_Energy>", m_hb2_ce_value.PV_Today_EnergyH*100 + ((float)m_hb2_ce_value.PV_Today_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Charge_Today_Energy>%04.2f</Bat_Charge_Today_Energy>", m_hb2_ce_value.Bat_Charge_Today_EnergyH*100 + ((float)m_hb2_ce_value.Bat_Charge_Today_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Discharge_Today_Energy>%04.2f</Bat_Discharge_Today_Energy>", m_hb2_ce_value.Bat_Discharge_Today_EnergyH*100 + ((float)m_hb2_ce_value.Bat_Discharge_Today_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Load_Today_Energy>%04.2f</Load_Today_Energy>", m_hb2_ce_value.Load_Today_EnergyH*100 + ((float)m_hb2_ce_value.Load_Today_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Negative_Load_Today_Energy>%04.2f</Negative_Load_Today_Energy>", m_hb2_ce_value.Negative_Load_Today_EnergyH*100 + ((float)m_hb2_ce_value.Negative_Load_Today_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridFeed_Today_Energy>%04.2f</GridFeed_Today_Energy>", m_hb2_ce_value.GridFeed_TodayH*100 + ((float)m_hb2_ce_value.GridFeed_TodayL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridCharge_Today_Energy>%04.2f</GridCharge_Today_Energy>", m_hb2_ce_value.GridCharge_TodayH*100 + ((float)m_hb2_ce_value.GridCharge_TodayL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV_Month_Energy>%04.2f</PV_Month_Energy>", m_hb2_ce_value.PV_Month_EnergyH*100 + ((float)m_hb2_ce_value.PV_Month_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+            // 0x0180
+                sprintf(buf, "<Bat_Charge_Month_Energy>%04.2f</Bat_Charge_Month_Energy>", m_hb2_ce_value.Bat_Charge_Month_EnergyH*100 + ((float)m_hb2_ce_value.Bat_Charge_Month_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Discharge_Month_Energy>%04.2f</Bat_Discharge_Month_Energy>", m_hb2_ce_value.Bat_Discharge_Month_EnergyH*100 + ((float)m_hb2_ce_value.Bat_Discharge_Month_EnergyH)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Load_Month_Energy>%04.2f</Load_Month_Energy>", m_hb2_ce_value.Load_Month_EnergyH*100 + ((float)m_hb2_ce_value.Load_Month_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Negative_Load_Month_Energy>%04.2f</Negative_Load_Month_Energy>", m_hb2_ce_value.Negative_Load_Month_EnergyH*100 + ((float)m_hb2_ce_value.Negative_Load_Month_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridFeed_Month_Energy>%04.2f</GridFeed_Month_Energy>", m_hb2_ce_value.GridFeed_MonthH*100 + ((float)m_hb2_ce_value.GridFeed_MonthL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridCharge_Month_Energy>%04.2f</GridCharge_Month_Energy>", m_hb2_ce_value.GridCharge_MonthH*100 + ((float)m_hb2_ce_value.GridCharge_MonthL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<CT_Total_Feedin_Energy>%04.2f</CT_Total_Feedin_Energy>", m_hb2_ce_value.CT_Total_Feedin_EnergyH*100 + ((float)m_hb2_ce_value.CT_Total_Feedin_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<CT_Today_Feedin_Energy>%04.2f</CT_Today_Feedin_Energy>", m_hb2_ce_value.CT_Today_Feedin_EnergyH*100 + ((float)m_hb2_ce_value.CT_Today_Feedin_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+            // 0x0190
+                sprintf(buf, "<CT_Total_Charge_Energy>%04.2f</CT_Total_Charge_Energy>", m_hb2_ce_value.CT_Total_Charge_EnergyH*100 + ((float)m_hb2_ce_value.CT_Total_Charge_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<CT_Today_Charge_Energy>%04.2f</CT_Today_Charge_Energy>", m_hb2_ce_value.CT_Today_Charge_EnergyH*100 + ((float)m_hb2_ce_value.CT_Today_Charge_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+            }
+
+            // set display info
+            if ( m_save_hb2_dp_info ) {
+            // 0x01A0
+                sprintf(buf, "<Display_Working_State>%d</Display_Working_State>", m_hb2_dp_info.Display_Working_State);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Output_Power_Restraint_Reeson>%d</Output_Power_Restraint_Reeson>", m_hb2_dp_info.Output_Power_Restraint_Reeson);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Battery_To_Load_Consumption_Time>%d</Battery_To_Load_Consumption_Time>", m_hb2_dp_info.Battery_To_Load_Consumption_Time);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<OnGrid_CountDown>%d</OnGrid_CountDown>", m_hb2_dp_info.OnGrid_CountDown);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Hybrid_Icon>%d</Hybrid_Icon>", (m_hb2_dp_info.Hybrid_IconH << 16) + m_hb2_dp_info.Hybrid_IconL);
+                strcat(m_log_buf, buf);
+            }
+
+            // set bms info
+            if ( m_save_hb2_bms_info ) {
+            // 0x0200
+                sprintf(buf, "<BMS_Voltage>%04.2f</BMS_Voltage>", ((float)m_hb2_bms_info.Charge_Voltage_Requirement/100));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_Current>%04.2f</BMS_Current>", ((float)m_hb2_bms_info.Charge_Current_Requirement/100));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Number_Of_Module_Warning>%d</Number_Of_Module_Warning>", m_hb2_bms_info.Number_Of_Module_Warning);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Master_Total_Voltage>%04.2f</Master_Total_Voltage>", ((float)m_hb2_bms_info.Master_Total_Voltage/100));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Discharging_Charging_Current>%04.2f</Discharging_Charging_Current>", ((float)m_hb2_bms_info.Discharging_Charging_Current/100));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_SOC>%03.1f</BMS_SOC>", ((float)m_hb2_bms_info.SOC/10));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<FCC>%04.2f</FCC>", ((float)m_hb2_bms_info.FCC/100));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<RC>%04.2f</RC>", ((float)m_hb2_bms_info.RC/100));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_Status>%d</BMS_Status>", m_hb2_bms_info.Status_Flag_Register);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<IO_Flag_Register>%d</IO_Flag_Register>", m_hb2_bms_info.IO_Flag_Register);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Warning_Flag_Register>%d</Warning_Flag_Register>", m_hb2_bms_info.Warning_Flag_Register);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Alarm_Flag_Register>%d</Alarm_Flag_Register>", m_hb2_bms_info.Alarm_Flag_Register);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_MaxCell>%05.3f</BMS_MaxCell>", ((float)m_hb2_bms_info.Max_Cell_Voltage/1000));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_MinCell>%05.3f</BMS_MinCell>", ((float)m_hb2_bms_info.Min_Cell_Voltage/1000));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_Max_Temp>%d</BMS_Max_Temp>", m_hb2_bms_info.Max_Cell_Temperature);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_Min_Temp>%d</BMS_Min_Temp>", m_hb2_bms_info.Min_Cell_Temperature);
+                strcat(m_log_buf, buf);
+            // 0x0210
+                sprintf(buf, "<BMS_CycleCount>%d</BMS_CycleCount>", m_hb2_bms_info.Master_Average_Cycle_Count);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Master_Average_SOH>%03.1f</Master_Average_SOH>", ((float)m_hb2_bms_info.Master_Average_SOH/10));
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Battery_Cumulative_Input_Capacity>%d</Battery_Cumulative_Input_Capacity>", m_hb2_bms_info.Battery_Cumulative_Input_Capacity);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Battery_Cumulative_Output_Capacity>%d</Battery_Cumulative_Output_Capacity>", m_hb2_bms_info.Battery_Cumulative_Output_Capacity);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Master_FW_Version>%d</Master_FW_Version>", m_hb2_bms_info.Master_FW_Version);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Master_Manufacture_Data>%d</Master_Manufacture_Data>", m_hb2_bms_info.Master_Manufacture_Data);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Master_Serial_Number>%d</Master_Serial_Number>", m_hb2_bms_info.Master_Serial_Number);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Number_Of_Whole_Cells>%d</Number_Of_Whole_Cells>", m_hb2_bms_info.Number_Of_Whole_Cells);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<BMS_ModuleNo>%d</BMS_ModuleNo>", m_hb2_bms_info.Number_Of_Module);
+                strcat(m_log_buf, buf);
+
+                //sprintf(buf, "<BMS_Error>0</BMS_Error>");
+                //strcat(m_log_buf, buf);
+                //sprintf(buf, "<BMS_Info>0</BMS_Info>");
+                //strcat(m_log_buf, buf);
+                //sprintf(buf, "<BMS_BaudRate>0</BMS_BaudRate>");
+                //strcat(m_log_buf, buf);
+            }
     }
 
     strcat(m_log_buf, "</record>");
@@ -7123,6 +9414,7 @@ bool CG320::WriteErrorLogXML(int index)
             m_data_st_time.tm_hour, m_data_st_time.tm_min, m_data_st_time.tm_sec, arySNobj[index].m_Sn);
         strcat(m_errlog_buf, buf);
 
+        // H5000/5001
         // 0xDB : error code
         if ( m_hb_rt_info.Error_Code ) {
             sprintf(buf, "<code>%d</code>", m_hb_rt_info.Error_Code);
@@ -7165,7 +9457,7 @@ bool CG320::WriteErrorLogXML(int index)
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0001 )
             strcat(m_errlog_buf, "<code>COD2_0001_Arc</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0002 )
-            strcat(m_errlog_buf, "<code>COD2_0002_Vac_Relay_fault</code>");
+            strcat(m_errlog_buf, "<code>COD2_0002_Vac_Relay_Fault</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0004 )
             strcat(m_errlog_buf, "<code>COD2_0004_Ipv1_short</code>");
         if ( m_hb_rt_info.PV_Inv_Error_COD2_Record & 0x0008 )
@@ -7257,6 +9549,151 @@ bool CG320::WriteErrorLogXML(int index)
             strcat(m_errlog_buf, "<code>COD5_0200_DD_en</code>");
         if ( m_hb_rt_info.DD_Error_COD2_Record & 0x0400 )
             strcat(m_errlog_buf, "<code>COD5_0400_PVEnable_flag</code>");
+
+
+        // H5500/9600
+        // 0x0128 : error code
+        if ( m_hb2_rt_info.Error_Code ) {
+            sprintf(buf, "<code>%d</code>", m_hb2_rt_info.Error_Code);
+            strcat(m_errlog_buf, buf);
+        }
+        // PV_Inv_Error_COD1_Record 0x0121
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0001 )
+            strcat(m_errlog_buf, "<code>COD1_0001_Fac_HL</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0002 )
+            strcat(m_errlog_buf, "<code>COD1_0002_CanBus_Fault</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0004 )
+            strcat(m_errlog_buf, "<code>COD1_0004_Islanding</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0008 )
+            strcat(m_errlog_buf, "<code>COD1_0008_Vac_H</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0010 )
+            strcat(m_errlog_buf, "<code>COD1_0010_Vac_L</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0020 )
+            strcat(m_errlog_buf, "<code>COD1_0020_Fac_H</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0040 )
+            strcat(m_errlog_buf, "<code>COD1_0040_Fac_L</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0080 )
+            strcat(m_errlog_buf, "<code>COD1_0080_Fac_LL</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0100 )
+            strcat(m_errlog_buf, "<code>COD1_0100_Vac_OCP</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0200 )
+            strcat(m_errlog_buf, "<code>COD1_0200_Vac_HL</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0400 )
+            strcat(m_errlog_buf, "<code>COD1_0400_Vac_LL</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x0800 )
+            strcat(m_errlog_buf, "<code>COD1_0800_OPP</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x1000 )
+            strcat(m_errlog_buf, "<code>COD1_1000_Iac_H</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x2000 )
+            strcat(m_errlog_buf, "<code>COD1_2000_Ipv_H</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x4000 )
+            strcat(m_errlog_buf, "<code>COD1_4000_ADCINT_OVF</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD1_Record & 0x8000 )
+            strcat(m_errlog_buf, "<code>COD1_8000_Vbus_H</code>");
+        // PV_Inv_Error_COD2_Record 0x0122
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0001 )
+            strcat(m_errlog_buf, "<code>COD2_0001_Arc</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0002 )
+            strcat(m_errlog_buf, "<code>COD2_0002_Para_Check</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0004 )
+            strcat(m_errlog_buf, "<code>COD2_0004_Ipv1_short</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0008 )
+            strcat(m_errlog_buf, "<code>COD2_0008_Ipv2_short</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0010 )
+            strcat(m_errlog_buf, "<code>COD2_0010_Vac_Short</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0020 )
+            strcat(m_errlog_buf, "<code>COD2_0020_CT_fault</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0040 )
+            strcat(m_errlog_buf, "<code>COD2_0040_PVOverPower</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0080 )
+            strcat(m_errlog_buf, "<code>COD2_0080_NO_GRID</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0100 )
+            strcat(m_errlog_buf, "<code>COD2_0100_PV_Input_High</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0200 )
+            strcat(m_errlog_buf, "<code>COD2_0200_INV_Overload</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0400 )
+            strcat(m_errlog_buf, "<code>COD2_0400_RCMU_30</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x0800 )
+            strcat(m_errlog_buf, "<code>COD2_0800_RCMU_60</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x1000 )
+            strcat(m_errlog_buf, "<code>COD2_1000_RCMU_150</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x2000 )
+            strcat(m_errlog_buf, "<code>COD2_2000_RCMU_300</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x4000 )
+            strcat(m_errlog_buf, "<code>COD2_4000_RCMUtest_Fault</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD2_Record & 0x8000 )
+            strcat(m_errlog_buf, "<code>COD2_8000_Vac_LM</code>");
+        // PV_Inv_Error_COD3_Record 0x0123
+        if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0001 )
+            strcat(m_errlog_buf, "<code>COD4_0001_External_PV_OPP</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0002 )
+            strcat(m_errlog_buf, "<code>COD4_0002_Model123_Reconnected_Delay</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0004 )
+            strcat(m_errlog_buf, "<code>COD4_0004_Peak_Shaving_Over_Power</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0008 )
+            strcat(m_errlog_buf, "<code>COD4_0008_CLA_Execute_Time_Over</code>");
+        // DD_Error_COD1_Record 0x0124
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0001 )
+            strcat(m_errlog_buf, "<code>COD3_0001_Vbat_H</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0002 )
+            strcat(m_errlog_buf, "<code>COD3_0002_Vbat_L_fault</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0004 )
+            strcat(m_errlog_buf, "<code>COD3_0004_Vbus_H</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0008 )
+            strcat(m_errlog_buf, "<code>COD3_0008_Vbus_L</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0010 )
+            strcat(m_errlog_buf, "<code>COD3_0010_Ibus_H</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0020 )
+            strcat(m_errlog_buf, "<code>COD3_0020_Ibat_H</code>");
+        //if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0040 )
+        //    strcat(m_errlog_buf, "<code>COD3_0040_Charger_T</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0080 )
+            strcat(m_errlog_buf, "<code>COD3_0080_Code</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0100 )
+            strcat(m_errlog_buf, "<code>COD3_0100_Vbat_Drop</code>");
+        //if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0200 )
+        //    strcat(m_errlog_buf, "<code>COD3_0200_INV_fault</code>");
+        //if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0400 )
+        //    strcat(m_errlog_buf, "<code>COD3_0400_GND_Fault</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0800 )
+            strcat(m_errlog_buf, "<code>COD3_0800_No_Bat</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x1000 )
+            strcat(m_errlog_buf, "<code>COD3_1000_BMS_Comute_fault</code>");
+        //if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x2000 )
+        //    strcat(m_errlog_buf, "<code>COD3_2000_BMS_Over_Current</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x4000 )
+            strcat(m_errlog_buf, "<code>COD3_4000_Vbus_High_Vbat</code>");
+        //if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x8000 )
+        //    strcat(m_errlog_buf, "<code>COD3_8000_Bat_Setting_fault</code>");
+        // DD_Error_COD2_Record 0x0125
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0001 )
+            strcat(m_errlog_buf, "<code>COD5_0001_EEProm_Fault</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0002 )
+            strcat(m_errlog_buf, "<code>COD5_0002_Communi_Fault</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0004 )
+            strcat(m_errlog_buf, "<code>COD5_0004_OT_Fault</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0008 )
+            strcat(m_errlog_buf, "<code>COD5_0008_Fan_Fault</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0010 )
+            strcat(m_errlog_buf, "<code>COD5_0010_Low_Battery</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0020 )
+            strcat(m_errlog_buf, "<code>COD5_0020_PV3_S</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0040 )
+            strcat(m_errlog_buf, "<code>COD5_0040_PV4_S</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0080 )
+            strcat(m_errlog_buf, "<code>COD5_0080_PV_Over_Power</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0100 )
+            strcat(m_errlog_buf, "<code>COD5_0100_PV_Input_High</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0200 )
+            strcat(m_errlog_buf, "<code>COD5_0200_Restart</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0400 )
+            strcat(m_errlog_buf, "<code>COD5_0400_GND_Fault</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x0800 )
+            strcat(m_errlog_buf, "<code>COD5_0800_OT_Alarm</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x1000 )
+            strcat(m_errlog_buf, "<code>COD5_1000_Bat_Wake_Up_Fault</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x2000 )
+            strcat(m_errlog_buf, "<code>COD5_2000_Vbat_Inconsistent</code>");
     }
 
     // set system error log
