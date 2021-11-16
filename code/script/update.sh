@@ -63,6 +63,7 @@ chmod 755 /etc/init.d/$CPLS
 
 rm /tmp/luci-indexcache
 rm /tmp/luci-modulecache/*
+rm /usr/home/White-List.txt
 sync
 
 sleep 1

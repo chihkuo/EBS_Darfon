@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.7.8"
+#define VERSION         "2.7.9"
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
@@ -30,7 +30,7 @@
 #define WL_CHANGED_PATH "/tmp/WL_Changed"
 #define CURL_FILE       "/tmp/Curlfile"
 #define TIMEOUT         "10"
-#define CURL_CMD        "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' -k https://52.9.235.220:8443/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
+#define CURL_CMD        "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' -k https://52.9.235.220:8443/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time TIMEOUT"
 #define UPDATE_MAX      200
 
 #define MODEL_LIST_PATH "/usr/home/ModelList"

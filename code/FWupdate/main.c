@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.2.7"
+#define VERSION             "1.2.8"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' -k https://52.9.235.220:8443/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -47,7 +47,11 @@
 #define MAX_BATTERY_SIZE    100
 
 #define	HYBRIDFW_FILE       "/mnt/hybridfw.tar.gz"
-//#define HYBRIDFW_LIST       "/mnt/hybridfwlist"
+#define	TMP_HYBRIDFW_FILE   "/tmp/hybridfw.tar.gz"
+#define	BATTERYFW_FILE      "/mnt/batteryfw.tar.gz"
+#define	TMP_BATTERYFW_FILE  "/tmp/batteryfw.tar.gz"
+
+#define OFFLINE_SECOND 1260
 
 // extern part
 extern int  MyModbusDrvInit(char *port, int baud, int data_bits, char parity, int stop_bits);
@@ -92,6 +96,7 @@ int ReadV3Ver(char *sn, unsigned char *fwver);
 int GetFWData(char *list_path);
 int GetHbFWData(char *list_path);
 int RunBatFWUpdate(char *list_path);
+int RunBat2FWUpdate(char *list_path);
 int stopProcess();
 int runProcess();
 int GetPort(char *file_path);
@@ -564,11 +569,31 @@ int QryDeviceFWUpdate()
                     }
                 }
                 // write sn & file path in to list
-                sprintf(buf, "%s %s\n", myupdate.SN, myupdate.FILE);
+                sprintf(buf, "%s %s %s\n", myupdate.SN, myupdate.UpdateType, myupdate.FILE);
                 fputs(buf, batfd);
             } else {
                 printf("UpdateType error!\n");
             }
+
+        } else if ( strcmp(myupdate.UpdateTarget, "Battery") == 0 ) {
+            if ( batfd == NULL ) {
+                    if ( gisusb ) {
+                        // usb
+                        if ( stat(USB_BATFW_LIST, &mystat) == 0 )
+                            batfd = fopen(USB_BATFW_LIST, "ab");
+                        else
+                            batfd = fopen(USB_BATFW_LIST, "wb");
+                    } else {
+                        // tmp
+                        if ( stat(TMP_BATFW_LIST, &mystat) == 0 )
+                            batfd = fopen(TMP_BATFW_LIST, "ab");
+                        else
+                            batfd = fopen(TMP_BATFW_LIST, "wb");
+                    }
+                }
+                // write sn & file path in to list
+                sprintf(buf, "%s %s %s\n", myupdate.SN, myupdate.UpdateType, myupdate.FILE);
+                fputs(buf, batfd);
 
         } else if ( strcmp(myupdate.UpdateTarget, "PLC") == 0 ) {
             if ( strcmp(myupdate.UpdateType, "Unicast") == 0 ) {
@@ -623,7 +648,7 @@ int QryDeviceFWUpdate()
                 // download
                 current_time = time(NULL);
                 st_time = localtime(&current_time);
-                sprintf(buf, "curl -o %s %s", myupdate.FILE, myupdate.FWURL);
+                sprintf(buf, "curl -k -o %s %s", myupdate.FILE, myupdate.FWURL);
                 if ( !system(buf) ) {
                     printf("Download %s to %s OK\n", myupdate.FWURL, myupdate.FILE);
                     sprintf(buf, "FWupdate QryDeviceFWUpdate() : Download %s to %s OK", myupdate.FWURL, myupdate.FILE);
@@ -3797,7 +3822,7 @@ int GetHbFWData(char *list_path)
     char *cptr = NULL;
     FILE *pfile_fd = NULL;
 
-    time_t      current_time = 0;
+    time_t      current_time = 0, start_time = 0;
     struct tm   *st_time = NULL;
 
     current_time = time(NULL);
@@ -4179,7 +4204,17 @@ int GetHbFWData(char *list_path)
             usleep(500000);
         }
         // register
-        retval = RunRegister(snlist[loop].SN);
+        start_time = time(NULL);
+        current_time = time(NULL);
+        while ( current_time - start_time < OFFLINE_SECOND ) {
+            retval = RunRegister(snlist[loop].SN);
+            if ( retval == 0 ) {
+                break;
+            } else {
+                usleep(30000000);
+                current_time = time(NULL);
+            }
+        }
         if ( retval ) {
             // fail
             printf("RunRegister fail retval = %d\n", retval);
@@ -4299,7 +4334,7 @@ int GetHbFWData(char *list_path)
         OpenLog(g_SYSLOG_PATH, st_time);
 
         // debug
-        usleep(30000000);
+        usleep(10000000);
     }
 
     printf("######### GetHbFWData() end #########\n");
@@ -4976,6 +5011,11 @@ int RunBatFWUpdate(char *list_path)
     return 0;
 }
 
+int RunBat2FWUpdate(char *list_path)
+{
+    return 0;
+}
+
 int stopProcess()
 {
     printf("run stopProcess()\n");
@@ -5252,7 +5292,10 @@ int GetSNList(char *list_path)
         printf("set battery fw list\n");
         while ( fgets(buf, 512, pfile_fd) != NULL ) {
             if ( strlen(buf) > 16 ) {
-                sscanf(buf, "%16s %127s", snlist[gsncount].SN, snlist[gsncount].FILE);
+                if ( strlen(myupdate.UpdateType) == 0 )
+                    sscanf(buf, "%16s %s %127s", snlist[gsncount].SN, myupdate.UpdateType, snlist[gsncount].FILE);
+                else
+                    sscanf(buf, "%16s %s %127s", snlist[gsncount].SN, NULL, snlist[gsncount].FILE);
                 gsncount++;
                 memset(buf, 0x00, 512);
             }
@@ -5266,6 +5309,11 @@ int GetSNList(char *list_path)
     // debug print
     printf("===========================================\n");
     printf("sn list count = %d\n", gsncount);
+    if ( strlen(myupdate.UpdateType) > 0 ) {
+        printf("UpdateType = %s\n", myupdate.UpdateType);
+        sprintf(buf, "FWupdate GetSNList() : UpdateType = %s", myupdate.UpdateType);
+        SaveLog(buf, st_time);
+    }
     for (i = 0; i < gsncount; i++) {
         printf("set sn list %d : sn = %s, file = %s\n", i, snlist[i].SN, snlist[i].FILE);
         sprintf(buf, "FWupdate GetSNList() : set sn list %d : sn = %s, file = %s", i, snlist[i].SN, snlist[i].FILE);
@@ -5474,8 +5522,13 @@ int DoUpdate(char *list_path)
         }
     // battery fw
     } else if ( strstr(list_path, BATFW_LIST) != NULL ) {
-        printf("run RunBatFWUpdate()\n");
-        RunBatFWUpdate(list_path);
+        if ( strcmp(myupdate.UpdateType, "1") == 0 ) {
+            printf("run RunBatFWUpdate()\n");
+            RunBatFWUpdate(list_path);
+        } else if ( strcmp(myupdate.UpdateType, "2") == 0 ) {
+            printf("run RunBat2FWUpdate()\n");
+            RunBat2FWUpdate(list_path);
+        }
         CloseLog(); //for test
         // set update result, then upload
         updBATFWstatus();
@@ -5489,7 +5542,7 @@ int DoUpdate(char *list_path)
         }
         system("sync; sync");
         printf("sleep 10 sec. for save log\n");
-        usleep(10000000); //for test
+        usleep(30000000); //for test
     } else {
         printf("Do nothing, list_path = %s\n", list_path);
     }
@@ -6014,6 +6067,170 @@ int main(int argc, char* argv[])
                     }
                 }
 
+                // check battery data from usb
+                if ( stat(BATTERYFW_FILE, &st) == 0 ) {
+                    printf("detect bat data\n");
+                    // unzip
+                    sprintf(strbuf, "tar -zxvf %s -C /mnt/", BATTERYFW_FILE);
+                    system(strbuf);
+                    usleep(1000000);
+                    system("sync");
+                    // remove fw data
+                    if ( remove(BATTERYFW_FILE) == 0 )
+                        printf("Remove %s\n", BATTERYFW_FILE);
+                    else
+                        perror("remove");
+                    usleep(1000000);
+                    system("sync");
+
+                    // check milist
+                    while (1) {
+                        printf("check MIList\n");
+                        pfile = popen("ls /tmp/MIList_*", "r");
+                        if ( pfile != NULL ) {
+                            memset(strbuf, 0x00, 256);
+                            memset(milistbuf, 0x00, 256);
+                            fgets(strbuf, 255, pfile);
+                            if ( strlen(strbuf) > 0 ) {
+                                strncpy(milistbuf, strbuf, strlen(strbuf)-1);
+                                break;
+                            } else {
+                                printf("MIList not found\n");
+                            }
+                            pclose(pfile);
+                        }
+                        usleep(10000000);
+                    }
+                    printf("get milistbuf name [%s]\n", milistbuf);
+
+                    // check myupdate.UpdateType if empty
+                    if ( strlen(myupdate.UpdateType) == 0 ) {
+                        if ( stat(USB_BATFW_LIST, &st) == 0 ) {
+                            plist = fopen(USB_BATFW_LIST, "r");
+                            memset(strbuf, 0x00, 256);
+                            fgets(strbuf, 255, plist);
+                            fclose(plist);
+                            sscanf(strbuf+17, "%s", myupdate.UpdateType);
+                            printf("myupdate.UpdateType = [%s]\n", myupdate.UpdateType);
+                        }
+                    }
+
+                    // check fw file .glo
+                    printf("check .glo\n");
+                    pfile = popen("ls /mnt/SV_*.glo", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(USB_BATFW_LIST, &st) != 0 )
+                                plist = fopen(USB_BATFW_LIST, "w");
+                            else
+                                plist = fopen(USB_BATFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s %s\n", hybrid_sn, myupdate.UpdateType, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf(".glo not found.\n");
+                        }
+                    }
+                    // check fw file .hex
+                    printf("check .hex\n");
+                    pfile = popen("ls /mnt/SV_*.hex", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(USB_BATFW_LIST, &st) != 0 )
+                                plist = fopen(USB_BATFW_LIST, "w");
+                            else
+                                plist = fopen(USB_BATFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s %s\n", hybrid_sn, myupdate.UpdateType, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf(".hex not found.\n");
+                        }
+                    }
+                    // check fw file .bin
+                    printf("check .bin\n");
+                    pfile = popen("ls /mnt/SV_*.bin", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(USB_BATFW_LIST, &st) != 0 )
+                                plist = fopen(USB_BATFW_LIST, "w");
+                            else
+                                plist = fopen(USB_BATFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s %s\n", hybrid_sn, myupdate.UpdateType, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf(".bin not found.\n");
+                        }
+                    }
+                }
+
                 // check mi unicast fw
                 if ( stat(USB_MIFW_LIST, &st) == 0 ) {
                     DoUpdate(USB_MIFW_LIST);
@@ -6050,6 +6267,283 @@ int main(int argc, char* argv[])
                     restart = 1;
                 }
             } else {
+                if ( stat(TMP_HYBRIDFW_FILE, &st) == 0 ) {
+                    printf("detect fw data\n");
+                    // unzip
+                    sprintf(strbuf, "tar -zxvf %s -C /tmp/", TMP_HYBRIDFW_FILE);
+                    system(strbuf);
+                    usleep(1000000);
+                    system("sync");
+                    // remove fw data
+                    if ( remove(TMP_HYBRIDFW_FILE) == 0 )
+                        printf("Remove %s\n", TMP_HYBRIDFW_FILE);
+                    else
+                        perror("remove");
+                    usleep(1000000);
+                    system("sync");
+
+                    // check milist
+                    while (1) {
+                        printf("check MIList\n");
+                        pfile = popen("ls /tmp/MIList_*", "r");
+                        if ( pfile != NULL ) {
+                            memset(strbuf, 0x00, 256);
+                            memset(milistbuf, 0x00, 256);
+                            fgets(strbuf, 255, pfile);
+                            if ( strlen(strbuf) > 0 ) {
+                                strncpy(milistbuf, strbuf, strlen(strbuf)-1);
+                                break;
+                            } else {
+                                printf("MIList not found\n");
+                            }
+                            pclose(pfile);
+                        }
+                        usleep(10000000);
+                    }
+                    printf("get milistbuf name [%s]\n", milistbuf);
+
+                    // check fw file cpu1
+                    printf("check cpu1\n");
+                    pfile = popen("ls /tmp/cpu1_*", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(TMP_HBFW_LIST, &st) != 0 )
+                                plist = fopen(TMP_HBFW_LIST, "w");
+                            else
+                                plist = fopen(TMP_HBFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s\n", hybrid_sn, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf("cpu1 not found.\n");
+                        }
+                    }
+                    // check fw file cpu2
+                    printf("check cpu2\n");
+                    pfile = popen("ls /tmp/cpu2_*", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(TMP_HBFW_LIST, &st) != 0 )
+                                plist = fopen(TMP_HBFW_LIST, "w");
+                            else
+                                plist = fopen(TMP_HBFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s\n", hybrid_sn, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf("cpu2 not found.\n");
+                        }
+                    }
+                }
+
+                // check battery data from usb
+                if ( stat(TMP_BATTERYFW_FILE, &st) == 0 ) {
+                    printf("detect bat data\n");
+                    // unzip
+                    sprintf(strbuf, "tar -zxvf %s -C /tmp/", TMP_BATTERYFW_FILE);
+                    system(strbuf);
+                    usleep(1000000);
+                    system("sync");
+                    // remove fw data
+                    if ( remove(TMP_BATTERYFW_FILE) == 0 )
+                        printf("Remove %s\n", TMP_BATTERYFW_FILE);
+                    else
+                        perror("remove");
+                    usleep(1000000);
+                    system("sync");
+
+                    // check milist
+                    while (1) {
+                        printf("check MIList\n");
+                        pfile = popen("ls /tmp/MIList_*", "r");
+                        if ( pfile != NULL ) {
+                            memset(strbuf, 0x00, 256);
+                            memset(milistbuf, 0x00, 256);
+                            fgets(strbuf, 255, pfile);
+                            if ( strlen(strbuf) > 0 ) {
+                                strncpy(milistbuf, strbuf, strlen(strbuf)-1);
+                                break;
+                            } else {
+                                printf("MIList not found\n");
+                            }
+                            pclose(pfile);
+                        }
+                        usleep(10000000);
+                    }
+                    printf("get milistbuf name [%s]\n", milistbuf);
+
+                    // check myupdate.UpdateType if empty
+                    if ( strlen(myupdate.UpdateType) == 0 ) {
+                        if ( stat(TMP_BATFW_LIST, &st) == 0 ) {
+                            plist = fopen(TMP_BATFW_LIST, "r");
+                            memset(strbuf, 0x00, 256);
+                            fgets(strbuf, 255, plist);
+                            fclose(plist);
+                            sscanf(strbuf+17, "%s", myupdate.UpdateType);
+                            printf("myupdate.UpdateType = [%s]\n", myupdate.UpdateType);
+                        }
+                    }
+
+                    // check fw file .glo
+                    printf("check .glo\n");
+                    pfile = popen("ls /tmp/SV_*.glo", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(TMP_BATFW_LIST, &st) != 0 )
+                                plist = fopen(TMP_BATFW_LIST, "w");
+                            else
+                                plist = fopen(TMP_BATFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s %s\n", hybrid_sn, myupdate.UpdateType, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf(".glo not found.\n");
+                        }
+                    }
+                    // check fw file .hex
+                    printf("check .hex\n");
+                    pfile = popen("ls /tmp/SV_*.hex", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(TMP_BATFW_LIST, &st) != 0 )
+                                plist = fopen(TMP_BATFW_LIST, "w");
+                            else
+                                plist = fopen(TMP_BATFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s %s\n", hybrid_sn, myupdate.UpdateType, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf(".hex not found.\n");
+                        }
+                    }
+                    // check fw file .bin
+                    printf("check .bin\n");
+                    pfile = popen("ls /tmp/SV_*.bin", "r");
+                    if ( pfile != NULL ) {
+                        memset(strbuf, 0x00, 256);
+                        memset(filebuf, 0x00, 256);
+                        fgets(strbuf, 255, pfile);
+                        if ( strlen(strbuf) > 0 ) {
+                            strncpy(filebuf, strbuf, strlen(strbuf)-1);
+                            printf("get filebuf name [%s]\n", filebuf);
+                            pclose(pfile);
+
+                            // set hybridfwlist
+                            if ( stat(TMP_BATFW_LIST, &st) != 0 )
+                                plist = fopen(TMP_BATFW_LIST, "w");
+                            else
+                                plist = fopen(TMP_BATFW_LIST, "a");
+
+                            // find sn in milist
+                            pfile = fopen(milistbuf, "r");
+                            if ( pfile != NULL ) {
+                                while( fgets(strbuf, 255, pfile) != NULL ) {
+                                    pindex = strstr(strbuf, "<sn>");
+                                    if ( pindex ) {
+                                        strncpy(hybrid_sn, pindex+4, 16);
+                                        printf("find sn = [%s]\n", hybrid_sn);
+                                        sprintf(strbuf, "%s %s %s\n", hybrid_sn, myupdate.UpdateType, filebuf);
+                                        fputs(strbuf, plist);
+                                    }
+                                }
+                                fclose(pfile);
+                            }
+                            fclose(plist);
+
+                        } else {
+                            printf(".bin not found.\n");
+                        }
+                    }
+                }
+
                 // check mi unicast fw
                 if ( stat(TMP_MIFW_LIST, &st) == 0 ) {
                     DoUpdate(TMP_MIFW_LIST);
