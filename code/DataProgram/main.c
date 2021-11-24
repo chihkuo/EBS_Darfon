@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.7.9"
+#define VERSION         "2.8.0"
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
@@ -30,7 +30,7 @@
 #define WL_CHANGED_PATH "/tmp/WL_Changed"
 #define CURL_FILE       "/tmp/Curlfile"
 #define TIMEOUT         "10"
-#define CURL_CMD        "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' -k https://52.9.235.220:8443/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time TIMEOUT"
+#define CURL_CMD        "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' -k https://52.9.235.220:8443/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
 #define UPDATE_MAX      200
 
 #define MODEL_LIST_PATH "/usr/home/ModelList"
@@ -42,6 +42,7 @@ char SOAP_HEAD[] =
 
 char SOAP_TAIL[] = "\t</soap:Body>\n</soap:Envelope>";
 
+char SWVER[16] = {0};
 char MAC[18] = {0};
 char SMS_SERVER[128] = {0};
 int sms_port = 0;
@@ -193,6 +194,18 @@ void getConfig()
         shelf_life = tmp_interval;
         printf("set shelf life %d\n", shelf_life);
     }
+
+    // get swupdate version
+    fd = popen("uci get dlsetting.@swver[0].dsuver", "r");
+    if ( fd == NULL ) {
+        printf("popen fail!\n");
+        return;
+    }
+    fgets(SWVER, 16, fd);
+    pclose(fd);
+    if ( strlen(SWVER) )
+        SWVER[strlen(SWVER)-1] = 0; // clean \n
+    printf("SWVER = %s\n", SWVER);
 
     return;
 }
@@ -1266,6 +1279,8 @@ int Updheartbeattime(time_t time)
     sprintf(buf, "\t\t\t<hearttime>%s</hearttime>\n", timebuf);
     fputs(buf, fd);
     sprintf(buf, "\t\t\t<Ver>%s</Ver>\n", VERSION);
+    fputs(buf, fd);
+    sprintf(buf, "\t\t\t<SWVer>%s</SWVer>\n", SWVER);
     fputs(buf, fd);
     sprintf(buf, "\t\t</UpdheartbeattimeV2>\n");
     fputs(buf, fd);

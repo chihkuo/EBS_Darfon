@@ -875,6 +875,13 @@ int main(int argc, char* argv[])
                     printf("reboot_count = %d\n", reboot_count);
                 }
                 if ( reboot_count == reboot_time ) {
+                    // doUpdDLSWStatus before reboot
+                    if ( doUpdDLSWStatus )
+                        if ( !UpdDLSWStatus() ) {
+                            doUpdDLSWStatus = 0;
+                            memset(myupdate.SWURL, 0, 128);
+                        }
+
                     SaveLog("SWupdate main() : Reboot time's up!", st_time);
                     CloseLog();
                     printf("SWupdate main() : Reboot now!\n");
