@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.8.0"
+#define VERSION         "2.8.1"
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
@@ -797,6 +797,69 @@ int Rcvlog()
             break;
     }
 
+    // upload /tmp/tmplog if upok==0
+    if ( !upok ) {
+        // set curl file
+        pcurlfile_fd = fopen(CURL_FILE, "wb");
+        if ( pcurlfile_fd == NULL ) {
+            printf("#### Open %s Fail ####\n", CURL_FILE);
+        } else {
+            fputs(SOAP_HEAD, pcurlfile_fd);
+            sprintf(buf, "\t\t<Rcvlog xmlns=\"http://tempuri.org/\">\n");
+            fputs(buf, pcurlfile_fd);
+            sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
+            fputs(buf, pcurlfile_fd);
+            sprintf(buf, "\t\t\t<devicefile>");
+            fputs(buf, pcurlfile_fd);
+            base64_encode("/tmp/tmplog", pcurlfile_fd);
+            sprintf(buf, "</devicefile>\n");
+            fputs(buf, pcurlfile_fd);
+            sprintf(buf, "\t\t</Rcvlog>\n");
+            fputs(buf, pcurlfile_fd);
+            fputs(SOAP_TAIL, pcurlfile_fd);
+            fclose(pcurlfile_fd);
+
+            // run curl soap to web server
+            sprintf(buf, "%s > /tmp/Rcvlog", g_CURL_CMD);
+            system(buf);
+
+            // check responds
+            if ( stat("/tmp/Rcvlog", &st) == 0 )
+                if ( st.st_size == 0 ) {
+                    printf("#### Rcvlog() /tmp/Rcvlog empty ####\n");
+                    SaveLog("DataProgram Rcvlog() : /tmp/Rcvlog empty", st_time);
+                    return 4;
+                }
+
+            // read data
+            presult_fd = fopen("/tmp/Rcvlog", "rb");
+            if ( presult_fd == NULL ) {
+                printf("#### Open /tmp/Rcvlog Fail ####\n");
+            } else {
+                memset(buf, 0, 512);
+                fread(buf, 1, 512, presult_fd);
+                fclose(presult_fd);
+                //printf("/tmp/Rcvlog : \n%s\n", buf);
+
+                index = strstr(buf, "<RcvlogResult>");
+                if ( index == NULL ) {
+                    printf("#### Rcvlog() <RcvlogResult> not found ####\n");
+                    SaveLog("DataProgram Rcvlog() : <RcvlogResult> not found", st_time);
+                } else {
+                    sscanf(index, "<RcvlogResult>%02d</RcvlogResult>", &ret);
+                    printf("ret = %02d\n", ret);
+                    if ( ret == 0 ) {
+                        printf("File /tmp/tmplog update OK\n");
+                        SaveLog("DataProgram Rcvlog() : update /tmp/tmplog OK", st_time);
+                    } else {
+                        printf("File /tmp/tmplog update Fail\n");
+                        SaveLog("DataProgram Rcvlog() : update /tmp/tmplog Fail", st_time);
+                    }
+                }
+            }
+        }
+    }
+
     printf("======================== Rcvlog end =========================\n");
     return 0;
 }
@@ -1107,6 +1170,69 @@ int Rcverrorlog()
 
         if ( upok )
             break;
+    }
+
+    // upload /tmp/tmperrlog if upok==0
+    if ( !upok ) {
+        // set curl file
+        pcurlfile_fd = fopen(CURL_FILE, "wb");
+        if ( pcurlfile_fd == NULL ) {
+            printf("#### Open %s Fail ####\n", CURL_FILE);
+        } else {
+            fputs(SOAP_HEAD, pcurlfile_fd);
+            sprintf(buf, "\t\t<Rcverrorlog xmlns=\"http://tempuri.org/\">\n");
+            fputs(buf, pcurlfile_fd);
+            sprintf(buf, "\t\t\t<macaddress>%s</macaddress>\n", MAC);
+            fputs(buf, pcurlfile_fd);
+            sprintf(buf, "\t\t\t<devicefile>");
+            fputs(buf, pcurlfile_fd);
+            base64_encode("/tmp/tmperrlog", pcurlfile_fd);
+            sprintf(buf, "</devicefile>\n");
+            fputs(buf, pcurlfile_fd);
+            sprintf(buf, "\t\t</Rcverrorlog>\n");
+            fputs(buf, pcurlfile_fd);
+            fputs(SOAP_TAIL, pcurlfile_fd);
+            fclose(pcurlfile_fd);
+
+            // run curl soap to web server
+            sprintf(buf, "%s > /tmp/Rcverrorlog", g_CURL_CMD);
+            system(buf);
+
+            // check responds
+            if ( stat("/tmp/Rcverrorlog", &st) == 0 )
+                if ( st.st_size == 0 ) {
+                    printf("#### Rcverrorlog() /tmp/Rcverrorlog empty ####\n");
+                    SaveLog("DataProgram Rcverrorlog() : /tmp/Rcverrorlog empty", st_time);
+                    return 4;
+                }
+
+            // read data
+            presult_fd = fopen("/tmp/Rcverrorlog", "rb");
+            if ( presult_fd == NULL ) {
+                printf("#### Open /tmp/Rcverrorlog Fail ####\n");
+            } else {
+                memset(buf, 0, 512);
+                fread(buf, 1, 512, presult_fd);
+                fclose(presult_fd);
+                //printf("/tmp/Rcverrorlog : \n%s\n", buf);
+
+                index = strstr(buf, "<RcverrorlogResult>");
+                if ( index == NULL ) {
+                    printf("#### Rcverrorlog() <RcverrorlogResult> not found ####\n");
+                    SaveLog("DataProgram Rcverrorlog() : <RcverrorlogResult> not found", st_time);
+                } else {
+                    sscanf(index, "<RcverrorlogResult>%02d</RcverrorlogResult>", &ret);
+                    printf("ret = %02d\n", ret);
+                    if ( ret == 0 ) {
+                        printf("File /tmp/Rcverrorlog update OK\n");
+                        SaveLog("DataProgram Rcverrorlog() : update /tmp/Rcverrorlog OK", st_time);
+                    } else {
+                        printf("File /tmp/Rcverrorlog update Fail\n");
+                        SaveLog("DataProgram Rcverrorlog() : update /tmp/Rcverrorlog Fail", st_time);
+                    }
+                }
+            }
+        }
     }
 
     printf("======================= Rcverrorlog end =======================\n");
