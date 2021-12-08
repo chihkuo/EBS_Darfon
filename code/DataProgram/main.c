@@ -14,7 +14,7 @@
 #include "../common/base64.h"
 #include "../common/SaveLog.h"
 
-#define VERSION         "2.8.1"
+#define VERSION         "2.8.2"
 //#define USB_PATH        "/tmp/usb"
 //#define USB_PATH        "/tmp/run/mountd/sda1"
 #define USB_PATH        "/mnt"
@@ -59,6 +59,7 @@ int shelf_life = 0; // day
 int save_time = 3600*24*30;
 char g_CURL_CMD[256] = {0};
 int check_milist = 1;
+int clean_bms_flag = 1;
 
 struct tm st_log_time = {0};
 struct tm st_errlog_time = {0};
@@ -2472,9 +2473,17 @@ int QryRawDataFile()
         strncpy(hour, start_index+10, end_index-(start_index+10));
 
         printf("Get SN = %s, Type = %s, Date = %s, Hour = %s\n", sn, type, date, hour);
-        if ( strncmp(type, "BMS", 3) == 0 )
-            UploadBSM(sn, date, hour);
-        else if ( strncmp(type, "RAW", 3) == 0 )
+        if ( strncmp(type, "BMS", 3) == 0 ) {
+            //UploadBSM(sn, date, hour);
+            sprintf(buf, "%s/bmslist", g_BMS_PATH);
+            if ( stat(buf, &st) == 0 )
+                fd = fopen(buf, "a");
+            else
+                fd = fopen(buf, "w");
+            fputs(sn, fd);
+            fputc('\n', fd);
+            fclose(fd);
+        } else if ( strncmp(type, "RAW", 3) == 0 )
             UploadRAW(date, hour);
         else if ( strncmp(type, "LOG", 3) == 0 )
             UploadLOG(date, hour);
@@ -2558,7 +2567,7 @@ void clean_host_data(time_t time)
     }
 
     // check bms dir.
-    dirp = opendir(BMS_PATH);
+    /*dirp = opendir(BMS_PATH);
     if ( dirp == NULL ) {
         printf("opendir %s fail\n", BMS_PATH);
         //return;
@@ -2607,6 +2616,9 @@ void clean_host_data(time_t time)
             }
         }
         closedir(dirp);
+    }*/
+    if ( (st_systime->tm_hour == 0) && clean_bms_flag ) {
+        system("rm -f /tmp/test/BMS/*; sync");
     }
 
     // check syslog dir.
@@ -2742,7 +2754,7 @@ void clean_storage_data(time_t time)
     }
 
     // check bms dir.
-    dirp = opendir(g_BMS_PATH);
+    /*dirp = opendir(g_BMS_PATH);
     if ( dirp == NULL ) {
         printf("opendir %s fail\n", g_BMS_PATH);
         //return;
@@ -2766,6 +2778,11 @@ void clean_storage_data(time_t time)
             }
         }
         closedir(dirp);
+    }*/
+    if ( (st_systime->tm_hour == 0) && clean_bms_flag ) {
+        sprintf(buf, "rm -f %s/*; sync", g_BMS_PATH);
+        system(buf);
+        clean_bms_flag = 0;
     }
 
     // check syslog dir.

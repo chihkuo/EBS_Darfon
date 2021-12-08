@@ -219,6 +219,7 @@ protected:
     time_t  m_current_time;
     int     m_plcver;
     bool    m_save_hb_id_data;
+    bool    m_save_hb_rtc_data;
     bool    m_save_hb_rs_info;
     bool    m_save_hb_rrs_info;
     bool    m_save_hb_rt_info;
@@ -229,6 +230,7 @@ protected:
     bool    m_save_hb2_rt_info;
     bool    m_save_hb2_ce_value;
     bool    m_save_hb2_dp_info;
+    bool    m_save_hb2_rtc_info;
     bool    m_save_hb2_bms_info;
 
     MI_ID_INFO      m_mi_id_info;

@@ -127,6 +127,7 @@ CG320::CG320()
     m_dl_config = {0};
     m_dl_path = {0};
     m_save_hb_id_data = false;
+    m_save_hb_rtc_data = false;
     m_save_hb_rs_info= false;
     m_save_hb_rrs_info= false;
     m_save_hb_rt_info= false;
@@ -155,6 +156,7 @@ CG320::CG320()
     m_save_hb2_rt_info = false;
     m_save_hb2_ce_value = false;
     m_save_hb2_dp_info = false;
+    m_save_hb2_rtc_info = false;
     m_save_hb2_bms_info = false;
     memset(m_log_buf, 0x00, LOG_BUF_SIZE);
     memset(m_log_filename, 0x00, 128);
@@ -1107,20 +1109,24 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                         }
 
                         // get time
-                        //current_time = time(NULL);
-                        //m_st_time = localtime(&current_time);
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
                         // get data time not 0 min. current time is 0 min.
                         //if ( m_data_st_time.tm_min != 0 )
                         //    if ( m_st_time->tm_min == 0 )
                         //        return -1;
 
-                        /*if ( GetHybridRTCData(i) )
+                        // get RTC data
+                        if ( GetHybridRTCData(i) ) {
                             arySNobj[i].m_Err = 0;
-                        else {
+                            arySNobj[i].m_state = 1;
+                            m_save_hb_rtc_data = true;
+                        } else {
                             if ( m_loopflag == 0 )
                                 arySNobj[i].m_Err++;
                             m_loopflag++;
-                        }*/
+                            m_save_hb_rtc_data = false;
+                        }
 
                         // get time
                         current_time = time(NULL);
@@ -1320,6 +1326,21 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                                 arySNobj[i].m_Err++;
                             m_loopflag++;
                             m_save_hb2_dp_info = false;
+                        }
+
+                        // get time
+                        current_time = time(NULL);
+                        m_st_time = localtime(&current_time);
+
+                        if ( GetHybridData(i, HB2_START_ADDRESS_RTC, HB2_COUNT_RTC) ) {
+                            arySNobj[i].m_Err = 0;
+                            arySNobj[i].m_state = 1;
+                            m_save_hb2_rtc_info = true;
+                        } else {
+                            if ( m_loopflag == 0 )
+                                arySNobj[i].m_Err++;
+                            m_loopflag++;
+                            m_save_hb2_rtc_info = false;
                         }
 
                         // get time
@@ -1698,7 +1719,7 @@ bool CG320::SetPath()
     }
 
     // set bms date path
-    memset(buf, 0, 256);
+    /*memset(buf, 0, 256);
     sprintf(buf, "%s/BMS/%4d%02d%02d", m_dl_path.m_root_path, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
     strcpy(m_dl_path.m_bms_path, buf);
     if ( stat(m_dl_path.m_bms_path, &st) == -1 ) {
@@ -1707,7 +1728,7 @@ bool CG320::SetPath()
             printf("mkdir %s fail!\n", m_dl_path.m_bms_path);
         else
             printf("mkdir %s OK\n", m_dl_path.m_bms_path);
-    }
+    }*/
 
     // set SYSLOG path
     sprintf(m_dl_path.m_syslog_path, "%s/SYSLOG", m_dl_path.m_root_path);
@@ -1785,14 +1806,14 @@ bool CG320::SetPath()
                 printf("mkdir %s OK\n", tmpbuf);
         }
         // create /tmp BMS date dir
-        sprintf(tmpbuf, "%s/BMS/%4d%02d%02d", DEF_PATH, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
+        /*sprintf(tmpbuf, "%s/BMS/%4d%02d%02d", DEF_PATH, 1900+m_st_time->tm_year, 1+m_st_time->tm_mon, m_st_time->tm_mday);
         if ( stat(tmpbuf, &st) == -1 ) {
             printf("%s not exist, run mkdir!\n", tmpbuf);
             if ( mkdir(tmpbuf, 0755) == -1 )
                 printf("mkdir %s fail!\n", tmpbuf);
             else
                 printf("mkdir %s OK\n", tmpbuf);
-        }
+        }*/
 
         // create /tmp SYSLOG dir
         sprintf(tmpbuf, "%s/SYSLOG", DEF_PATH);
@@ -1831,6 +1852,7 @@ void CG320::CleanParameter()
     m_hb_dd_err_cod2 = {0};
     m_hb_icon_info = {0};
     m_save_hb_id_data = false;
+    m_save_hb_rtc_data = false;
     m_save_hb_rs_info = false;
     m_save_hb_rrs_info = false;
     m_save_hb_rt_info = false;
@@ -1852,13 +1874,14 @@ void CG320::CleanParameter()
     m_hb2_ce_value = {0};
     m_hb2_dp_info = {0};
     m_hb2_icon_info = {0};
-    m_hb_rtc_data = {0};
+    m_hb2_rtc_data = {0};
     m_hb2_bms_info = {0};
     m_save_hb2_id_data = false;
     m_save_hb2_rs_info = false;
     m_save_hb2_rt_info = false;
     m_save_hb2_ce_value = false;
     m_save_hb2_dp_info = false;
+    m_save_hb2_rtc_info = false;
     m_save_hb2_bms_info = false;
 
     return;
@@ -7608,7 +7631,7 @@ bool CG320::SetHybrid2RTCData(int index)
     time_t  current_time;
     struct tm   *st_time = NULL;
 
-    //printf("#### SetHybrid2RTCData Start ####\n");
+    printf("#### SetHybrid2RTCData Start ####\n");
     current_time = time(NULL);
     st_time = localtime(&current_time);
 
@@ -7618,14 +7641,14 @@ bool CG320::SetHybrid2RTCData(int index)
         ReRegister(index);
     }
 
-    m_hb_rtc_data.Second = st_time->tm_sec;
-    m_hb_rtc_data.Minute = st_time->tm_min;
-    m_hb_rtc_data.Hour = st_time->tm_hour;
-    m_hb_rtc_data.Date = st_time->tm_mday;
-    m_hb_rtc_data.Month = 1 + st_time->tm_mon; // ptm->tm_mon 0~11, m_hb_rtc_data.Month 1~12
-    m_hb_rtc_data.Year = 1900 + st_time->tm_year;
-    //printf("RTC timebuf : %4d/%02d/%02d ", m_hb_rtc_data.Year, m_hb_rtc_data.Month, m_hb_rtc_data.Date);
-    //printf("%02d:%02d:%02d\n", m_hb_rtc_data.Hour, m_hb_rtc_data.Minute, m_hb_rtc_data.Second);
+    m_hb2_rtc_data.Second = st_time->tm_sec;
+    m_hb2_rtc_data.Minute = st_time->tm_min;
+    m_hb2_rtc_data.Hour = st_time->tm_hour;
+    m_hb2_rtc_data.Date = st_time->tm_mday;
+    m_hb2_rtc_data.Month = 1 + st_time->tm_mon; // ptm->tm_mon 0~11, m_hb2_rtc_data.Month 1~12
+    m_hb2_rtc_data.Year = 1900 + st_time->tm_year;
+    //printf("RTC timebuf : %4d/%02d/%02d ", m_hb2_rtc_data.Year, m_hb2_rtc_data.Month, m_hb2_rtc_data.Date);
+    //printf("%02d:%02d:%02d\n", m_hb2_rtc_data.Hour, m_hb2_rtc_data.Minute, m_hb2_rtc_data.Second);
     //printf("#######################################\n");
 
     int err = 0;
@@ -7645,17 +7668,17 @@ bool CG320::SetHybrid2RTCData(int index)
         szRTCData[6] = 0x10; // bytes
         // data 0x40 ~ 0x45
         szRTCData[7] = 0x00;
-        szRTCData[8] = (unsigned char)m_hb_rtc_data.Second;
+        szRTCData[8] = (unsigned char)m_hb2_rtc_data.Second;
         szRTCData[9] = 0x00;
-        szRTCData[10] = (unsigned char)m_hb_rtc_data.Minute;
+        szRTCData[10] = (unsigned char)m_hb2_rtc_data.Minute;
         szRTCData[11] = 0x00;
-        szRTCData[12] = (unsigned char)m_hb_rtc_data.Hour;
+        szRTCData[12] = (unsigned char)m_hb2_rtc_data.Hour;
         szRTCData[13] = 0x00;
-        szRTCData[14] = (unsigned char)m_hb_rtc_data.Date;
+        szRTCData[14] = (unsigned char)m_hb2_rtc_data.Date;
         szRTCData[15] = 0x00;
-        szRTCData[16] = (unsigned char)m_hb_rtc_data.Month;
-        szRTCData[17] = (unsigned char)((m_hb_rtc_data.Year >> 8) & 0xFF);
-        szRTCData[18] = (unsigned char)(m_hb_rtc_data.Year & 0xFF);
+        szRTCData[16] = (unsigned char)m_hb2_rtc_data.Month;
+        szRTCData[17] = (unsigned char)((m_hb2_rtc_data.Year >> 8) & 0xFF);
+        szRTCData[18] = (unsigned char)(m_hb2_rtc_data.Year & 0xFF);
         // zero 0x46 ~ 0x4E
         szRTCData[19] = 0x00;
         szRTCData[20] = 0x00;
@@ -8492,7 +8515,7 @@ bool CG320::WriteLogXML(int index)
                 m_hb_rt_info.DD_Error_COD_Record || m_hb_rt_info.DD_Error_COD2_Record ) {
                 strcat(m_log_buf, "<Status>2</Status>");
             } else {
-                if ( m_loopflag == 5 ) {
+                if ( m_loopflag == 6 ) {
                     strcat(m_log_buf, "<Status>1</Status>");
                     m_inverter_state = 1;
                     m_sys_error |= SYS_0010_Off_Line;
@@ -8507,7 +8530,7 @@ bool CG320::WriteLogXML(int index)
                 m_hb2_rt_info.DD_Error_COD1_Record || m_hb2_rt_info.DD_Error_COD2_Record ) {
                 strcat(m_log_buf, "<Status>2</Status>");
             } else {
-                if ( m_loopflag == 6 ) {
+                if ( m_loopflag == 7 ) {
                     strcat(m_log_buf, "<Status>1</Status>");
                     m_inverter_state = 1;
                     m_sys_error |= SYS_0010_Off_Line;
@@ -8621,6 +8644,22 @@ bool CG320::WriteLogXML(int index)
                 strcat(m_log_buf, buf);
                 // set flags2
                 sprintf(buf, "<Rule_Flag>%d</Rule_Flag>", m_hb_id_data.Flags2);
+                strcat(m_log_buf, buf);
+            }
+
+            // set RTC part
+            if ( m_save_hb_rtc_data ) {
+                sprintf(buf, "<Second>%d</Second>", m_hb_rtc_data.Second);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Minute>%d</Minute>", m_hb_rtc_data.Minute);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Hour>%d</Hour>", m_hb_rtc_data.Hour);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Day>%d</Day>", m_hb_rtc_data.Date);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Month>%d</Month>", m_hb_rtc_data.Month);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Year>%d</Year>", m_hb_rtc_data.Year);
                 strcat(m_log_buf, buf);
             }
 
@@ -8979,6 +9018,22 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<OnGrid_CountDown>%d</OnGrid_CountDown>", m_hb2_dp_info.OnGrid_CountDown);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<Hybrid_Icon>%d</Hybrid_Icon>", (m_hb2_dp_info.Hybrid_IconH << 16) + m_hb2_dp_info.Hybrid_IconL);
+                strcat(m_log_buf, buf);
+            }
+
+            // set RTC part
+            if ( m_save_hb2_rtc_info ) {
+                sprintf(buf, "<Second>%d</Second>", m_hb2_rtc_data.Second);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Minute>%d</Minute>", m_hb2_rtc_data.Minute);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Hour>%d</Hour>", m_hb2_rtc_data.Hour);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Day>%d</Day>", m_hb2_rtc_data.Date);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Month>%d</Month>", m_hb2_rtc_data.Month);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Year>%d</Year>", m_hb2_rtc_data.Year);
                 strcat(m_log_buf, buf);
             }
 

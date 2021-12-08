@@ -26,6 +26,7 @@
 #define PLC_LIST                "plclist"
 #define PLCM_LIST               "plcmlist"
 #define BATFW_LIST              "batteryfwlist"
+#define BMS_LIST                "bmslist"
 
 #define TMP_MIFW_LIST           "/tmp/mifwlist"
 #define TMP_MIFW_BLIST          "/tmp/mifwbroadcastlist"
@@ -33,6 +34,7 @@
 #define TMP_PLC_LIST            "/tmp/plclist"
 #define TMP_PLCM_LIST           "/tmp/plcmlist"
 #define TMP_BATFW_LIST          "/tmp/batteryfwlist"
+#define TMP_BMS_LIST            "/tmp/test/BMS/bmslist"
 
 #define USB_MIFW_LIST           "/mnt/mifwlist"
 #define USB_MIFW_BLIST          "/mnt/mifwbroadcastlist"
@@ -40,6 +42,7 @@
 #define USB_PLC_LIST            "/mnt/plclist"
 #define USB_PLCM_LIST           "/mnt/plcmlist"
 #define USB_BATFW_LIST          "/mnt/batteryfwlist"
+#define USB_BMS_LIST            "/mnt/BMS/bmslist"
 
 #define SYSLOG_PATH         "/tmp/test/SYSLOG"
 #define MAX_DATA_SIZE       144
@@ -7050,6 +7053,15 @@ int GetSNList(char *list_path)
                 memset(buf, 0x00, 512);
             }
         }
+    } else if ( strstr(list_path, BMS_LIST) != NULL ) {
+        printf("set bms list\n");
+        while ( fgets(buf, 512, pfile_fd) != NULL ) {
+            if ( strlen(buf) > 16 ) {
+                sscanf(buf, "%16s", snlist[gsncount].SN);
+                gsncount++;
+                memset(buf, 0x00, 512);
+            }
+        }
     } else {
         // list_path error
         printf("list_path error!\n");
@@ -7292,7 +7304,12 @@ int DoUpdate(char *list_path)
         }
         system("sync; sync");
         printf("sleep 10 sec. for save log\n");
-        usleep(30000000); //for test
+        usleep(10000000); //for test
+    // bms log
+    } else if ( strstr(list_path, BMS_LIST) != NULL ) {
+        system("sync; sync");
+        printf("sleep 10 sec. for save log\n");
+        usleep(10000000); //for test
     } else {
         printf("Do nothing, list_path = %s\n", list_path);
     }
@@ -8016,6 +8033,12 @@ int main(int argc, char* argv[])
                     DoUpdate(USB_BATFW_LIST);
                     restart = 1;
                 }
+
+                // check bms list
+                if ( stat(USB_BMS_LIST, &st) == 0 ) {
+                    DoUpdate(USB_BMS_LIST);
+                    restart = 1;
+                }
             } else {
                 if ( stat(TMP_HYBRIDFW_FILE, &st) == 0 ) {
                     printf("detect fw data\n");
@@ -8327,6 +8350,12 @@ int main(int argc, char* argv[])
                  // check battery fw
                 if ( stat(TMP_BATFW_LIST, &st) == 0 ) {
                     DoUpdate(TMP_BATFW_LIST);
+                    restart = 1;
+                }
+
+                // check bms list
+                if ( stat(TMP_BMS_LIST, &st) == 0 ) {
+                    DoUpdate(TMP_BMS_LIST);
                     restart = 1;
                 }
             }
