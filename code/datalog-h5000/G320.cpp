@@ -98,6 +98,7 @@ CG320::CG320()
     m_sys_error = 0;
     m_inverter_state = 0;
     m_do_get_TZ = false;
+    m_do_set_RTC = false;
     m_data_st_time = {0};
     m_st_time = NULL;
     m_last_read_time = 0;
@@ -417,7 +418,7 @@ int CG320::DoReRegister(time_t loop_time)
                         GetMiIDInfoV3(i); // MI PLC V3.0
                 } else {
                     if ( arySNobj[i].m_Device >= 0x0A ) // Hybrid
-                        SetHybridRTCData(i);
+                        ;//SetHybridRTCData(i);
                     else
                         GetMiIDInfo(i); // MI PLC V2.0
                 }
@@ -1080,11 +1081,13 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                         // first set rtc time, and one day set one time
                         if ( m_loopstate == 1 ) {
                             GetHybridBMSVer(i);
-                            SetHybridRTCData(i);
+                            if ( m_do_set_RTC )
+                                SetHybridRTCData(i);
                         } else if ( m_loopstate == 2 ) {
                             if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) ) {
                                 GetHybridBMSVer(i);
-                                SetHybridRTCData(i);
+                                if ( m_do_set_RTC )
+                                    SetHybridRTCData(i);
                             }
                         }
 
@@ -1243,11 +1246,13 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                         // first set rtc time, and one day set one time
                         if ( m_loopstate == 1 ) {
                             GetHybridBMSVer(i);
-                            SetHybrid2RTCData(i);
+                            if ( m_do_set_RTC )
+                                SetHybrid2RTCData(i);
                         } else if ( m_loopstate == 2 ) {
                             if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) ) {
                                 GetHybridBMSVer(i);
-                                SetHybrid2RTCData(i);
+                                if ( m_do_set_RTC )
+                                    SetHybrid2RTCData(i);
                             }
                         }
 
@@ -8022,6 +8027,7 @@ void CG320::GetNTPTime()
 
         if ( strlen(buf) == 0 ) {
             printf("GetNTPTime check ntpd empty!\n");
+            m_do_set_RTC = 1;
             break;
         }
 

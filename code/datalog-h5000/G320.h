@@ -210,6 +210,7 @@ protected:
     int     m_sys_error;
     int     m_inverter_state;
     bool    m_do_get_TZ;
+    bool    m_do_set_RTC;
     struct tm   m_data_st_time;
     struct tm   *m_st_time;
     time_t  m_last_read_time;
