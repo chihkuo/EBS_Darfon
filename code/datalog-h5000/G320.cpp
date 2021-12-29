@@ -1084,6 +1084,12 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                             if ( m_do_set_RTC )
                                 SetHybridRTCData(i);
                         } else if ( m_loopstate == 2 ) {
+                            if ( m_hb_bms_ver == 0 ) {
+                                GetHybridBMSVer(i);
+                            } else if ( (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0) ) {
+                                GetHybridBMSVer(i);
+                            }
+
                             if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) ) {
                                 GetHybridBMSVer(i);
                                 if ( m_do_set_RTC )
@@ -1249,6 +1255,12 @@ int CG320::GetData(time_t data_time, bool first, bool last)
                             if ( m_do_set_RTC )
                                 SetHybrid2RTCData(i);
                         } else if ( m_loopstate == 2 ) {
+                            if ( m_hb_bms_ver == 0 ) {
+                                GetHybridBMSVer(i);
+                            } else if ( (m_data_st_time.tm_hour%2 == 0) && (m_data_st_time.tm_min == 0) ) {
+                                GetHybridBMSVer(i);
+                            }
+
                             if ( (m_data_st_time.tm_hour == 0) && (m_data_st_time.tm_min == 0) ) {
                                 GetHybridBMSVer(i);
                                 if ( m_do_set_RTC )
@@ -5946,15 +5958,10 @@ bool CG320::GetHybridBMSVer(int index)
         lpdata = GetRespond(m_busfd, 7, m_dl_config.m_delay_time_2);
         if ( lpdata ) {
             printf("#### GetHybridBMSVer OK ####\n");
-            //SaveLog((char *)"DataLogger GetHybridBMSVer() : OK", log_time);
+            SaveLog((char *)"DataLogger GetHybridBMSVer() : OK", log_time);
             arySNobj[index].m_ok_time = time(NULL);
-            if ( arySNobj[index].m_Model < 16 ) {
-                m_hb_bms_ver = (*(lpdata+3) << 8) + *(lpdata+4);
-                printf("m_hb_bms_ver = 0x%04X\n", m_hb_bms_ver);
-            } else {
-                //m_hb2_bms_ver = (*(lpdata+3) << 8) + *(lpdata+4);
-                //printf("m_hb2_bms_ver = 0x%04X\n", m_hb2_bms_ver);
-            }
+            m_hb_bms_ver = (*(lpdata+3) << 8) + *(lpdata+4);
+            printf("m_hb_bms_ver = 0x%04X\n", m_hb_bms_ver);
             return true;
         } else {
             if ( have_respond == true ) {
