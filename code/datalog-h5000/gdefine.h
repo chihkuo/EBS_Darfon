@@ -364,17 +364,17 @@ typedef struct stHybrid2_ID_Data {
     int Display_Ver;
     int HW_Ver; // 0x0002 High byte to 0x000C
     int Safety_Control; // 0x000D, ori Flags1
-    // remove int Flags2
+    int DL_Ver; // add 0x000E
 }HB2_ID_DATA;
 
 typedef struct stHybrid2_ID_Flags {
-    char B0_Rule21;
-    char B1_SunSpec;
-    char B2_Heco1;
-    char B3_Heco2;
-    char B4_PREPA;
-    char B5_Dominion;
-    char B6_MA;
+    // char B0_Rule21; remove
+    char B0_SunSpec;
+    char B1_Heco1;
+    char B2_Heco2;
+    char B3_PREPA;
+    char B4_Dominion;
+    char B5_MA;
 }HB2_ID_FLAGS;
 
 typedef struct stHybrid2_Remote_Setting_Info {
@@ -392,7 +392,7 @@ typedef struct stHybrid2_Remote_Setting_Info {
     int BatteryAbsorptionChargingVoltage; // rename, ori 0x0099 BatteryFloatingVoltage
     int BatteryReservePercentage; // ori 0x009A
     int GridTiedMaxSOC; // new
-    int PeakShavingPower; // Volt_VAr ori 0x009B
+    //0x00BD move to 0x00E6 //int PeakShavingPower; // Volt_VAr ori 0x009B
     int StartFrequency; // ori 0x009C
     int EndFrequency; // ori 0x009D
 // 0x00C0
@@ -430,6 +430,7 @@ typedef struct stHybrid2_Remote_Setting_Info {
     int Peak_Period_Start_Minute2_of_OtherSeason;
     int Peak_Period_End_Hour2_of_OtherSeason;
     int Peak_Period_End_Minute2_of_OtherSeason;
+    int PeakShavingPower; // ori 0x00BD // Volt_VAr ori 0x009B
 }HB2_RS_INFO;
 
 typedef struct stHybrid2_RS_Function_Flags {

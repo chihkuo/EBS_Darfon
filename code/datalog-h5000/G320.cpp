@@ -46,6 +46,8 @@
 #define HB2_START_ADDRESS_ID        0x01
 #define HB2_START_ADDRESS_RSINFO    0xB0
 #define HB2_START_ADDRESS_RSINFO2   0xC0
+#define HB2_START_ADDRESS_RSINFO3   0xD0
+#define HB2_START_ADDRESS_RSINFO4   0xE0
 #define HB2_START_ADDRESS_RTINFO    0x100
 #define HB2_START_ADDRESS_CEVALUE   0x160
 #define HB2_START_ADDRESS_DPINFO    0x1A0
@@ -2080,6 +2082,7 @@ bool CG320::RunTODOList()
                                     m_hb2_id_data.Display_Ver = m_dl_cmd.m_data[10];
                                     m_hb2_id_data.HW_Ver = m_dl_cmd.m_data[11];
                                     m_hb2_id_data.Safety_Control = m_dl_cmd.m_data[12];
+                                    m_hb2_id_data.DL_Ver = m_dl_cmd.m_data[13];
                                     SaveLog((char *)"DataLogger RunTODOList() : run SetHybrid2IDData()", m_st_time);
                                     SetHybrid2IDData(i);
                                     break;
@@ -2097,7 +2100,7 @@ bool CG320::RunTODOList()
                                     m_hb2_rs_info.BatteryAbsorptionChargingVoltage = m_dl_cmd.m_data[10];
                                     m_hb2_rs_info.BatteryReservePercentage = m_dl_cmd.m_data[11];
                                     m_hb2_rs_info.GridTiedMaxSOC = m_dl_cmd.m_data[12];
-                                    m_hb2_rs_info.PeakShavingPower = m_dl_cmd.m_data[13];
+                                    //m_hb2_rs_info.PeakShavingPower = m_dl_cmd.m_data[13];
                                     m_hb2_rs_info.StartFrequency = m_dl_cmd.m_data[14];
                                     m_hb2_rs_info.EndFrequency = m_dl_cmd.m_data[15];
                                     SaveLog((char *)"DataLogger RunTODOList() : run SetHybrid2RSInfo1()", m_st_time);
@@ -2125,6 +2128,37 @@ bool CG320::RunTODOList()
                                         printf("run ReRegister %d\n", i);
                                         ReRegister(i);
                                     }
+                                    break;
+                                case HB2_START_ADDRESS_RSINFO3:
+                                    m_hb2_rs_info.TOU_Season1_Operation_Mode = m_dl_cmd.m_data[0];
+                                    m_hb2_rs_info.TOU_OtherSeason_Operation_Mode = m_dl_cmd.m_data[1];
+                                    m_hb2_rs_info.TOU_Season1_Start_Month = m_dl_cmd.m_data[2];
+                                    m_hb2_rs_info.TOU_Season1_Start_Day = m_dl_cmd.m_data[3];
+                                    m_hb2_rs_info.TOU_Season1_End_Month = m_dl_cmd.m_data[4];
+                                    m_hb2_rs_info.TOU_Season1_End_Day = m_dl_cmd.m_data[5];
+                                    m_hb2_rs_info.Peak_Period_Start_Hour1_of_Season1 = m_dl_cmd.m_data[6];
+                                    m_hb2_rs_info.Peak_Period_Start_Minute1_of_Season1 = m_dl_cmd.m_data[7];
+                                    m_hb2_rs_info.Peak_Period_End_Hour1_of_Season1 = m_dl_cmd.m_data[8];
+                                    m_hb2_rs_info.Peak_Period_End_Minute1_of_Season1 = m_dl_cmd.m_data[9];
+                                    m_hb2_rs_info.Peak_Period_Start_Hour2_of_Season1 = m_dl_cmd.m_data[10];
+                                    m_hb2_rs_info.Peak_Period_Start_Minute2_of_Season1 = m_dl_cmd.m_data[11];
+                                    m_hb2_rs_info.Peak_Period_End_Hour2_of_Season1 = m_dl_cmd.m_data[12];
+                                    m_hb2_rs_info.Peak_Period_End_Minute2_of_Season1 = m_dl_cmd.m_data[13];
+                                    m_hb2_rs_info.Peak_Period_Start_Hour1_of_OtherSeason = m_dl_cmd.m_data[14];
+                                    m_hb2_rs_info.Peak_Period_Start_Minute1_of_OtherSeason = m_dl_cmd.m_data[15];
+                                    SaveLog((char *)"DataLogger RunTODOList() : run SetHybrid2RSInfo3()", m_st_time);
+                                    SetHybrid2RSInfo3(i);
+                                    break;
+                                case HB2_START_ADDRESS_RSINFO4:
+                                    m_hb2_rs_info.Peak_Period_End_Hour1_of_OtherSeason = m_dl_cmd.m_data[0];
+                                    m_hb2_rs_info.Peak_Period_End_Minute1_of_OtherSeason = m_dl_cmd.m_data[1];
+                                    m_hb2_rs_info.Peak_Period_Start_Hour2_of_OtherSeason = m_dl_cmd.m_data[2];
+                                    m_hb2_rs_info.Peak_Period_Start_Minute2_of_OtherSeason = m_dl_cmd.m_data[3];
+                                    m_hb2_rs_info.Peak_Period_End_Hour2_of_OtherSeason = m_dl_cmd.m_data[4];
+                                    m_hb2_rs_info.Peak_Period_End_Minute2_of_OtherSeason = m_dl_cmd.m_data[5];
+                                    m_hb2_rs_info.PeakShavingPower = m_dl_cmd.m_data[6];
+                                    SaveLog((char *)"DataLogger RunTODOList() : run SetHybrid2RSInfo4()", m_st_time);
+                                    SetHybrid2RSInfo4(i);
                                     break;
                             }
                         }
@@ -5380,9 +5414,6 @@ bool CG320::GetHybridData(int index, int star_address, int data_count)
                             ParserHybrid2RSFunctionFlags(m_hb2_rs_info.FunctionControl1);
                             ParserHybrid2RSSoftwareFlags(m_hb2_rs_info.SoftwareControl);
                             break;
-                        //case START_ADDRESS_RRSINFO:
-                        //    DumpHybridRRSInfo(data_buf);
-                        //    break;
                         case HB2_START_ADDRESS_RTINFO:
                             DumpHybrid2RTInfo(data_buf);
                             ParserHybrid2RTModuleFlags(m_hb2_rt_info.Module_Status);
@@ -6373,6 +6404,7 @@ void CG320::DumpHybrid2IDData(unsigned char *buf)
     m_hb2_id_data.Display_Ver = (*(buf+20) << 8) + *(buf+21);
     m_hb2_id_data.HW_Ver = (*(buf+22) << 8) + *(buf+23);
     m_hb2_id_data.Safety_Control = (*(buf+24) << 8) + *(buf+25);
+    m_hb2_id_data.DL_Ver = (*(buf+26) << 8) + *(buf+27);
 
     printf("#### Dump Hybrid2 ID Data ####\n");
     printf("Grid_Voltage   = %d ==> ", m_hb2_id_data.Grid_Voltage);
@@ -6437,7 +6469,7 @@ void CG320::DumpHybrid2IDData(unsigned char *buf)
             printf("H5500\n");
             break;
         case 17:
-            printf("H9600\n");
+            printf("H7\n");
             break;
         default:
             printf("Other\n");
@@ -6453,6 +6485,7 @@ void CG320::DumpHybrid2IDData(unsigned char *buf)
     printf("Display_Ver    = %d\n", m_hb2_id_data.Display_Ver);
     printf("HW_Ver         = 0x%02X\n", m_hb2_id_data.HW_Ver);
     printf("Safety_Control = 0x%02X\n", m_hb2_id_data.Safety_Control);
+    printf("DL_Ver         = 0x%02X\n", m_hb2_id_data.DL_Ver);
     printf("#############################\n");
 }
 
@@ -6500,9 +6533,9 @@ bool CG320::SetHybrid2IDData(int index)
     // Safety_Control flag 0x0D
     szIDData[31] = (unsigned char)((m_hb2_id_data.Safety_Control >> 8) & 0x00FF);
     szIDData[32] = (unsigned char)(m_hb2_id_data.Safety_Control & 0xFF);
-    // empty
-    szIDData[33] = 0x00;
-    szIDData[34] = 0x00;
+    // DL_Ver
+    szIDData[33] = (unsigned char)((m_hb2_id_data.DL_Ver >> 8) & 0x00FF);
+    szIDData[34] = (unsigned char)(m_hb2_id_data.DL_Ver & 0xFF);
     // data crc 0x0F
     crc = CalculateCRC(szIDData+7, 28);
     szIDData[35] = (unsigned char) (crc >> 8); // data crc hi
@@ -6550,28 +6583,28 @@ void CG320::ParserHybrid2IDFlags(int flags)
 {
     int tmp = flags;
 
-    m_hb2_id_flags.B0_Rule21 = tmp & 0x01;
+    //m_hb2_id_flags.B0_Rule21 = tmp & 0x01;
+    //tmp>>=1;
+    m_hb2_id_flags.B0_SunSpec = tmp & 0x01;
     tmp>>=1;
-    m_hb2_id_flags.B1_SunSpec = tmp & 0x01;
+    m_hb2_id_flags.B1_Heco1 = tmp & 0x01;
     tmp>>=1;
-    m_hb2_id_flags.B2_Heco1 = tmp & 0x01;
+    m_hb2_id_flags.B2_Heco2 = tmp & 0x01;
     tmp>>=1;
-    m_hb2_id_flags.B3_Heco2 = tmp & 0x01;
+    m_hb2_id_flags.B3_PREPA = tmp & 0x01;
     tmp>>=1;
-    m_hb2_id_flags.B4_PREPA = tmp & 0x01;
+    m_hb2_id_flags.B4_Dominion = tmp & 0x01;
     tmp>>=1;
-    m_hb2_id_flags.B5_Dominion = tmp & 0x01;
-    tmp>>=1;
-    m_hb2_id_flags.B6_MA = tmp & 0x01;
+    m_hb2_id_flags.B5_MA = tmp & 0x01;
 
     printf("#### Parser Hybrid2 ID Flags2 ####\n");
-    printf("Bit0 : Rule21              = %d\n", m_hb2_id_flags.B0_Rule21);
-    printf("Bit1 : SunSpec             = %d\n", m_hb2_id_flags.B1_SunSpec);
-    printf("Bit2 : Heco1               = %d\n", m_hb2_id_flags.B2_Heco1);
-    printf("Bit3 : Heco2               = %d\n", m_hb2_id_flags.B3_Heco2);
-    printf("Bit4 : PREPA               = %d\n", m_hb2_id_flags.B4_PREPA);
-    printf("Bit5 : Dominion            = %d\n", m_hb2_id_flags.B5_Dominion);
-    printf("Bit6 : MA                  = %d\n", m_hb2_id_flags.B6_MA);
+    //printf("Bit0 : Rule21              = %d\n", m_hb2_id_flags.B0_Rule21);
+    printf("Bit1 : SunSpec             = %d\n", m_hb2_id_flags.B0_SunSpec);
+    printf("Bit2 : Heco1               = %d\n", m_hb2_id_flags.B1_Heco1);
+    printf("Bit3 : Heco2               = %d\n", m_hb2_id_flags.B2_Heco2);
+    printf("Bit4 : PREPA               = %d\n", m_hb2_id_flags.B3_PREPA);
+    printf("Bit5 : Dominion            = %d\n", m_hb2_id_flags.B4_Dominion);
+    printf("Bit6 : MA                  = %d\n", m_hb2_id_flags.B5_MA);
     printf("################################\n");
 }
 
@@ -6591,7 +6624,7 @@ void CG320::DumpHybrid2RSInfo(unsigned char *buf)
     m_hb2_rs_info.BatteryAbsorptionChargingVoltage = (*(buf+20) << 8) + *(buf+21);
     m_hb2_rs_info.BatteryReservePercentage = (*(buf+22) << 8) + *(buf+23);
     m_hb2_rs_info.GridTiedMaxSOC = (*(buf+24) << 8) + *(buf+25);
-    m_hb2_rs_info.PeakShavingPower = (*(buf+26) << 8) + *(buf+27);
+    // empty //m_hb2_rs_info.PeakShavingPower = (*(buf+26) << 8) + *(buf+27);
     m_hb2_rs_info.StartFrequency = (*(buf+28) << 8) + *(buf+29);
     m_hb2_rs_info.EndFrequency = (*(buf+30) << 8) + *(buf+31);
 // 0x00C0
@@ -6630,6 +6663,7 @@ void CG320::DumpHybrid2RSInfo(unsigned char *buf)
     m_hb2_rs_info.Peak_Period_Start_Minute2_of_OtherSeason = (*(buf+102) << 8) + *(buf+103);
     m_hb2_rs_info.Peak_Period_End_Hour2_of_OtherSeason = (*(buf+104) << 8) + *(buf+105);
     m_hb2_rs_info.Peak_Period_End_Minute2_of_OtherSeason = (*(buf+106) << 8) + *(buf+107);
+    m_hb2_rs_info.PeakShavingPower = (*(buf+108) << 8) + *(buf+109);
 
     printf("#### Dump Hybrid2 RS Info ####\n");
 // 0x00B0
@@ -6700,7 +6734,7 @@ void CG320::DumpHybrid2RSInfo(unsigned char *buf)
     printf("Battery Absorption Charging Voltage = %03.1f V\n", ((float)m_hb2_rs_info.BatteryAbsorptionChargingVoltage)/10);
     printf("Battery Reserve Percentage = %d%%\n", m_hb2_rs_info.BatteryReservePercentage);
     printf("Grid Tied Max SOC = %d%%\n", m_hb2_rs_info.GridTiedMaxSOC);
-    printf("Peak Shaving Power = %d W\n", m_hb2_rs_info.PeakShavingPower*100);
+    //printf("Peak Shaving Power = %d W\n", m_hb2_rs_info.PeakShavingPower*100);
     printf("Start Frequency = %03.1f Hz\n", (float)m_hb2_rs_info.StartFrequency/10);
     printf("End Frequency = %03.1f Hz\n", (float)m_hb2_rs_info.EndFrequency/10);
 
@@ -6752,6 +6786,7 @@ void CG320::DumpHybrid2RSInfo(unsigned char *buf)
     printf("Peak_Period_Start_Minute2_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_Start_Minute2_of_OtherSeason);
     printf("Peak_Period_End_Hour2_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_End_Hour2_of_OtherSeason);
     printf("Peak_Period_End_Minute2_of_OtherSeason = %d\n", m_hb2_rs_info.Peak_Period_End_Minute2_of_OtherSeason);
+    printf("Peak Shaving Power = %d W\n", m_hb2_rs_info.PeakShavingPower*100);
 
     printf("#############################\n");
 }
@@ -6799,16 +6834,15 @@ bool CG320::SetHybrid2RSInfo1(int index)
     szRSInfo[30] = (unsigned char)(m_hb2_rs_info.BatteryReservePercentage & 0xFF);
     szRSInfo[31] = (unsigned char)((m_hb2_rs_info.GridTiedMaxSOC >> 8) & 0xFF);
     szRSInfo[32] = (unsigned char)(m_hb2_rs_info.GridTiedMaxSOC & 0xFF);
-    szRSInfo[33] = (unsigned char)((m_hb2_rs_info.PeakShavingPower >> 8) & 0xFF);
-    szRSInfo[34] = (unsigned char)(m_hb2_rs_info.PeakShavingPower & 0xFF);
+    //szRSInfo[33] = (unsigned char)((m_hb2_rs_info.PeakShavingPower >> 8) & 0xFF);
+    szRSInfo[33] = 0;
+    //szRSInfo[34] = (unsigned char)(m_hb2_rs_info.PeakShavingPower & 0xFF);
+    szRSInfo[34] = 0;
     szRSInfo[35] = (unsigned char)((m_hb2_rs_info.StartFrequency >> 8) & 0xFF);
     szRSInfo[36] = (unsigned char)(m_hb2_rs_info.StartFrequency & 0xFF);
     szRSInfo[37] = (unsigned char)((m_hb2_rs_info.EndFrequency >> 8) & 0xFF);
     szRSInfo[38] = (unsigned char)(m_hb2_rs_info.EndFrequency & 0xFF);
-    // data crc 0x9F
-    //crc = CalculateCRC(szRSInfo+7, 30);
-    //szRSInfo[37] = (unsigned char) (crc >> 8); // data crc hi
-    //szRSInfo[38] = (unsigned char) (crc & 0xFF); // data crc lo
+    // crc
     szRSInfo[39] = 0x00; // cmd crc hi
     szRSInfo[40] = 0x00; // cmd crc lo
     MakeReadDataCRC(szRSInfo,41);
@@ -6883,25 +6917,8 @@ bool CG320::SetHybrid2RSInfo2(int index)
     szRSInfo[22] = (unsigned char)(m_hb2_rs_info.SunSpecWritable & 0xFF);
     szRSInfo[23] = (unsigned char)((m_hb2_rs_info.SoftwareControl >> 8) & 0xFF);
     szRSInfo[24] = (unsigned char)(m_hb2_rs_info.SoftwareControl & 0xFF);
-/*    szRSInfo[25] = 0x00;
-    szRSInfo[26] = 0x00;
-    szRSInfo[27] = 0x00;
-    szRSInfo[28] = 0x00;
-    szRSInfo[29] = 0x00;
-    szRSInfo[30] = 0x00;
-    szRSInfo[31] = 0x00;
-    szRSInfo[32] = 0x00;
-    szRSInfo[33] = 0x00;
-    szRSInfo[34] = 0x00;
-    szRSInfo[35] = 0x00;
-    szRSInfo[36] = 0x00;
-    szRSInfo[37] = 0x00;
-    szRSInfo[38] = 0x00;
-    // data crc 0x9F
-    crc = CalculateCRC(szRSInfo+7, 30);
-    szRSInfo[37] = (unsigned char) (crc >> 8); // data crc hi
-    szRSInfo[38] = (unsigned char) (crc & 0xFF); // data crc lo
-*/    szRSInfo[25] = 0x00; // cmd crc hi
+    // crc
+    szRSInfo[25] = 0x00; // cmd crc hi
     szRSInfo[26] = 0x00; // cmd crc lo
     MakeReadDataCRC(szRSInfo,27);
     MClearRX();
@@ -6931,6 +6948,166 @@ bool CG320::SetHybrid2RSInfo2(int index)
         } else {
             printf("#### SetHybrid2RSInfo2 No Response ####\n");
             SaveLog((char *)"DataLogger SetHybrid2RSInfo2() : No Response", m_st_time);
+            err++;
+        }
+
+        usleep(1000000);
+    }
+
+    return false;
+}
+
+bool CG320::SetHybrid2RSInfo3(int index)
+{
+    printf("#### SetHybrid2RSInfo3 Start ####\n");
+
+    int err = 0;
+    //unsigned short crc;
+    byte *lpdata = NULL;
+
+    unsigned char szRSInfo[41]={0};
+    szRSInfo[0] = arySNobj[index].m_Addr;
+    szRSInfo[1] = 0x10; // function code
+    szRSInfo[2] = 0x00;
+    szRSInfo[3] = 0xD0; // star address
+    szRSInfo[4] = 0x00;
+    szRSInfo[5] = 0x10; // number of data
+    szRSInfo[6] = 0x20; // bytes
+    // data 0xD0 ~ 0xDF
+    szRSInfo[7] = (unsigned char)((m_hb2_rs_info.TOU_Season1_Operation_Mode >> 8) & 0xFF);
+    szRSInfo[8] = (unsigned char)(m_hb2_rs_info.TOU_Season1_Operation_Mode & 0xFF);
+    szRSInfo[9] = (unsigned char)((m_hb2_rs_info.TOU_OtherSeason_Operation_Mode >> 8) & 0xFF);
+    szRSInfo[10] = (unsigned char)(m_hb2_rs_info.TOU_OtherSeason_Operation_Mode & 0xFF);
+    szRSInfo[11] = (unsigned char)((m_hb2_rs_info.TOU_Season1_Start_Month >> 8) & 0xFF);
+    szRSInfo[12] = (unsigned char)(m_hb2_rs_info.TOU_Season1_Start_Month & 0xFF);
+    szRSInfo[13] = (unsigned char)((m_hb2_rs_info.TOU_Season1_Start_Day >> 8) & 0xFF);
+    szRSInfo[14] = (unsigned char)(m_hb2_rs_info.TOU_Season1_Start_Day & 0xFF);
+    szRSInfo[15] = (unsigned char)((m_hb2_rs_info.TOU_Season1_End_Month >> 8) & 0xFF);
+    szRSInfo[16] = (unsigned char)(m_hb2_rs_info.TOU_Season1_End_Month & 0xFF);
+    szRSInfo[17] = (unsigned char)((m_hb2_rs_info.TOU_Season1_End_Day >> 8) & 0xFF);
+    szRSInfo[18] = (unsigned char)(m_hb2_rs_info.TOU_Season1_End_Day & 0xFF);
+    szRSInfo[19] = (unsigned char)((m_hb2_rs_info.Peak_Period_Start_Hour1_of_Season1 >> 8) & 0xFF);
+    szRSInfo[20] = (unsigned char)(m_hb2_rs_info.Peak_Period_Start_Hour1_of_Season1 & 0xFF);
+    szRSInfo[21] = (unsigned char)((m_hb2_rs_info.Peak_Period_Start_Minute1_of_Season1 >> 8) & 0xFF);
+    szRSInfo[22] = (unsigned char)(m_hb2_rs_info.Peak_Period_Start_Minute1_of_Season1 & 0xFF);
+    szRSInfo[23] = (unsigned char)((m_hb2_rs_info.Peak_Period_End_Hour1_of_Season1 >> 8) & 0xFF);
+    szRSInfo[24] = (unsigned char)(m_hb2_rs_info.Peak_Period_End_Hour1_of_Season1 & 0xFF);
+    szRSInfo[25] = (unsigned char)((m_hb2_rs_info.Peak_Period_End_Minute1_of_Season1 >> 8) & 0xFF);
+    szRSInfo[26] = (unsigned char)(m_hb2_rs_info.Peak_Period_End_Minute1_of_Season1 & 0xFF);
+    szRSInfo[27] = (unsigned char)((m_hb2_rs_info.Peak_Period_Start_Hour2_of_Season1 >> 8) & 0xFF);
+    szRSInfo[28] = (unsigned char)(m_hb2_rs_info.Peak_Period_Start_Hour2_of_Season1 & 0xFF);
+    szRSInfo[29] = (unsigned char)((m_hb2_rs_info.Peak_Period_Start_Minute2_of_Season1 >> 8) & 0xFF);
+    szRSInfo[30] = (unsigned char)(m_hb2_rs_info.Peak_Period_Start_Minute2_of_Season1 & 0xFF);
+    szRSInfo[31] = (unsigned char)((m_hb2_rs_info.Peak_Period_End_Hour2_of_Season1 >> 8) & 0xFF);
+    szRSInfo[32] = (unsigned char)(m_hb2_rs_info.Peak_Period_End_Hour2_of_Season1 & 0xFF);
+    szRSInfo[33] = (unsigned char)((m_hb2_rs_info.Peak_Period_End_Minute2_of_Season1 >> 8) & 0xFF);
+    szRSInfo[34] = (unsigned char)(m_hb2_rs_info.Peak_Period_End_Minute2_of_Season1 & 0xFF);
+    szRSInfo[35] = (unsigned char)((m_hb2_rs_info.Peak_Period_Start_Hour1_of_OtherSeason >> 8) & 0xFF);
+    szRSInfo[36] = (unsigned char)(m_hb2_rs_info.Peak_Period_Start_Hour1_of_OtherSeason & 0xFF);
+    szRSInfo[37] = (unsigned char)((m_hb2_rs_info.Peak_Period_Start_Minute1_of_OtherSeason >> 8) & 0xFF);
+    szRSInfo[38] = (unsigned char)(m_hb2_rs_info.Peak_Period_Start_Minute1_of_OtherSeason & 0xFF);
+    // crc
+    szRSInfo[39] = 0x00; // cmd crc hi
+    szRSInfo[40] = 0x00; // cmd crc lo
+    MakeReadDataCRC(szRSInfo,41);
+    MClearRX();
+    txsize=41;
+    waitAddr = arySNobj[index].m_Addr;
+    waitFCode = 0x10;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, szRSInfo, 41);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            if ( CheckCRC(lpdata, 8) ) {
+                printf("#### SetHybrid2RSInfo3 OK ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RSInfo3() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
+                //free(lpdata);
+                return true;
+            } else {
+                printf("#### SetHybrid2RSInfo3 CRC Error ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RSInfo3() : CRC Error", m_st_time);
+                err++;
+            }
+            //free(lpdata);
+        } else {
+            printf("#### SetHybrid2RSInfo3 No Response ####\n");
+            SaveLog((char *)"DataLogger SetHybrid2RSInfo3() : No Response", m_st_time);
+            err++;
+        }
+
+        usleep(1000000);
+    }
+
+    return false;
+}
+
+bool CG320::SetHybrid2RSInfo4(int index)
+{
+    printf("#### SetHybrid2RSInfo4 Start ####\n");
+
+    int err = 0;
+    //unsigned short crc;
+    byte *lpdata = NULL;
+
+    unsigned char szRSInfo[23]={0};
+    szRSInfo[0] = arySNobj[index].m_Addr;
+    szRSInfo[1] = 0x10; // function code
+    szRSInfo[2] = 0x00;
+    szRSInfo[3] = 0xE0; // star address
+    szRSInfo[4] = 0x00;
+    szRSInfo[5] = 0x07; // number of data
+    szRSInfo[6] = 0x0E; // bytes
+    // data 0xE0 ~ 0xE6
+    szRSInfo[7] = (unsigned char)((m_hb2_rs_info.Peak_Period_End_Hour1_of_OtherSeason >> 8) & 0xFF);
+    szRSInfo[8] = (unsigned char)(m_hb2_rs_info.Peak_Period_End_Hour1_of_OtherSeason & 0xFF);
+    szRSInfo[9] = (unsigned char)((m_hb2_rs_info.Peak_Period_End_Minute1_of_OtherSeason >> 8) & 0xFF);
+    szRSInfo[10] = (unsigned char)(m_hb2_rs_info.Peak_Period_End_Minute1_of_OtherSeason & 0xFF);
+    szRSInfo[11] = (unsigned char)((m_hb2_rs_info.Peak_Period_Start_Hour2_of_OtherSeason >> 8) & 0xFF);
+    szRSInfo[12] = (unsigned char)(m_hb2_rs_info.Peak_Period_Start_Hour2_of_OtherSeason & 0xFF);
+    szRSInfo[13] = (unsigned char)((m_hb2_rs_info.Peak_Period_Start_Minute2_of_OtherSeason >> 8) & 0xFF);
+    szRSInfo[14] = (unsigned char)(m_hb2_rs_info.Peak_Period_Start_Minute2_of_OtherSeason & 0xFF);
+    szRSInfo[15] = (unsigned char)((m_hb2_rs_info.Peak_Period_End_Hour2_of_OtherSeason >> 8) & 0xFF);
+    szRSInfo[16] = (unsigned char)(m_hb2_rs_info.Peak_Period_End_Hour2_of_OtherSeason & 0xFF);
+    szRSInfo[17] = (unsigned char)((m_hb2_rs_info.Peak_Period_End_Minute2_of_OtherSeason >> 8) & 0xFF);
+    szRSInfo[18] = (unsigned char)(m_hb2_rs_info.Peak_Period_End_Minute2_of_OtherSeason & 0xFF);
+    szRSInfo[19] = (unsigned char)((m_hb2_rs_info.PeakShavingPower >> 8) & 0xFF);
+    szRSInfo[20] = (unsigned char)(m_hb2_rs_info.PeakShavingPower & 0xFF);
+    // crc
+    szRSInfo[21] = 0x00; // cmd crc hi
+    szRSInfo[22] = 0x00; // cmd crc lo
+    MakeReadDataCRC(szRSInfo,23);
+    MClearRX();
+    txsize=23;
+    waitAddr = arySNobj[index].m_Addr;
+    waitFCode = 0x10;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, szRSInfo, 23);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            if ( CheckCRC(lpdata, 8) ) {
+                printf("#### SetHybrid2RSInfo4 OK ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RSInfo4() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
+                //free(lpdata);
+                return true;
+            } else {
+                printf("#### SetHybrid2RSInfo4 CRC Error ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2RSInfo4() : CRC Error", m_st_time);
+                err++;
+            }
+            //free(lpdata);
+        } else {
+            printf("#### SetHybrid2RSInfo4 No Response ####\n");
+            SaveLog((char *)"DataLogger SetHybrid2RSInfo4() : No Response", m_st_time);
             err++;
         }
 
@@ -7466,8 +7643,8 @@ void CG320::DumpHybrid2CEValue(unsigned char *buf)
 
     printf("#### Dump Hybrid2 CE Value ####\n");
 // 0x0160
-    printf("Total_Life_TimeH = %d *100KWH\n", m_hb2_ce_value.Total_Life_TimeH);
-    printf("Total_Life_TimeL = %d *0.01KWH\n", m_hb2_ce_value.Total_Life_TimeL);
+    printf("Total_Life_TimeH = %d *100H\n", m_hb2_ce_value.Total_Life_TimeH);
+    printf("Total_Life_TimeL = %d *0.01H\n", m_hb2_ce_value.Total_Life_TimeL);
     printf("PV_Total_EnergyH = %d *100KWH\n", m_hb2_ce_value.PV_Total_EnergyH);
     printf("PV_Total_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.PV_Total_EnergyL);
     printf("Bat_Charge_Total_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Charge_Total_EnergyH);
@@ -8733,6 +8910,9 @@ bool CG320::WriteLogXML(int index)
                 // set flags1
                 sprintf(buf, "<Safety_Control>%d</Safety_Control>", m_hb2_id_data.Safety_Control);
                 strcat(m_log_buf, buf);
+                // set dl ver
+                sprintf(buf, "<DLver>%d</DLver>", m_hb2_id_data.DL_Ver);
+                strcat(m_log_buf, buf);
             }
 
             // set remote setting
@@ -8774,8 +8954,8 @@ bool CG320::WriteLogXML(int index)
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<GridTiedMaxSOC>%d</GridTiedMaxSOC>", m_hb2_rs_info.GridTiedMaxSOC);
                 strcat(m_log_buf, buf);
-                sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb2_rs_info.PeakShavingPower)/10);
-                strcat(m_log_buf, buf);
+                //sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb2_rs_info.PeakShavingPower)/10);
+                //strcat(m_log_buf, buf);
                 sprintf(buf, "<StartFrequency>%03.1f</StartFrequency>", ((float)m_hb2_rs_info.StartFrequency)/10);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<EndFrequency>%03.1f</EndFrequency>", ((float)m_hb2_rs_info.EndFrequency)/10);
@@ -8787,8 +8967,8 @@ bool CG320::WriteLogXML(int index)
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<Q_Value>%d</Q_Value>", m_hb2_rs_info.PowerFactorControl);
                 strcat(m_log_buf, buf);
-                sprintf(buf, "<TMP_C3>%d</TMP_C3>", m_hb2_rs_info.TMP_C3);
-                strcat(m_log_buf, buf);
+                //sprintf(buf, "<TMP_C3>%d</TMP_C3>", m_hb2_rs_info.TMP_C3);
+                //strcat(m_log_buf, buf);
                 sprintf(buf, "<SpecifiedModbusSlaveID>%d</SpecifiedModbusSlaveID>", m_hb2_rs_info.SpecifiedModbusSlaveID);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<FunctionControl1>%d</FunctionControl1>", m_hb2_rs_info.FunctionControl1);
@@ -8844,6 +9024,8 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<Peak_Period_End_Hour2_of_OtherSeason>%d</Peak_Period_End_Hour2_of_OtherSeason>", m_hb2_rs_info.Peak_Period_End_Hour2_of_OtherSeason);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<Peak_Period_End_Minute2_of_OtherSeason>%d</Peak_Period_End_Minute2_of_OtherSeason>", m_hb2_rs_info.Peak_Period_End_Minute2_of_OtherSeason);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PeakShavingPower>%05.3f</PeakShavingPower>", ((float)m_hb2_rs_info.PeakShavingPower)/10);
                 strcat(m_log_buf, buf);
             }
 
@@ -9719,8 +9901,8 @@ bool CG320::WriteErrorLogXML(int index)
             strcat(m_errlog_buf, "<code>COD3_0080_Code</code>");
         if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0100 )
             strcat(m_errlog_buf, "<code>COD3_0100_Vbat_Drop</code>");
-        //if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0200 )
-        //    strcat(m_errlog_buf, "<code>COD3_0200_INV_fault</code>");
+        if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0200 )
+            strcat(m_errlog_buf, "<code>COD3_0200_Model_FW_define_Err</code>");
         //if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0400 )
         //    strcat(m_errlog_buf, "<code>COD3_0400_GND_Fault</code>");
         if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0800 )
