@@ -8016,7 +8016,7 @@ bool CG320::GetTimezone()
     log_time = localtime(&current_time);
     SaveLog((char *)"DataLogger GetTimezone() run.", log_time);
 
-    m_do_get_TZ = true;
+/*    m_do_get_TZ = true;
     printf("\n########### Get Timezone ###########\n");
     // get timezone from ip
     sprintf(buf, "curl -k %s --max-time 30 > /tmp/timezone", TIMEZONE_URL);
@@ -8054,13 +8054,13 @@ bool CG320::GetTimezone()
         } else if ( (tmp[i] == '+') || (tmp[i] == '-') ) { // + or - , copy
             timezone[j] = tmp[i];
             j++;
-            /*if ( ('0' <= tmp[i+1]) && (tmp[i+1] <= '9') ) { // next byte is number 0 ~ 9, copy
-                timezone[j] = tmp[i];
-                j++;
-            } else { // next byte not number, set .
-                timezone[j] = '.';
-                j++;
-            }*/
+            //if ( ('0' <= tmp[i+1]) && (tmp[i+1] <= '9') ) { // next byte is number 0 ~ 9, copy
+            //    timezone[j] = tmp[i];
+            //    j++;
+            //} else { // next byte not number, set .
+            //    timezone[j] = '.';
+            //    j++;
+            //}
         } else if ( tmp[i] == '_' ) { // _ , set to space
             timezone[j] = ' ';
             j++;
@@ -8121,14 +8121,19 @@ bool CG320::GetTimezone()
     printf("Debug : time_offset[] = %s\n", time_offset);
     sprintf(tmp, "DataLogger GetTimezone() : time_offset = [%s]", time_offset);
     SaveLog(tmp, log_time);
-
+*/
+    strcpy(zonename, "UTC");
+    strcpy(time_offset, "GMT0");
+    sprintf(tmp, "DataLogger GetTimezone() : zonename = [%s], time_offset = [%s]", zonename, time_offset);
+    printf(tmp);
+    SaveLog(tmp, log_time);
     SetTimezone(zonename, time_offset);
     m_do_get_TZ = false;
 
     usleep(1000000);
     GetNTPTime();
 
-    printf("####################################\n");
+    printf("\n####################################\n");
 
     return true;
 }
