@@ -172,6 +172,7 @@ protected:
     void    ParserHybrid2IconInfo(int Icon_L, int Icon_H);
     void    DumpHybrid2RTCData(unsigned char *buf);
     bool    SetHybrid2RTCData(int index);
+    bool    SetHybrid2ARCInfo(int index);
     void    DumpHybrid2BMSInfo(unsigned char *buf);
 
     bool    GetTimezone();
@@ -272,6 +273,7 @@ protected:
     HB2_DP_INFO     m_hb2_dp_info;
     HB2_ICON_INFO   m_hb2_icon_info;
     HB2_RTC_DATA    m_hb2_rtc_data;
+    HB2_ARC_INFO    m_hb2_arc_info;
     HB2_BMS_INFO    m_hb2_bms_info;
 
     DL_CMD          m_dl_cmd;

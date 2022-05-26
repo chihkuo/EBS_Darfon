@@ -573,6 +573,11 @@ typedef struct stHybrid2_PV_Inv_Error_COD3 {
     char B1_Model123_Reconnected_Delay;
     char B2_Peak_Shaving_Over_Power;
     char B3_CLA_Execute_Time_Over;
+    char B4_Fac_Sudden;               // 1.42 add
+    char B5_Inverter_Idc_Fault;       // 1.42 add
+    char B6_Zero_Export_Fault;        // 1.42 add
+    char B7_Grid_Charge_To_Bat_Fault; // 1.42 add
+    char B8_Grid_Ok_For_DD;           // 1.42 add
 }HB2_PVINV_ERR_COD3;
 
 typedef struct stHybrid2_DD_Error_COD1 {
@@ -585,7 +590,7 @@ typedef struct stHybrid2_DD_Error_COD1 {
     // b6 remove
     char B7_Code;
     char B8_Vbat_Drop;
-    // b9 remove
+    char B9_Model_FW_Define_Err;
     // b10 remove
     char B11_No_bat;
     char B12_BMS_Comute_Fault;
@@ -609,6 +614,7 @@ typedef struct stHybrid2_DD_Error_COD2 {
     char B11_OT_Alarm; // new
     char B12_Bat_Wake_Up_Fault; // new
     char B13_Vbat_Inconsistent; // new
+    char B14_Bat_FW_Update;
 }HB2_DD_ERR_COD2;
 
 typedef struct stHybrid2_Cumulative_Energy_Value {
@@ -668,10 +674,65 @@ typedef struct stHybrid2_Cumulative_Energy_Value {
     int CT_Total_Charge_EnergyL;
     int CT_Today_Charge_EnergyH;
     int CT_Today_Charge_EnergyL;
+// 1.42 add
+// 0x01A0
+    int PV_Year_EnergyH;
+    int PV_Year_EnergyL;
+    int Bat_Charge_Year_EnergyH;
+    int Bat_Charge_Year_EnergyL;
+    int Bat_Discharge_Year_EnergyH;
+    int Bat_Discharge_Year_EnergyL;
+    int Load_Year_EnergyH;
+    int Load_Year_EnergyL;
+    int Negative_Load_Year_EnergyH;
+    int Negative_Load_Year_EnergyL;
+    int GridFeed_Year_EnergyH;
+    int GridFeed_Year_EnergyL;
+    int GridCharge_Year_EnergyH;
+    int GridCharge_Year_EnergyL;
+    int PV1_Todat_Energy;
+    int PV2_Todat_Energy;
+// 0x01B0
+    int PV3_Todat_Energy;
+    int PV4_Todat_Energy;
+    int PV1_Todat_Energy_Peak_Power;
+    int PV1_Todat_Energy_Peak_Current;
+    int PV1_Todat_Energy_Peak_Voltage;
+    int PV2_Todat_Energy_Peak_Power;
+    int PV2_Todat_Energy_Peak_Current;
+    int PV2_Todat_Energy_Peak_Voltage;
+    int PV3_Todat_Energy_Peak_Power;
+    int PV3_Todat_Energy_Peak_Current;
+    int PV3_Todat_Energy_Peak_Voltage;
+    int PV4_Todat_Energy_Peak_Power;
+    int PV4_Todat_Energy_Peak_Current;
+    int PV4_Todat_Energy_Peak_Voltage;
+    int GridCharge_Todat_Energy_Peak_Power;
+    int GridCharge_Todat_Energy_Peak_Current;
+// 0x01C0
+    int GridFeed_Today_Energy_Peak_Power;
+    int GridFeed_Today_Energy_Peak_Current;
+    int Grid_Today_Energy_Peak_Voltage_Min;
+    int Grid_Today_Energy_Peak_Voltage_Max;
+    int Grid_Today_Energy_Peak_Frequency_Min;
+    int Grid_Today_Energy_Peak_Frequency_Max;
+    int Bat_Charge_Today_Energy_Peak_Current;
+    int Bat_Discharge_Today_Energy_Peak_Current;
+    int Bat_Today_Energy_Peak_Voltage_Min;
+    int Bat_Today_Energy_Peak_Voltage_Max;
+    int Load_Today_Energy_Peak_Power;
+    int Load_Today_Energy_Peak_Current;
+    int Negative_Load_Today_Energy_Peak_Power;
+    int Negative_Load_Today_Energy_Peak_Current;
+    int Load_Today_Energy_Peak_Voltage_Min;
+    int Load_Today_Energy_Peak_Voltage_Max;
+// 0x01D0
+    int Load_Today_Energy_Peak_Frequency_Min;
+    int Load_Today_Energy_Peak_Frequency_Max;
 }HB2_CE_VALUE;
 
 typedef struct stHybrid2_Display_Info {
-// 0x01A0
+// 0x01A0 => 0x01E0
     int Display_Working_State; // new
     int Output_Power_Restraint_Reeson; // new
     int Battery_To_Load_Consumption_Time; // new
@@ -705,7 +766,7 @@ typedef struct stHybrid2_Icon_Info {
 }HB2_ICON_INFO;
 
 typedef struct stHybrid2_RTC_Data {
-// 0x01D0
+// 0x01D0 => 0x0150
     int Second;
     int Minute;
     int Hour;
@@ -713,6 +774,14 @@ typedef struct stHybrid2_RTC_Data {
     int Month;
     int Year;
 }HB2_RTC_DATA;
+
+typedef struct stHybrid2_ARC_Info {
+// 0x01F0
+    int Self_Testing;
+    int Warning_Threshold;
+    int Warning_Clear;
+    int Reset_EEPROM;
+}HB2_ARC_INFO;
 
 typedef struct stHybrid2_BMS_Info {
 // 0x0200

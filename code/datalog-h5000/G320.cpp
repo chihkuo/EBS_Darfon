@@ -50,15 +50,17 @@
 #define HB2_START_ADDRESS_RSINFO4   0xE0
 #define HB2_START_ADDRESS_RTINFO    0x100
 #define HB2_START_ADDRESS_CEVALUE   0x160
-#define HB2_START_ADDRESS_DPINFO    0x1A0
-#define HB2_START_ADDRESS_RTC       0x1D0
+#define HB2_START_ADDRESS_DPINFO    0x1E0 // 0x1A0 => 0x1E0 (1.40 => 1.42)
+#define HB2_START_ADDRESS_RTC       0x150 // 0x1D0 => 0x150 (1.40 => 1.42)
+#define HB2_START_ADDRESS_ARCINFO   0x1F0 // 1.42 add
 #define HB2_START_ADDRESS_BMSINFO   0x200
 #define HB2_COUNT_ID                30
 #define HB2_COUNT_RSINFO            128
 #define HB2_COUNT_RTINFO            96
-#define HB2_COUNT_CEVALUE           128
+#define HB2_COUNT_CEVALUE           256 // 128 => 256 (1.40 => 1.42)
 #define HB2_COUNT_DPINFO            32
 #define HB2_COUNT_RTC               16
+#define HB2_COUNT_ARCINFO           32 // 1.42 add
 #define HB2_COUNT_BMSINFO           64
 
 extern "C"
@@ -153,6 +155,7 @@ CG320::CG320()
     m_hb2_dp_info = {0};
     m_hb2_icon_info = {0};
     m_hb2_rtc_data = {0};
+    m_hb2_arc_info = {0};
     m_hb2_bms_info = {0};
     m_save_hb2_id_data = false;
     m_save_hb2_rs_info = false;
@@ -1894,6 +1897,7 @@ void CG320::CleanParameter()
     m_hb2_dp_info = {0};
     m_hb2_icon_info = {0};
     m_hb2_rtc_data = {0};
+    m_hb2_arc_info = {0};
     m_hb2_bms_info = {0};
     m_save_hb2_id_data = false;
     m_save_hb2_rs_info = false;
@@ -2159,6 +2163,14 @@ bool CG320::RunTODOList()
                                     m_hb2_rs_info.PeakShavingPower = m_dl_cmd.m_data[6];
                                     SaveLog((char *)"DataLogger RunTODOList() : run SetHybrid2RSInfo4()", m_st_time);
                                     SetHybrid2RSInfo4(i);
+                                    break;
+                                case HB2_START_ADDRESS_ARCINFO:
+                                    m_hb2_arc_info.Self_Testing = m_dl_cmd.m_data[0];
+                                    m_hb2_arc_info.Warning_Threshold = m_dl_cmd.m_data[1];
+                                    m_hb2_arc_info.Warning_Clear = m_dl_cmd.m_data[2];
+                                    m_hb2_arc_info.Reset_EEPROM = m_dl_cmd.m_data[15];
+                                    SaveLog((char *)"DataLogger RunTODOList() : run SetHybrid2ARCInfo()", m_st_time);
+                                    SetHybrid2ARCInfo(i);
                                     break;
                             }
                         }
@@ -7469,12 +7481,27 @@ void CG320::ParserHybrid2PVInvErrCOD3(int COD3)
     m_hb2_pvinv_err_cod3.B2_Peak_Shaving_Over_Power = tmp & 0x0001;
     tmp>>=1;
     m_hb2_pvinv_err_cod3.B3_CLA_Execute_Time_Over = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod3.B4_Fac_Sudden = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod3.B5_Inverter_Idc_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod3.B6_Zero_Export_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod3.B7_Grid_Charge_To_Bat_Fault = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_pvinv_err_cod3.B8_Grid_Ok_For_DD = tmp & 0x0001;
 
     printf("#### Parser Hybrid2 PV Inverter Error Code 3 ####\n");
     printf("Bit0  : External_PV_OPP = %d\n", m_hb2_pvinv_err_cod3.B0_External_PV_OPP);
     printf("Bit1  : Model123_Reconnected_Delay = %d\n", m_hb2_pvinv_err_cod3.B1_Model123_Reconnected_Delay);
     printf("Bit2  : Peak_Shaving_Over_Power = %d\n", m_hb2_pvinv_err_cod3.B2_Peak_Shaving_Over_Power);
     printf("Bit3  : CLA_Execute_Time_Over = %d\n", m_hb2_pvinv_err_cod3.B3_CLA_Execute_Time_Over);
+    printf("Bit4  : Fac_Sudden = %d\n", m_hb2_pvinv_err_cod3.B4_Fac_Sudden);
+    printf("Bit5  : Inverter_Idc_Fault = %d\n", m_hb2_pvinv_err_cod3.B5_Inverter_Idc_Fault);
+    printf("Bit6  : Zero_Export_Fault = %d\n", m_hb2_pvinv_err_cod3.B6_Zero_Export_Fault);
+    printf("Bit7  : Grid_Charge_To_Bat_Fault = %d\n", m_hb2_pvinv_err_cod3.B7_Grid_Charge_To_Bat_Fault);
+    printf("Bit8  : Grid_Ok_For_DD = %d\n", m_hb2_pvinv_err_cod3.B8_Grid_Ok_For_DD);
     printf("################################################\n");
 }
 
@@ -7498,9 +7525,9 @@ void CG320::ParserHybrid2DDErrCOD1(int COD1)
     m_hb2_dd_err_cod1.B7_Code = tmp & 0x0001;
     tmp>>=1;
     m_hb2_dd_err_cod1.B8_Vbat_Drop = tmp & 0x0001;
-    tmp>>=3;
-    //m_hb2_dd_err_cod1.B9_INV_Fault = tmp & 0x0001;
-    //tmp>>=1;
+    tmp>>=1;
+    m_hb2_dd_err_cod1.B9_Model_FW_Define_Err = tmp & 0x0001;
+    tmp>>=2;
     //m_hb2_dd_err_cod1.B10_GND_Fault = tmp & 0x0001;
     //tmp>>=1;
     m_hb2_dd_err_cod1.B11_No_bat = tmp & 0x0001;
@@ -7523,7 +7550,7 @@ void CG320::ParserHybrid2DDErrCOD1(int COD1)
     //printf("Bit6  : Charger_T = %d\n", m_hb2_dd_err_cod1.B6_Charger_T);
     printf("Bit7  : Code = %d\n", m_hb2_dd_err_cod1.B7_Code);
     printf("Bit8  : Vbat_Drop = %d\n", m_hb2_dd_err_cod1.B8_Vbat_Drop);
-    //printf("Bit9  : INV_Fault = %d\n", m_hb2_dd_err_cod1.B9_INV_Fault);
+    printf("Bit9  : Model_FW_Define_Err = %d\n", m_hb2_dd_err_cod1.B9_Model_FW_Define_Err);
     //printf("Bit10 : GND_Fault = %d\n", m_hb2_dd_err_cod1.B10_GND_Fault);
     printf("Bit11 : No_bat = %d\n", m_hb2_dd_err_cod1.B11_No_bat);
     printf("Bit12 : BMS_Comute_Fault = %d\n", m_hb2_dd_err_cod1.B12_BMS_Comute_Fault);
@@ -7563,6 +7590,8 @@ void CG320::ParserHybrid2DDErrCOD2(int COD2)
     m_hb2_dd_err_cod2.B12_Bat_Wake_Up_Fault = tmp & 0x0001;
     tmp>>=1;
     m_hb2_dd_err_cod2.B13_Vbat_Inconsistent = tmp & 0x0001;
+    tmp>>=1;
+    m_hb2_dd_err_cod2.B14_Bat_FW_Update = tmp & 0x0001;
 
     printf("#### Parser Hybrid2 DD Error Code 2 ####\n");
     printf("Bit0  : EEProm_Fault = %d\n", m_hb2_dd_err_cod2.B0_EEProm_Fault);
@@ -7576,9 +7605,10 @@ void CG320::ParserHybrid2DDErrCOD2(int COD2)
     printf("Bit8  : PV_Input_High = %d\n", m_hb2_dd_err_cod2.B8_PV_Input_High);
     printf("Bit9  : Restart = %d\n", m_hb2_dd_err_cod2.B9_Restart);
     printf("Bit10 : GND_Fault = %d\n", m_hb2_dd_err_cod2.B10_GND_Fault);
-    printf("Bit10 : OT_Alarm = %d\n", m_hb2_dd_err_cod2.B11_OT_Alarm);
-    printf("Bit10 : Bat_Wake_Up_Fault = %d\n", m_hb2_dd_err_cod2.B12_Bat_Wake_Up_Fault);
-    printf("Bit10 : Vbat_Inconsistent = %d\n", m_hb2_dd_err_cod2.B13_Vbat_Inconsistent);
+    printf("Bit11 : OT_Alarm = %d\n", m_hb2_dd_err_cod2.B11_OT_Alarm);
+    printf("Bit12 : Bat_Wake_Up_Fault = %d\n", m_hb2_dd_err_cod2.B12_Bat_Wake_Up_Fault);
+    printf("Bit13 : Vbat_Inconsistent = %d\n", m_hb2_dd_err_cod2.B13_Vbat_Inconsistent);
+    printf("Bit14 : Bat_FW_Update = %d\n", m_hb2_dd_err_cod2.B14_Bat_FW_Update);
     printf("#####################################\n");
 }
 
@@ -7640,11 +7670,66 @@ void CG320::DumpHybrid2CEValue(unsigned char *buf)
     m_hb2_ce_value.CT_Total_Charge_EnergyL = (*(buf+98) << 8) + *(buf+99);
     m_hb2_ce_value.CT_Today_Charge_EnergyH = (*(buf+100) << 8) + *(buf+101);
     m_hb2_ce_value.CT_Today_Charge_EnergyL = (*(buf+102) << 8) + *(buf+103);
+// add 1.42
+// 0x01A0
+    m_hb2_ce_value.PV_Year_EnergyH = (*(buf+128) << 8) + *(buf+129);
+    m_hb2_ce_value.PV_Year_EnergyL = (*(buf+130) << 8) + *(buf+131);
+    m_hb2_ce_value.Bat_Charge_Year_EnergyH = (*(buf+132) << 8) + *(buf+133);
+    m_hb2_ce_value.Bat_Charge_Year_EnergyL = (*(buf+134) << 8) + *(buf+135);
+    m_hb2_ce_value.Bat_Discharge_Year_EnergyH = (*(buf+136) << 8) + *(buf+137);
+    m_hb2_ce_value.Bat_Discharge_Year_EnergyL = (*(buf+138) << 8) + *(buf+139);
+    m_hb2_ce_value.Load_Year_EnergyH = (*(buf+140) << 8) + *(buf+141);
+    m_hb2_ce_value.Load_Year_EnergyL = (*(buf+142) << 8) + *(buf+143);
+    m_hb2_ce_value.Negative_Load_Year_EnergyH = (*(buf+144) << 8) + *(buf+145);
+    m_hb2_ce_value.Negative_Load_Year_EnergyL = (*(buf+146) << 8) + *(buf+147);
+    m_hb2_ce_value.GridFeed_Year_EnergyH = (*(buf+148) << 8) + *(buf+149);
+    m_hb2_ce_value.GridFeed_Year_EnergyL = (*(buf+150) << 8) + *(buf+151);
+    m_hb2_ce_value.GridCharge_Year_EnergyH = (*(buf+152) << 8) + *(buf+153);
+    m_hb2_ce_value.GridCharge_Year_EnergyL = (*(buf+154) << 8) + *(buf+155);
+    m_hb2_ce_value.PV1_Todat_Energy = (*(buf+156) << 8) + *(buf+157);
+    m_hb2_ce_value.PV2_Todat_Energy = (*(buf+158) << 8) + *(buf+159);
+// 0x01B0
+    m_hb2_ce_value.PV3_Todat_Energy = (*(buf+160) << 8) + *(buf+161);
+    m_hb2_ce_value.PV4_Todat_Energy = (*(buf+162) << 8) + *(buf+163);
+    m_hb2_ce_value.PV1_Todat_Energy_Peak_Power = (*(buf+164) << 8) + *(buf+165);
+    m_hb2_ce_value.PV1_Todat_Energy_Peak_Current = (*(buf+166) << 8) + *(buf+167);
+    m_hb2_ce_value.PV1_Todat_Energy_Peak_Voltage = (*(buf+168) << 8) + *(buf+169);
+    m_hb2_ce_value.PV2_Todat_Energy_Peak_Power = (*(buf+170) << 8) + *(buf+171);
+    m_hb2_ce_value.PV2_Todat_Energy_Peak_Current = (*(buf+172) << 8) + *(buf+173);
+    m_hb2_ce_value.PV2_Todat_Energy_Peak_Voltage = (*(buf+174) << 8) + *(buf+175);
+    m_hb2_ce_value.PV3_Todat_Energy_Peak_Power = (*(buf+176) << 8) + *(buf+177);
+    m_hb2_ce_value.PV3_Todat_Energy_Peak_Current = (*(buf+178) << 8) + *(buf+179);
+    m_hb2_ce_value.PV3_Todat_Energy_Peak_Voltage = (*(buf+180) << 8) + *(buf+181);
+    m_hb2_ce_value.PV4_Todat_Energy_Peak_Power = (*(buf+182) << 8) + *(buf+183);
+    m_hb2_ce_value.PV4_Todat_Energy_Peak_Current = (*(buf+184) << 8) + *(buf+185);
+    m_hb2_ce_value.PV4_Todat_Energy_Peak_Voltage = (*(buf+186) << 8) + *(buf+187);
+    m_hb2_ce_value.GridCharge_Todat_Energy_Peak_Power = (*(buf+188) << 8) + *(buf+189);
+    m_hb2_ce_value.GridCharge_Todat_Energy_Peak_Current = (*(buf+190) << 8) + *(buf+191);
+// 0x01C0
+    m_hb2_ce_value.GridFeed_Today_Energy_Peak_Power = (*(buf+192) << 8) + *(buf+193);
+    m_hb2_ce_value.GridFeed_Today_Energy_Peak_Current = (*(buf+194) << 8) + *(buf+195);
+    m_hb2_ce_value.Grid_Today_Energy_Peak_Voltage_Min = (*(buf+196) << 8) + *(buf+197);
+    m_hb2_ce_value.Grid_Today_Energy_Peak_Voltage_Max = (*(buf+198) << 8) + *(buf+199);
+    m_hb2_ce_value.Grid_Today_Energy_Peak_Frequency_Min = (*(buf+200) << 8) + *(buf+201);
+    m_hb2_ce_value.Grid_Today_Energy_Peak_Frequency_Max = (*(buf+202) << 8) + *(buf+203);
+    m_hb2_ce_value.Bat_Charge_Today_Energy_Peak_Current = (*(buf+204) << 8) + *(buf+205);
+    m_hb2_ce_value.Bat_Discharge_Today_Energy_Peak_Current = (*(buf+206) << 8) + *(buf+207);
+    m_hb2_ce_value.Bat_Today_Energy_Peak_Voltage_Min = (*(buf+208) << 8) + *(buf+209);
+    m_hb2_ce_value.Bat_Today_Energy_Peak_Voltage_Max = (*(buf+210) << 8) + *(buf+211);
+    m_hb2_ce_value.Load_Today_Energy_Peak_Power = (*(buf+212) << 8) + *(buf+213);
+    m_hb2_ce_value.Load_Today_Energy_Peak_Current = (*(buf+214) << 8) + *(buf+215);
+    m_hb2_ce_value.Negative_Load_Today_Energy_Peak_Power = (*(buf+216) << 8) + *(buf+217);
+    m_hb2_ce_value.Negative_Load_Today_Energy_Peak_Current = (*(buf+218) << 8) + *(buf+219);
+    m_hb2_ce_value.Load_Today_Energy_Peak_Voltage_Min = (*(buf+220) << 8) + *(buf+221);
+    m_hb2_ce_value.Load_Today_Energy_Peak_Voltage_Max = (*(buf+222) << 8) + *(buf+223);
+// 0x01D0
+    m_hb2_ce_value.Load_Today_Energy_Peak_Frequency_Min = (*(buf+224) << 8) + *(buf+225);
+    m_hb2_ce_value.Load_Today_Energy_Peak_Frequency_Max = (*(buf+226) << 8) + *(buf+227);
 
     printf("#### Dump Hybrid2 CE Value ####\n");
 // 0x0160
-    printf("Total_Life_TimeH = %d *100H\n", m_hb2_ce_value.Total_Life_TimeH);
-    printf("Total_Life_TimeL = %d *0.01H\n", m_hb2_ce_value.Total_Life_TimeL);
+    printf("Total_Life_TimeH = %d *65536H\n", m_hb2_ce_value.Total_Life_TimeH);
+    printf("Total_Life_TimeL = %d *H\n", m_hb2_ce_value.Total_Life_TimeL);
     printf("PV_Total_EnergyH = %d *100KWH\n", m_hb2_ce_value.PV_Total_EnergyH);
     printf("PV_Total_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.PV_Total_EnergyL);
     printf("Bat_Charge_Total_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Charge_Total_EnergyH);
@@ -7698,12 +7783,66 @@ void CG320::DumpHybrid2CEValue(unsigned char *buf)
     printf("CT_Total_Charge_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.CT_Total_Charge_EnergyL);
     printf("CT_Today_Charge_EnergyH = %d *100KWH\n", m_hb2_ce_value.CT_Today_Charge_EnergyH);
     printf("CT_Today_Charge_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.CT_Today_Charge_EnergyL);
+// 0x01A0
+    printf("PV_Year_EnergyH = %d *100KWH\n", m_hb2_ce_value.PV_Year_EnergyH);
+    printf("PV_Year_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.PV_Year_EnergyL);
+    printf("Bat_Charge_Year_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Charge_Year_EnergyH);
+    printf("Bat_Charge_Year_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Bat_Charge_Year_EnergyL);
+    printf("Bat_Discharge_Year_EnergyH = %d *100KWH\n", m_hb2_ce_value.Bat_Discharge_Year_EnergyH);
+    printf("Bat_Discharge_Year_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Bat_Discharge_Year_EnergyL);
+    printf("Load_Year_EnergyH = %d *100KWH\n", m_hb2_ce_value.Load_Year_EnergyH);
+    printf("Load_Year_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Load_Year_EnergyL);
+    printf("Negative_Load_Year_EnergyH = %d *100KWH\n", m_hb2_ce_value.Negative_Load_Year_EnergyH);
+    printf("Negative_Load_Year_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.Negative_Load_Year_EnergyL);
+    printf("GridFeed_Year_EnergyH = %d *100KWH\n", m_hb2_ce_value.GridFeed_Year_EnergyH);
+    printf("GridFeed_Year_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.GridFeed_Year_EnergyL);
+    printf("GridCharge_Year_EnergyH = %d *100KWH\n", m_hb2_ce_value.GridCharge_Year_EnergyH);
+    printf("GridCharge_Year_EnergyL = %d *0.01KWH\n", m_hb2_ce_value.GridCharge_Year_EnergyL);
+    printf("PV1_Todat_Energy = %d *0.01KWH\n", m_hb2_ce_value.PV1_Todat_Energy);
+    printf("PV2_Todat_Energy = %d *0.01KWH\n", m_hb2_ce_value.PV2_Todat_Energy);
+// 0x01B0
+    printf("PV3_Todat_Energy = %d *0.01KWH\n", m_hb2_ce_value.PV3_Todat_Energy);
+    printf("PV4_Todat_Energy = %d *0.01KWH\n", m_hb2_ce_value.PV4_Todat_Energy);
+    printf("PV1_Todat_Energy_Peak_Power = %d *0.01KWH\n", m_hb2_ce_value.PV1_Todat_Energy_Peak_Power);
+    printf("PV1_Todat_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.PV1_Todat_Energy_Peak_Current);
+    printf("PV1_Todat_Energy_Peak_Voltage = %d V\n", m_hb2_ce_value.PV1_Todat_Energy_Peak_Voltage);
+    printf("PV2_Todat_Energy_Peak_Power = %d *0.01KWH\n", m_hb2_ce_value.PV2_Todat_Energy_Peak_Power);
+    printf("PV2_Todat_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.PV2_Todat_Energy_Peak_Current);
+    printf("PV2_Todat_Energy_Peak_Voltage = %d V\n", m_hb2_ce_value.PV2_Todat_Energy_Peak_Voltage);
+    printf("PV3_Todat_Energy_Peak_Power = %d *0.01KWH\n", m_hb2_ce_value.PV3_Todat_Energy_Peak_Power);
+    printf("PV3_Todat_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.PV3_Todat_Energy_Peak_Current);
+    printf("PV3_Todat_Energy_Peak_Voltage = %d V\n", m_hb2_ce_value.PV3_Todat_Energy_Peak_Voltage);
+    printf("PV4_Todat_Energy_Peak_Power = %d *0.01KWH\n", m_hb2_ce_value.PV4_Todat_Energy_Peak_Power);
+    printf("PV4_Todat_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.PV4_Todat_Energy_Peak_Current);
+    printf("PV4_Todat_Energy_Peak_Voltage = %d V\n", m_hb2_ce_value.PV4_Todat_Energy_Peak_Voltage);
+    printf("GridCharge_Todat_Energy_Peak_Power = %d *0.01KWH\n", m_hb2_ce_value.GridCharge_Todat_Energy_Peak_Power);
+    printf("GridCharge_Todat_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.GridCharge_Todat_Energy_Peak_Current);
+// 0x01C0
+    printf("GridFeed_Today_Energy_Peak_Power = %d *0.01KWH\n", m_hb2_ce_value.GridFeed_Today_Energy_Peak_Power);
+    printf("GridFeed_Today_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.GridFeed_Today_Energy_Peak_Current);
+    printf("Grid_Today_Energy_Peak_Voltage_Min = %d V\n", m_hb2_ce_value.Grid_Today_Energy_Peak_Voltage_Min);
+    printf("Grid_Today_Energy_Peak_Voltage_Max = %d V\n", m_hb2_ce_value.Grid_Today_Energy_Peak_Voltage_Max);
+    printf("Grid_Today_Energy_Peak_Frequency_Min = %d *0.1Hz\n", m_hb2_ce_value.Grid_Today_Energy_Peak_Frequency_Min);
+    printf("Grid_Today_Energy_Peak_Frequency_Max = %d *0.1Hz\n", m_hb2_ce_value.Grid_Today_Energy_Peak_Frequency_Max);
+    printf("Bat_Charge_Today_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.Bat_Charge_Today_Energy_Peak_Current);
+    printf("Bat_Discharge_Today_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.Bat_Discharge_Today_Energy_Peak_Current);
+    printf("Bat_Today_Energy_Peak_Voltage_Min = %d V\n", m_hb2_ce_value.Bat_Today_Energy_Peak_Voltage_Min);
+    printf("Bat_Today_Energy_Peak_Voltage_Max = %d V\n", m_hb2_ce_value.Bat_Today_Energy_Peak_Voltage_Max);
+    printf("Load_Today_Energy_Peak_Power = %d *0.01KWH\n", m_hb2_ce_value.Load_Today_Energy_Peak_Power);
+    printf("Load_Today_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.Load_Today_Energy_Peak_Current);
+    printf("Negative_Load_Today_Energy_Peak_Power = %d *0.01KWH\n", m_hb2_ce_value.Negative_Load_Today_Energy_Peak_Power);
+    printf("Negative_Load_Today_Energy_Peak_Current = %d *0.01A\n", m_hb2_ce_value.Negative_Load_Today_Energy_Peak_Current);
+    printf("Load_Today_Energy_Peak_Voltage_Min = %d V\n", m_hb2_ce_value.Load_Today_Energy_Peak_Voltage_Min);
+    printf("Load_Today_Energy_Peak_Voltage_Max = %d V\n", m_hb2_ce_value.Load_Today_Energy_Peak_Voltage_Max);
+// 0x01D0
+    printf("Load_Today_Energy_Peak_Frequency_Min = %d *0.1Hz\n", m_hb2_ce_value.Load_Today_Energy_Peak_Frequency_Min);
+    printf("Load_Today_Energy_Peak_Frequency_Max = %d *0.1Hz\n", m_hb2_ce_value.Load_Today_Energy_Peak_Frequency_Max);
     printf("#############################\n");
 }
 
 void CG320::DumpHybrid2DPInfo(unsigned char *buf)
 {
-// 0x0160
+// V1.42 0x01A0 => 0x01E0
     m_hb2_dp_info.Display_Working_State = (*(buf) << 8) + *(buf+1);
     m_hb2_dp_info.Output_Power_Restraint_Reeson = (*(buf+2) << 8) + *(buf+3);
     m_hb2_dp_info.Battery_To_Load_Consumption_Time = (*(buf+4) << 8) + *(buf+5);
@@ -7851,7 +7990,7 @@ bool CG320::SetHybrid2RTCData(int index)
         szRTCData[0] = arySNobj[index].m_Addr;
         szRTCData[1] = 0x10; // function code
         szRTCData[2] = 0x01;
-        szRTCData[3] = 0xD0; // star address
+        szRTCData[3] = 0x50; // star address // V1.42 modify 0x1D0 => 0x150
         szRTCData[4] = 0x00;
         szRTCData[5] = 0x08; // number of data
         szRTCData[6] = 0x10; // bytes
@@ -7929,6 +8068,95 @@ bool CG320::SetHybrid2RTCData(int index)
             SaveLog((char *)"DataLogger SetHybrid2RTCData() : No Response", st_time);
             //SaveLog((char *)"DataLogger SetHybrid2RTCData() : run reregister()", st_time);
             //ReRegister(index);
+            err++;
+        }
+
+        usleep(1000000);
+    }
+
+    return false;
+}
+
+bool CG320::SetHybrid2ARCInfo(int index)
+{
+    printf("#### SetHybrid2ARCInfo Start ####\n");
+
+    int err = 0;
+    //unsigned short crc;
+    byte *lpdata = NULL;
+
+    unsigned char szRSInfo[41]={0};
+    szRSInfo[0] = arySNobj[index].m_Addr;
+    szRSInfo[1] = 0x10; // function code
+    szRSInfo[2] = 0x01;
+    szRSInfo[3] = 0xF0; // star address
+    szRSInfo[4] = 0x00;
+    szRSInfo[5] = 0x10; // number of data
+    szRSInfo[6] = 0x20; // bytes
+    // data 0x1F0 ~ 0x1FF
+    szRSInfo[7] = (unsigned char)((m_hb2_arc_info.Self_Testing >> 8) & 0xFF);
+    szRSInfo[8] = (unsigned char)(m_hb2_arc_info.Self_Testing & 0xFF);
+    szRSInfo[9] = (unsigned char)((m_hb2_arc_info.Warning_Threshold >> 8) & 0xFF);
+    szRSInfo[10] = (unsigned char)(m_hb2_arc_info.Warning_Threshold & 0xFF);
+    szRSInfo[11] = (unsigned char)((m_hb2_arc_info.Warning_Clear >> 8) & 0xFF);
+    szRSInfo[12] = (unsigned char)(m_hb2_arc_info.Warning_Clear & 0xFF);
+    szRSInfo[13] = 0;
+    szRSInfo[14] = 0;
+    szRSInfo[15] = 0;
+    szRSInfo[16] = 0;
+    szRSInfo[17] = 0;
+    szRSInfo[18] = 0;
+    szRSInfo[19] = 0;
+    szRSInfo[20] = 0;
+    szRSInfo[21] = 0;
+    szRSInfo[22] = 0;
+    szRSInfo[23] = 0;
+    szRSInfo[24] = 0;
+    szRSInfo[25] = 0;
+    szRSInfo[26] = 0;
+    szRSInfo[27] = 0;
+    szRSInfo[28] = 0;
+    szRSInfo[29] = 0;
+    szRSInfo[30] = 0;
+    szRSInfo[31] = 0;
+    szRSInfo[32] = 0;
+    szRSInfo[33] = 0;
+    szRSInfo[34] = 0;
+    szRSInfo[35] = 0;
+    szRSInfo[36] = 0;
+    szRSInfo[37] = (unsigned char)((m_hb2_arc_info.Reset_EEPROM >> 8) & 0xFF);
+    szRSInfo[38] = (unsigned char)(m_hb2_arc_info.Reset_EEPROM & 0xFF);
+    // crc
+    szRSInfo[39] = 0x00; // cmd crc hi
+    szRSInfo[40] = 0x00; // cmd crc lo
+    MakeReadDataCRC(szRSInfo,41);
+    MClearRX();
+    txsize=41;
+    waitAddr = arySNobj[index].m_Addr;
+    waitFCode = 0x10;
+
+    while ( err < 3 ) {
+        memcpy(txbuffer, szRSInfo, 41);
+        MStartTX(m_busfd);
+        //usleep(m_dl_config.m_delay_time_2);
+
+        lpdata = GetRespond(m_busfd, 8, m_dl_config.m_delay_time_2);
+        if ( lpdata ) {
+            if ( CheckCRC(lpdata, 8) ) {
+                printf("#### SetHybrid2ARCInfo OK ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2ARCInfo() : OK", m_st_time);
+                arySNobj[index].m_ok_time = time(NULL);
+                //free(lpdata);
+                return true;
+            } else {
+                printf("#### SetHybrid2ARCInfo CRC Error ####\n");
+                SaveLog((char *)"DataLogger SetHybrid2ARCInfo() : CRC Error", m_st_time);
+                err++;
+            }
+            //free(lpdata);
+        } else {
+            printf("#### SetHybrid2ARCInfo No Response ####\n");
+            SaveLog((char *)"DataLogger SetHybrid2ARCInfo() : No Response", m_st_time);
             err++;
         }
 
@@ -9144,7 +9372,7 @@ bool CG320::WriteLogXML(int index)
             // set cumulative energy value
             if ( m_save_hb2_ce_value ) {
             // 0x0160
-                sprintf(buf, "<Total_Life_Time>%04.2f</Total_Life_Time>", m_hb2_ce_value.Total_Life_TimeH*100 + ((float)m_hb2_ce_value.Total_Life_TimeL)*0.01);
+                sprintf(buf, "<Total_Life_Time>%d</Total_Life_Time>", m_hb2_ce_value.Total_Life_TimeH*65536 + m_hb2_ce_value.Total_Life_TimeL);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<total_KWH>%04.2f</total_KWH>", m_hb2_ce_value.PV_Total_EnergyH*100 + ((float)m_hb2_ce_value.PV_Total_EnergyL)*0.01);
                 strcat(m_log_buf, buf);
@@ -9198,6 +9426,97 @@ bool CG320::WriteLogXML(int index)
                 sprintf(buf, "<CT_Total_Charge_Energy>%04.2f</CT_Total_Charge_Energy>", m_hb2_ce_value.CT_Total_Charge_EnergyH*100 + ((float)m_hb2_ce_value.CT_Total_Charge_EnergyL)*0.01);
                 strcat(m_log_buf, buf);
                 sprintf(buf, "<CT_Today_Charge_Energy>%04.2f</CT_Today_Charge_Energy>", m_hb2_ce_value.CT_Today_Charge_EnergyH*100 + ((float)m_hb2_ce_value.CT_Today_Charge_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+            // 1.42 add
+            // 0x01A0
+                sprintf(buf, "<PV_Year_Energy>%04.2f</PV_Year_Energy>", m_hb2_ce_value.PV_Year_EnergyH*100 + ((float)m_hb2_ce_value.PV_Year_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Charge_Year_Energy>%04.2f</Bat_Charge_Year_Energy>", m_hb2_ce_value.Bat_Charge_Year_EnergyH*100 + ((float)m_hb2_ce_value.Bat_Charge_Year_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Discharge_Year_Energy>%04.2f</Bat_Discharge_Year_Energy>", m_hb2_ce_value.Bat_Discharge_Year_EnergyH*100 + ((float)m_hb2_ce_value.Bat_Discharge_Year_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Load_Year_Energy>%04.2f</Load_Year_Energy>", m_hb2_ce_value.Load_Year_EnergyH*100 + ((float)m_hb2_ce_value.Load_Year_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Negative_Load_Year_Energy>%04.2f</Negative_Load_Year_Energy>", m_hb2_ce_value.Negative_Load_Year_EnergyH*100 + ((float)m_hb2_ce_value.Negative_Load_Year_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridFeed_Year_Energy>%04.2f</GridFeed_Year_Energy>", m_hb2_ce_value.GridFeed_Year_EnergyH*100 + ((float)m_hb2_ce_value.GridFeed_Year_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridCharge_Year_Energy>%04.2f</GridCharge_Year_Energy>", m_hb2_ce_value.GridCharge_Year_EnergyH*100 + ((float)m_hb2_ce_value.GridCharge_Year_EnergyL)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV1_Todat_Energy>%04.2f</PV1_Todat_Energy>", ((float)m_hb2_ce_value.PV1_Todat_Energy)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV2_Todat_Energy>%04.2f</PV2_Todat_Energy>", ((float)m_hb2_ce_value.PV2_Todat_Energy)*0.01);
+                strcat(m_log_buf, buf);
+            // 0x01B0
+                sprintf(buf, "<PV3_Todat_Energy>%04.2f</PV3_Todat_Energy>", ((float)m_hb2_ce_value.PV3_Todat_Energy)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV4_Todat_Energy>%04.2f</PV4_Todat_Energy>", ((float)m_hb2_ce_value.PV4_Todat_Energy)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV1_Todat_Energy_Peak_Power>%04.2f</PV1_Todat_Energy_Peak_Power>", ((float)m_hb2_ce_value.PV1_Todat_Energy_Peak_Power)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV1_Todat_Energy_Peak_Current>%04.2f</PV1_Todat_Energy_Peak_Current>", ((float)m_hb2_ce_value.PV1_Todat_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV1_Todat_Energy_Peak_Voltage>%d</PV1_Todat_Energy_Peak_Voltage>", m_hb2_ce_value.PV1_Todat_Energy_Peak_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV2_Todat_Energy_Peak_Power>%04.2f</PV2_Todat_Energy_Peak_Power>", ((float)m_hb2_ce_value.PV2_Todat_Energy_Peak_Power)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV2_Todat_Energy_Peak_Current>%04.2f</PV2_Todat_Energy_Peak_Current>", ((float)m_hb2_ce_value.PV2_Todat_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV2_Todat_Energy_Peak_Voltage>%d</PV2_Todat_Energy_Peak_Voltage>", m_hb2_ce_value.PV2_Todat_Energy_Peak_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV3_Todat_Energy_Peak_Power>%04.2f</PV3_Todat_Energy_Peak_Power>", ((float)m_hb2_ce_value.PV3_Todat_Energy_Peak_Power)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV3_Todat_Energy_Peak_Current>%04.2f</PV3_Todat_Energy_Peak_Current>", ((float)m_hb2_ce_value.PV3_Todat_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV3_Todat_Energy_Peak_Voltage>%d</PV3_Todat_Energy_Peak_Voltage>", m_hb2_ce_value.PV3_Todat_Energy_Peak_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV4_Todat_Energy_Peak_Power>%04.2f</PV4_Todat_Energy_Peak_Power>", ((float)m_hb2_ce_value.PV4_Todat_Energy_Peak_Power)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV4_Todat_Energy_Peak_Current>%04.2f</PV4_Todat_Energy_Peak_Current>", ((float)m_hb2_ce_value.PV4_Todat_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<PV4_Todat_Energy_Peak_Voltage>%d</PV4_Todat_Energy_Peak_Voltage>", m_hb2_ce_value.PV4_Todat_Energy_Peak_Voltage);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridCharge_Todat_Energy_Peak_Power>%04.2f</GridCharge_Todat_Energy_Peak_Power>", ((float)m_hb2_ce_value.GridCharge_Todat_Energy_Peak_Power)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridCharge_Todat_Energy_Peak_Current>%04.2f</GridCharge_Todat_Energy_Peak_Current>", ((float)m_hb2_ce_value.GridCharge_Todat_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+            // 0x01C0
+                sprintf(buf, "<GridFeed_Today_Energy_Peak_Power>%04.2f</GridFeed_Today_Energy_Peak_Power>", ((float)m_hb2_ce_value.GridFeed_Today_Energy_Peak_Power)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<GridFeed_Today_Energy_Peak_Current>%04.2f</GridFeed_Today_Energy_Peak_Current>", ((float)m_hb2_ce_value.GridFeed_Today_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Grid_Today_Energy_Peak_Voltage_Min>%d</Grid_Today_Energy_Peak_Voltage_Min>", m_hb2_ce_value.Grid_Today_Energy_Peak_Voltage_Min);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Grid_Today_Energy_Peak_Voltage_Max>%d</Grid_Today_Energy_Peak_Voltage_Max>", m_hb2_ce_value.Grid_Today_Energy_Peak_Voltage_Max);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Grid_Today_Energy_Peak_Frequency_Min>%03.1f</Grid_Today_Energy_Peak_Frequency_Min>", ((float)m_hb2_ce_value.Grid_Today_Energy_Peak_Frequency_Min)*0.1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Grid_Today_Energy_Peak_Frequency_Max>%03.1f</Grid_Today_Energy_Peak_Frequency_Max>", ((float)m_hb2_ce_value.Grid_Today_Energy_Peak_Frequency_Max)*0.1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Charge_Today_Energy_Peak_Current>%04.2f</Bat_Charge_Today_Energy_Peak_Current>", ((float)m_hb2_ce_value.Bat_Charge_Today_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Discharge_Today_Energy_Peak_Current>%04.2f</Bat_Discharge_Today_Energy_Peak_Current>", ((float)m_hb2_ce_value.Bat_Discharge_Today_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Today_Energy_Peak_Voltage_Min>%d</Bat_Today_Energy_Peak_Voltage_Min>", m_hb2_ce_value.Bat_Today_Energy_Peak_Voltage_Min);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Bat_Today_Energy_Peak_Voltage_Max>%d</Bat_Today_Energy_Peak_Voltage_Max>", m_hb2_ce_value.Bat_Today_Energy_Peak_Voltage_Max);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Load_Today_Energy_Peak_Power>%04.2f</Load_Today_Energy_Peak_Power>", ((float)m_hb2_ce_value.Load_Today_Energy_Peak_Power)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Load_Today_Energy_Peak_Current>%04.2f</Load_Today_Energy_Peak_Current>", ((float)m_hb2_ce_value.Load_Today_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Negative_Load_Today_Energy_Peak_Power>%04.2f</Negative_Load_Today_Energy_Peak_Power>", ((float)m_hb2_ce_value.Negative_Load_Today_Energy_Peak_Power)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Negative_Load_Today_Energy_Peak_Current>%04.2f</Negative_Load_Today_Energy_Peak_Current>", ((float)m_hb2_ce_value.Negative_Load_Today_Energy_Peak_Current)*0.01);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Load_Today_Energy_Peak_Voltage_Min>%d</Load_Today_Energy_Peak_Voltage_Min>", m_hb2_ce_value.Load_Today_Energy_Peak_Voltage_Min);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Load_Today_Energy_Peak_Voltage_Max>%d</Load_Today_Energy_Peak_Voltage_Max>", m_hb2_ce_value.Load_Today_Energy_Peak_Voltage_Max);
+                strcat(m_log_buf, buf);
+            // 0x01D0
+                sprintf(buf, "<Load_Today_Energy_Peak_Frequency_Min>%03.1f</Load_Today_Energy_Peak_Frequency_Min>", ((float)m_hb2_ce_value.Load_Today_Energy_Peak_Frequency_Min)*0.1);
+                strcat(m_log_buf, buf);
+                sprintf(buf, "<Load_Today_Energy_Peak_Frequency_Max>%03.1f</Load_Today_Energy_Peak_Frequency_Max>", ((float)m_hb2_ce_value.Load_Today_Energy_Peak_Frequency_Max)*0.1);
                 strcat(m_log_buf, buf);
             }
 
@@ -9882,6 +10201,16 @@ bool CG320::WriteErrorLogXML(int index)
             strcat(m_errlog_buf, "<code>COD4_0004_Peak_Shaving_Over_Power</code>");
         if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0008 )
             strcat(m_errlog_buf, "<code>COD4_0008_CLA_Execute_Time_Over</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0010 )
+            strcat(m_errlog_buf, "<code>COD4_0010_Fac_Sudden</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0020 )
+            strcat(m_errlog_buf, "<code>COD4_0020_Inverter_Idc_Fault</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0040 )
+            strcat(m_errlog_buf, "<code>COD4_0040_Zero_Export_Fault</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0080 )
+            strcat(m_errlog_buf, "<code>COD4_0080_Grid_Charge_To_Bat_Fault</code>");
+        if ( m_hb2_rt_info.PV_Inv_Error_COD3_Record & 0x0100 )
+            strcat(m_errlog_buf, "<code>COD4_0100_Grid_Ok_For_DD</code>");
         // DD_Error_COD1_Record 0x0124
         if ( m_hb2_rt_info.DD_Error_COD1_Record & 0x0001 )
             strcat(m_errlog_buf, "<code>COD3_0001_Vbat_H</code>");
@@ -9944,6 +10273,8 @@ bool CG320::WriteErrorLogXML(int index)
             strcat(m_errlog_buf, "<code>COD5_1000_Bat_Wake_Up_Fault</code>");
         if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x2000 )
             strcat(m_errlog_buf, "<code>COD5_2000_Vbat_Inconsistent</code>");
+        if ( m_hb2_rt_info.DD_Error_COD2_Record & 0x4000 )
+            strcat(m_errlog_buf, "<code>COD5_4000_Bat_FW_Update</code>");
     }
 
     // set system error log
