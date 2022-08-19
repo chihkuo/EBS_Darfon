@@ -156,7 +156,7 @@ protected:
     bool    SetHybrid2RSInfo1(int index);
     bool    SetHybrid2RSInfo2(int index);
     bool    SetHybrid2RSInfo3(int index);
-    bool    SetHybrid2RSInfo4(int index);
+//    bool    SetHybrid2RSInfo4(int index);
     void    ParserHybrid2RSFunctionFlags(int flags);
     void    ParserHybrid2RSSoftwareFlags(int flags);
     void    DumpHybrid2RTInfo(unsigned char *buf);
