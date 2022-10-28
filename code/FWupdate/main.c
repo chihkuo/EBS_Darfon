@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.3.0"
+#define VERSION             "1.3.1"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' -k https://52.9.235.220:8443/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -1354,7 +1354,7 @@ int GetBatInfo(int loop, int slaveid, int retry)
                 mybatinfo.burn_status = (lpdata[13] << 8) + lpdata[14];
                 mybatinfo.section = (lpdata[15] << 8) + lpdata[16];
                 mybatinfo.BMS_number = (lpdata[17] << 8) + lpdata[18];
-                if ( (myupdate.UpdateType == 2) && (mybatinfo.status == 2) && (mybatinfo.burn_status > 5) ) // burn_status = 6~14
+                if ( /*(myupdate.UpdateType[0] == '2') &&*/ (mybatinfo.status == 2) && (mybatinfo.burn_status > 5) ) // burn_status = 6~14
                     gbat_num = mybatinfo.BMS_number;
                 break;
             }
@@ -6216,7 +6216,7 @@ int RunBat2FWUpdate(char *list_path)
     int i = 0, loop = 0, /*addr = 0,*/ total_size = 0, retval = 0, clearsn = 0, clearfile = 0, retry = 0, fail_check = 0;
     unsigned short section = 0, section_size = 0, crc_tmp = 0;
     char strtmp[256] = {0}, valuetmp[16] = {0}; // for debug
-    unsigned char read_buf[36] = {0}, crc_check[34] = {0}, file_type_H = 0, file_type_L = 0;
+    unsigned char line_buf[74] = {0}, read_buf[36] = {0}, crc_check[34] = {0}, file_type_H = 0, file_type_L = 0;
     FILE *pfile_fd = NULL;
 
     time_t      current_time = 0, start_time = 0;
@@ -6260,8 +6260,17 @@ int RunBat2FWUpdate(char *list_path)
         }
 
         // read file header
+        memset(line_buf, 0x00, 74);
         memset(read_buf, 0x00, 36);
-        fread(read_buf, 1, 36, pfile_fd);
+        //fread(read_buf, 1, 36, pfile_fd);
+        if ( fgets((char*)line_buf, 74, pfile_fd) != NULL ) {
+        // parser header data
+            for ( i = 0; i < 36; i++) {
+                sscanf((char*)line_buf+2*i, "%02hhX", read_buf+i);
+                //printf("read_buf[%d]=%02X\n", i, read_buf[i]);
+            }
+        }
+
         // debug
         memset(strtmp, 0x00, 256);
         sprintf(strtmp, "FWupdate RunBat2FWUpdate() : get header :");
