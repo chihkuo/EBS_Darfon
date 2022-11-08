@@ -15,7 +15,7 @@
 #define USB_DEV     "/dev/sda1"
 #define SDCARD_PATH "/tmp/sdcard"
 
-#define VERSION             "1.3.1"
+#define VERSION             "1.3.2"
 #define TIMEOUT             "30"
 #define CURL_FILE           "/tmp/FWupdate"
 #define CURL_CMD            "curl -H 'Content-Type: text/xml;charset=UTF-8;SOAPAction:\"\"' -k https://52.9.235.220:8443/SmsWebService1.asmx?WSDL -d @"CURL_FILE" --max-time "TIMEOUT
@@ -3504,7 +3504,7 @@ int WriteBatData2(int loop, int slaveid, unsigned char file_type, unsigned short
                     ret = mybatinfo.status;
                     snlist[loop].status = 56;
                     break;
-                } else if (mybatinfo.burn_status != 8) {
+                } else if (mybatinfo.burn_status != 6) {
                     printf("burn_status = %d, stop\n", mybatinfo.burn_status);
                     ret = mybatinfo.burn_status;
                     snlist[loop].status = 57;
@@ -3512,7 +3512,7 @@ int WriteBatData2(int loop, int slaveid, unsigned char file_type, unsigned short
                 }
             }
 
-            // set first write command (write section nuber)
+/*            // set first write command (write section nuber)
             // set slave id
             cmd[0] = (unsigned char)slaveid;
             // set function code
@@ -3615,21 +3615,27 @@ int WriteBatData2(int loop, int slaveid, unsigned char file_type, unsigned short
             if ( ret ) {
                 return ret;
             }
-
+*/
             // read section data
             memset(read_buf, 0x00, 1024);
             fread(read_buf, 1, section_size, pfile_fd);
+            len = strlen((char *)read_buf);
+            printf("get data size %d\n", len);
+            if ( len == 0 ) {
+                printf("len = 0, EOF!\n");
+                break;
+            }
 
             // set write data part
             index = 0;
-            address = 0x0021;
+            address = 0x0020;
             writesize = MAX_BATTERY_SIZE;
             numofdata = writesize/2;
 
-            while ( index < (section_size) ) {
+            while ( index < len ) {
                 // check data size
-                if ( (index + writesize) > (section_size) ) {
-                    writesize = (section_size) - index;
+                if ( (index + writesize) > len ) {
+                    writesize = len - index;
                     numofdata = writesize/2;
                 }
 
@@ -3816,7 +3822,7 @@ int WriteBatData2(int loop, int slaveid, unsigned char file_type, unsigned short
                     ret = mybatinfo.status;
                     snlist[loop].status = 56;
                     break;
-                } else if (mybatinfo.burn_status != 8) {
+                } else if (mybatinfo.burn_status != 6) {
                     printf("burn_status = %d, stop\n", mybatinfo.burn_status);
                     ret = mybatinfo.burn_status;
                     snlist[loop].status = 57;
@@ -3824,7 +3830,7 @@ int WriteBatData2(int loop, int slaveid, unsigned char file_type, unsigned short
                 }
             }
 
-            // set first write command (write section nuber)
+/*            // set first write command (write section nuber)
             // set slave id
             cmd[0] = (unsigned char)slaveid;
             // set function code
@@ -3927,16 +3933,21 @@ int WriteBatData2(int loop, int slaveid, unsigned char file_type, unsigned short
             if ( ret ) {
                 return ret;
             }
-
+*/
             // read section data
             memset(read_buf, 0x00, 1024);
             //fread(read_buf, 1, section_size, pfile_fd);
-            fgets((char *)read_buf , 1024 , pfile_fd);
+            fgets((char *)read_buf , 1023 , pfile_fd);
             len = strlen((char *)read_buf);
+            printf("get data size %d\n", len);
+            if ( len == 0 ) {
+                printf("len = 0, EOF!\n");
+                break;
+            }
 
             // set write data part
             index = 0;
-            address = 0x0021;
+            address = 0x0020;
             writesize = MAX_BATTERY_SIZE;
             numofdata = writesize/2;
 
@@ -4133,7 +4144,7 @@ int WriteBatData2(int loop, int slaveid, unsigned char file_type, unsigned short
         ret = mybatinfo.status;
         snlist[loop].status = 56;
         return ret;
-    } else if (mybatinfo.burn_status != 8) {
+    } else if (mybatinfo.burn_status != 6) {
         printf("burn_status = %d, stop\n", mybatinfo.burn_status);
         ret = mybatinfo.burn_status;
         snlist[loop].status = 57;
@@ -6216,7 +6227,7 @@ int RunBat2FWUpdate(char *list_path)
     int i = 0, loop = 0, /*addr = 0,*/ total_size = 0, retval = 0, clearsn = 0, clearfile = 0, retry = 0, fail_check = 0;
     unsigned short section = 0, section_size = 0, crc_tmp = 0;
     char strtmp[256] = {0}, valuetmp[16] = {0}; // for debug
-    unsigned char line_buf[74] = {0}, read_buf[36] = {0}, crc_check[34] = {0}, file_type_H = 0, file_type_L = 0;
+    unsigned char line_buf[128] = {0}, read_buf[36] = {0}, crc_check[34] = {0}, file_type_H = 0, file_type_L = 0;
     FILE *pfile_fd = NULL;
 
     time_t      current_time = 0, start_time = 0;
@@ -6260,10 +6271,10 @@ int RunBat2FWUpdate(char *list_path)
         }
 
         // read file header
-        memset(line_buf, 0x00, 74);
+        memset(line_buf, 0x00, 128);
         memset(read_buf, 0x00, 36);
         //fread(read_buf, 1, 36, pfile_fd);
-        if ( fgets((char*)line_buf, 74, pfile_fd) != NULL ) {
+        if ( fgets((char*)line_buf, 127, pfile_fd) != NULL ) {
         // parser header data
             for ( i = 0; i < 36; i++) {
                 sscanf((char*)line_buf+2*i, "%02hhX", read_buf+i);
@@ -6331,6 +6342,10 @@ int RunBat2FWUpdate(char *list_path)
             printf("get total_size = 0x%08X\n", total_size);
             section = (read_buf[26]<<8) + read_buf[27];
             printf("get section = 0x%04X\n", section);
+            if ( section == 0 ) {
+                section = 65535;
+                printf("set section = 0x%04X\n", section);
+            }
             section_size = (read_buf[28]<<8) + read_buf[29];
             printf("get section_size = 0x%04X\n", section_size);
         }
@@ -6661,10 +6676,10 @@ int RunBat2FWUpdate(char *list_path)
                             SetHeader2(loop, gV2id, read_buf);
                             usleep(1000000);
                             GetBatInfo(loop, gV2id, 3);
-                            if (mybatinfo.burn_status == 5 || mybatinfo.burn_status == 9 || mybatinfo.burn_status == 10 || mybatinfo.burn_status == 12 || mybatinfo.burn_status == 13) {
+                            if (mybatinfo.burn_status == 5 || mybatinfo.burn_status == 7 || mybatinfo.burn_status == 9 || mybatinfo.burn_status == 10 || mybatinfo.burn_status == 12 || mybatinfo.burn_status == 13) {
                                 retval = 1;
                                 break;
-                            } else if (mybatinfo.burn_status == 4) {
+                            } else if (mybatinfo.burn_status == 6) {
                                 retval = 2;
                                 break;
                             } else if (mybatinfo.burn_status == 11) {

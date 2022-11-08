@@ -25,7 +25,8 @@
 //#define TIMEZONE_URL    "http://ip-api.com/json"
 #define TIMEZONE_URL    "https://worldtimeapi.org/api/ip"
 //#define TIME_OFFSET_URL "http://svn.fonosfera.org/fon-ng/trunk/luci/modules/admin-fon/root/etc/timezones.db"
-#define TIME_OFFSET_URL "https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/luasrc/sys/zoneinfo/tzdata.lua"
+//#define TIME_OFFSET_URL "https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/luasrc/sys/zoneinfo/tzdata.lua"
+#define TIME_OFFSET_PATH "/usr/lib/lua/luci/sys/zoneinfo/tzdata.lua"
 //#define KEY             "O10936IZHJTQ"
 #define TIME_SERVER_URL "https://www.worldtimeserver.com/handlers/GetData.ashx?action=GCTData"
 
@@ -8328,7 +8329,8 @@ bool CG320::GetTimezone()
         return false;
 
     // get time offset from openwrt if match timezone
-    sprintf(buf, "curl -k %s --max-time 30 | grep -i \"%s\" > /tmp/time_offset", TIME_OFFSET_URL, timezone);
+    //sprintf(buf, "curl -k %s --max-time 30 | grep -i \"%s\" > /tmp/time_offset", TIME_OFFSET_URL, timezone);
+    sprintf(buf, "cat %s | grep -i \"%s\" > /tmp/time_offset", TIME_OFFSET_PATH, timezone);
     //printf("cmd = %s\n", buf);
     system(buf);
     pFile = fopen("/tmp/time_offset", "rb");
